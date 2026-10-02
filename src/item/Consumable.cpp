@@ -34,6 +34,7 @@
 #include "Game.h"
 #include "Offsets.h"
 #include "item/Arg.h"
+#include "item/Record.h"
 
 #include <cstdint>
 
@@ -41,20 +42,7 @@ namespace Item::Consumable {
 
 namespace {
 
-using GetItemRecord_t = const uint8_t *(__thiscall *)(void *cache, uint32_t itemID,
-                                                      const uint64_t *guid, void *callback,
-                                                      void *userData, int unused);
-
-const uint8_t *PeekItemRecord(uint32_t itemID) {
-    auto fn = reinterpret_cast<GetItemRecord_t>(Offsets::FUN_DBCACHE_ITEMSTATS_GET_RECORD);
-    auto *cache = reinterpret_cast<void *>(Offsets::VAR_ITEMDB_CACHE);
-    const uint64_t zeroGuid = 0;
-    return fn(cache, itemID, &zeroGuid, nullptr, nullptr, 0);
-}
-
 constexpr uint32_t kItemClassConsumable = 0;
-constexpr uint32_t kInvTypeAmmo = 24;   // INVTYPE_AMMO
-constexpr uint32_t kInvTypeThrown = 25; // INVTYPE_THROWN
 
 int __fastcall Script_C_Item_IsConsumableItem(void *L) {
     const int itemID = Item::Arg::ResolveItemID(L, 1);
@@ -62,7 +50,7 @@ int __fastcall Script_C_Item_IsConsumableItem(void *L) {
         Game::Lua::PushBoolean(L, 0);
         return 1;
     }
-    const uint8_t *record = PeekItemRecord(static_cast<uint32_t>(itemID));
+    const uint8_t *record = Item::PeekRecord(static_cast<uint32_t>(itemID));
     if (record == nullptr) {
         Game::Lua::PushBoolean(L, 0);
         return 1;
@@ -73,7 +61,8 @@ int __fastcall Script_C_Item_IsConsumableItem(void *L) {
         record + Offsets::OFF_ITEMSTATS_INVENTORY_TYPE);
 
     const bool consumable = classID == kItemClassConsumable ||
-                            invType == kInvTypeAmmo || invType == kInvTypeThrown;
+                            invType == Offsets::INVTYPE_AMMO ||
+                            invType == Offsets::INVTYPE_THROWN;
     Game::Lua::PushBoolean(L, consumable);
     return 1;
 }

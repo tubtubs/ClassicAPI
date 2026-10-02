@@ -10,7 +10,7 @@
 
 #include "Game.h"
 #include "Offsets.h"
-#include "dbc/Lookup.h"
+#include "dbc/Names.h"
 #include "unit/Identity.h"
 
 #include <cstdint>
@@ -18,8 +18,6 @@
 namespace Unit::ClassBase {
 
 namespace {
-
-using ResolveUnitToken_t = void *(__fastcall *)(const char *token);
 
 // `UnitClassBase(unit) → (classFile, classID)` — returns the locale-
 // independent class token ("WARRIOR", "PALADIN", "HUNTER", "ROGUE",
@@ -79,13 +77,12 @@ int __fastcall Script_UnitClassBase(void *L) {
     // tokens go through the unit descriptor.
     uint8_t classByte = 0;
     if (Unit::Identity::IsPlayerToken(token)) {
-        classByte = *reinterpret_cast<const uint8_t *>(Offsets::VAR_PLAYER_CLASS_BYTE);
+        classByte = Game::Read<uint8_t>(Offsets::VAR_PLAYER_CLASS_BYTE);
     } else {
-        auto resolve = reinterpret_cast<ResolveUnitToken_t>(Offsets::FUN_RESOLVE_UNIT_TOKEN);
-        auto *unit = static_cast<const uint8_t *>(resolve(token));
+        auto *unit = static_cast<const uint8_t *>(Game::ResolveUnitToken(token));
         if (unit != nullptr) {
-            auto *desc = *reinterpret_cast<const uint8_t *const *>(
-                unit + Offsets::OFF_UNIT_DESCRIPTOR);
+            auto *desc =
+                Game::Read<const uint8_t *>(unit, Offsets::OFF_UNIT_DESCRIPTOR);
             if (desc != nullptr)
                 classByte = *(desc + Offsets::OFF_UNIT_DESCRIPTOR_CLASS_BYTE);
         }
@@ -98,8 +95,8 @@ int __fastcall Script_UnitClassBase(void *L) {
             const uint8_t *rec = Unit::Identity::PlayerInfoRecord(
                 Unit::Identity::GuidForToken(token));
             if (rec != nullptr)
-                classByte = static_cast<uint8_t>(*reinterpret_cast<const uint32_t *>(
-                    rec + Offsets::OFF_PLAYER_INFO_CLASS));
+                classByte = static_cast<uint8_t>(
+                    Game::Read<uint32_t>(rec, Offsets::OFF_PLAYER_INFO_CLASS));
         }
     }
     if (classByte == 0) {
@@ -108,11 +105,7 @@ int __fastcall Script_UnitClassBase(void *L) {
         return 2;
     }
 
-    const char *classFile = DBC::StringField(
-        Offsets::VAR_CHRCLASSES_RECORDS,
-        Offsets::VAR_CHRCLASSES_COUNT,
-        classByte,
-        Offsets::OFF_CHRCLASSES_FILENAME);
+    const char *classFile = DBC::ClassToken(classByte);
     if (classFile == nullptr) {
         Game::Lua::PushNil(L);
         Game::Lua::PushNil(L);

@@ -49,42 +49,31 @@
 
 #include "Game.h"
 #include "Offsets.h"
-#include "dbc/Lookup.h"
+#include "item/CGItem.h"
 #include "item/ID.h"
+#include "item/Icon.h"
 #include "item/Link.h"
 #include "item/Location.h"
+#include "item/Record.h"
 #include "item/StatAccum.h"
 
 #include <cstdint>
-#include <cstdio>
 
 namespace Container::ItemInfo {
 
 namespace {
-
-bool BuildIconPath(uint32_t displayInfoID, char *out, size_t outSize) {
-    out[0] = '\0';
-    const char *iconName = DBC::StringField(
-        Offsets::VAR_ITEMDISPLAYINFO_RECORDS, Offsets::VAR_ITEMDISPLAYINFO_COUNT,
-        displayInfoID, Offsets::OFF_ITEMDISPLAYINFO_ICON);
-    if (iconName == nullptr || iconName[0] == '\0')
-        return false;
-    std::snprintf(out, outSize, "Interface\\Icons\\%s", iconName);
-    return true;
-}
 
 // Mirrors the engine's `readable` decision (0x004F97BD..0x004F97CF): a slot
 // is readable when its static page text is set OR the per-instance
 // readable-text id is non-zero (letters / server-authored notes).
 bool ItemReadable(const uint8_t *item, const uint8_t *record) {
     if (record != nullptr &&
-        *reinterpret_cast<const uint32_t *>(record + Offsets::OFF_ITEMSTATS_PAGE_TEXT) != 0)
+        Game::Read<uint32_t>(record, Offsets::OFF_ITEMSTATS_PAGE_TEXT) != 0)
         return true;
-    const uint8_t *descriptor = *reinterpret_cast<const uint8_t *const *>(
-        item + Offsets::OFF_ITEM_DESCRIPTOR);
+    const uint8_t *descriptor = Item::ObjectFields(item);
     return descriptor != nullptr &&
-           *reinterpret_cast<const uint32_t *>(
-               descriptor + Offsets::OFF_DESCRIPTOR_READABLE_TEXT_ID) != 0;
+           Game::Read<uint32_t>(
+               descriptor, Offsets::OFF_DESCRIPTOR_READABLE_TEXT_ID) != 0;
 }
 
 int __fastcall Script_C_Container_GetContainerItemInfo(void *L) {
@@ -107,23 +96,22 @@ int __fastcall Script_C_Container_GetContainerItemInfo(void *L) {
     // them off the half-built table avoids any stack interleaving. ---
     const int itemID = Item::ID::FromCGItem(item);
     const uint8_t *record = (itemID > 0)
-        ? Item::StatAccum::FetchRecord(static_cast<uint32_t>(itemID))
+        ? Item::PeekRecord(static_cast<uint32_t>(itemID))
         : nullptr;
 
     // Live per-instance descriptor fields.
-    const uint8_t *descriptor = *reinterpret_cast<const uint8_t *const *>(
-        item + Offsets::OFF_ITEM_DESCRIPTOR);
+    const uint8_t *descriptor = Item::ObjectFields(item);
     int stackCount = 0;
     bool isBound = false;
     if (descriptor != nullptr) {
-        stackCount = *reinterpret_cast<const int *>(
-            descriptor + Offsets::OFF_DESCRIPTOR_STACK_COUNT);
-        isBound = (*reinterpret_cast<const uint32_t *>(
-                       descriptor + Offsets::OFF_DESCRIPTOR_FLAGS) &
+        stackCount = Game::Read<int>(
+            descriptor, Offsets::OFF_DESCRIPTOR_STACK_COUNT);
+        isBound = (Game::Read<uint32_t>(
+                       descriptor, Offsets::OFF_DESCRIPTOR_FLAGS) &
                    Offsets::ITEM_FLAG_SOULBOUND) != 0;
     }
-    const bool isLocked = (*reinterpret_cast<const uint32_t *>(
-                               item + Offsets::OFF_ITEM_CLIENT_LOCK) &
+    const bool isLocked = (Game::Read<uint32_t>(
+                               item, Offsets::OFF_ITEM_CLIENT_LOCK) &
                            Offsets::ITEM_CLIENT_LOCK_BIT) != 0;
     const bool isReadable = ItemReadable(item, record);
 
@@ -135,17 +123,17 @@ int __fastcall Script_C_Container_GetContainerItemInfo(void *L) {
     bool hasLoot = false;
     bool hasNoValue = false;
     if (record != nullptr) {
-        const uint32_t displayInfoID = *reinterpret_cast<const uint32_t *>(
-            record + Offsets::OFF_ITEMSTATS_DISPLAY_INFO_ID);
-        haveIcon = BuildIconPath(displayInfoID, iconPath, sizeof(iconPath));
-        quality = *reinterpret_cast<const uint32_t *>(
-            record + Offsets::OFF_ITEMSTATS_QUALITY);
+        const uint32_t displayInfoID = Game::Read<uint32_t>(
+            record, Offsets::OFF_ITEMSTATS_DISPLAY_INFO_ID);
+        haveIcon = Item::Icon::PathForDisplayInfoID(displayInfoID, iconPath, sizeof(iconPath));
+        quality = Game::Read<uint32_t>(
+            record, Offsets::OFF_ITEMSTATS_QUALITY);
         haveQuality = true;
-        const uint32_t flags = *reinterpret_cast<const uint32_t *>(
-            record + Offsets::OFF_ITEMSTATS_FLAGS);
+        const uint32_t flags = Game::Read<uint32_t>(
+            record, Offsets::OFF_ITEMSTATS_FLAGS);
         hasLoot = (flags & Offsets::ITEM_FLAG_LOOTABLE) != 0;
-        hasNoValue = *reinterpret_cast<const uint32_t *>(
-                         record + Offsets::OFF_ITEMSTATS_SELL_PRICE) == 0;
+        hasNoValue = Game::Read<uint32_t>(
+                         record, Offsets::OFF_ITEMSTATS_SELL_PRICE) == 0;
     }
 
     const char *hyperlink = Item::Link::FromCGItem(item);
@@ -155,8 +143,8 @@ int __fastcall Script_C_Container_GetContainerItemInfo(void *L) {
     if (Item::Link::NameFromCGItem(item, nameBuf, sizeof(nameBuf))) {
         itemName = nameBuf;
     } else if (record != nullptr) {
-        const char *baseName = *reinterpret_cast<const char *const *>(
-            record + Offsets::OFF_ITEMSTATS_NAME);
+        const char *baseName = Game::Read<const char *>(
+            record, Offsets::OFF_ITEMSTATS_NAME);
         if (baseName != nullptr && baseName[0] != '\0')
             itemName = baseName;
     }

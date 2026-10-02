@@ -58,10 +58,7 @@ bool InWorld() {
     // Player resolves only when in-world. Same gate other modules
     // (e.g. `Item::Location::ResolveBag`) use to avoid touching
     // engine state during loading screens or glue.
-    using ResolveUnitToken_t = void *(__fastcall *)(const char *);
-    auto fn = reinterpret_cast<ResolveUnitToken_t>(
-        Offsets::FUN_RESOLVE_UNIT_TOKEN);
-    return fn("player") != nullptr;
+    return Game::ResolveUnitToken("player") != nullptr;
 }
 
 void CancelPlacement() {
@@ -104,6 +101,8 @@ bool CommitAtCoords(const float coords[3]) {
     Commit(coords);
     return true;
 }
+
+bool GroundPlacementPending() { return PlacementReady(); }
 
 bool Resolve() {
     if (!PlacementReady())
@@ -225,9 +224,25 @@ int __fastcall Script_C_Spell_CastAtCursor(void *L) {
     return 1;
 }
 
+// --- Documentation ----------------------------------------------------------
+
+const Game::Doc::Field kCastAtCursorArgs[] = {
+    Game::Doc::Req("spell", "SpellIdentifier",
+                   "A spell ID, which casts that exact rank, or a spell name, "
+                   "which casts the highest rank you know unless it ends in \"(Rank N)\"."),
+};
+const Game::Doc::Field kCastAtCursorRets[] = {
+    Game::Doc::Req("placed", "bool",
+                   "True when the spell landed at the cursor; false when the cursor was "
+                   "not on the ground, or the spell needs no ground target."),
+};
+const Game::Doc::Function kCastAtCursor{
+    "Casts a ground-target spell at the cursor's world position, with no reticle click.",
+    kCastAtCursorArgs, kCastAtCursorRets, nullptr, true};
+
 void RegisterLuaFunctions() {
     Game::Lua::RegisterTableFunction("C_Spell", "CastAtCursor",
-                                     &Script_C_Spell_CastAtCursor);
+                                     &Script_C_Spell_CastAtCursor, &kCastAtCursor);
 }
 
 const Game::ModuleAutoRegister _autoreg{&RegisterLuaFunctions};

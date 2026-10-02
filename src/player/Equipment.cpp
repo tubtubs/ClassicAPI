@@ -49,12 +49,32 @@
 // registry, distinct from the object manager) silently no-ops for item
 // objects, verified empirically (item values-updates arrive and the
 // player-bank observers fire, item-bank ones never do).
+//
+// Also `WEAPON_SLOT_CHANGED` (no payload) — the narrow sibling of
+// PLAYER_EQUIPMENT_CHANGED that swing-timer consumers want: it fires only
+// for the three weapon slots (16 main hand / 17 off hand / 18 ranged), so
+// they don't filter a 19-slot event in Lua on every gear change. Equip,
+// unequip and swap all fire it. It rides the SAME observers — the weapon
+// slots are three of the 19 already registered — but is COALESCED to at
+// most one fire per frame via a dirty flag drained on WorldTick, because
+// one action can change two weapon slots (a two-hander replacing a
+// one-hander plus an off-hand) and the per-slot observer would otherwise
+// fire twice for it. With no payload there's nothing to lose by merging —
+// and Blizzard's generated docs flag this event `UniqueEvent`, where the
+// two per-slot events above are `SynchronousEvent`, so coalescing is the
+// event's own shape rather than a local preference.
+// Slot 18 is exempted for the classes whose slot 18 is a RELIC slot
+// (Libram / Idol / Totem) — see IsWeaponSlot.
 
 #include "Game.h"
 #include "Offsets.h"
+#include "dbc/Lookup.h"
 #include "equipmentset/Locations.h"
 #include "event/Custom.h"
+#include "item/CGItem.h"
+#include "object/Resolve.h"
 #include "player/StatSignal.h"
+#include "tick/WorldTick.h"
 #include "unit/Identity.h"
 
 #include <cstdint>
@@ -68,6 +88,49 @@ const Event::Custom::AutoReserve _r{kEvtEquipmentChanged};
 constexpr const char *kEvtDurability = "UPDATE_INVENTORY_DURABILITY";
 const Event::Custom::AutoReserve _r2{kEvtDurability};
 
+// System per Blizzard's own generated docs, where all three of this
+// file's events live (PaperDollInfoDocumentation.lua) — so documenting
+// PLAYER_EQUIPMENT_CHANGED / UPDATE_INVENTORY_DURABILITY later puts them
+// in the same place.
+constexpr const char *kEvtWeaponSlotChanged = "WEAPON_SLOT_CHANGED";
+const Game::Doc::Event kWeaponSlotChangedDoc{
+    "PaperDollInfo",
+    "Fires when the item in a weapon slot changes: main hand, off hand, or "
+    "ranged.",
+    {}};
+const Event::Custom::AutoReserve _r3{kEvtWeaponSlotChanged,
+                                     &kWeaponSlotChangedDoc};
+
+// 0-based descriptor slots for the three weapon slots — the `slot0 =
+// luaSlot - 1` convention below, so Lua 16/17/18.
+constexpr int kSlot0MainHand = 15;
+constexpr int kSlot0OffHand = 16;
+constexpr int kSlot0Ranged = 17;
+bool g_weaponDirty = false;
+
+// Whether slot 18 holds relics (Libram / Idol / Totem) instead of a ranged
+// weapon. Same test Script_UnitHasRelicSlot (0x00519E50) makes: index
+// ChrClasses.dbc by the player's class byte and read the record's
+// relic-slot field. Read live rather than cached — the class-byte global
+// is repopulated per character-enter, so logging out to a character of
+// another class would leave a cached answer stale.
+bool PlayerHasRelicSlot() {
+    const uint8_t *cls =
+        DBC::Record(Offsets::VAR_CHRCLASSES_RECORDS, Offsets::VAR_CHRCLASSES_COUNT,
+                    Game::Read<uint8_t>(Offsets::VAR_PLAYER_CLASS_BYTE));
+    return cls != nullptr &&
+           Game::Read<uint32_t>(cls, Offsets::OFF_CHRCLASSES_RELIC_SLOT) != 0;
+}
+
+// A relic is a passive stat item, never something you swing, so a relic
+// swap is not a weapon change — the three classes with a relic slot have
+// no ranged weapon to report at all.
+bool IsWeaponSlot(int slot0) {
+    if (slot0 == kSlot0MainHand || slot0 == kSlot0OffHand)
+        return true;
+    return slot0 == kSlot0Ranged && !PlayerHasRelicSlot();
+}
+
 // Whether the slot currently holds an item — read from the player's
 // inventory-manager GUID array, the same source the engine's own bag
 // observer (FUN_004F8DB0) treats as the post-change truth when its field
@@ -79,14 +142,9 @@ const Event::Custom::AutoReserve _r2{kEvtDurability};
 // player object can be mid-create and momentarily unresolvable — a Lua
 // error thrown from there unwinds through raw engine code.
 bool SlotHasItem(uint32_t guidLo, uint32_t guidHi, int slot0Based) {
-    using ResolveByGUID_t = void *(__fastcall *)(uint32_t typeMask,
-                                                 const char *debugName,
-                                                 uint32_t guidLo, uint32_t guidHi,
-                                                 int line);
-    auto resolve =
-        reinterpret_cast<ResolveByGUID_t>(Offsets::FUN_OBJECT_RESOLVE_BY_GUID);
-    auto *player = static_cast<const uint8_t *>(resolve(
-        Offsets::OBJ_TYPE_PLAYER, "ClassicAPI", guidLo, guidHi, 0x172));
+    auto *player = static_cast<const uint8_t *>(Object::ByGuid(
+        Offsets::TYPEMASK_PLAYER,
+        (static_cast<uint64_t>(guidHi) << 32) | guidLo, "ClassicAPI", 0x172));
     if (player == nullptr)
         return false;
     const uint8_t *invMgr = player + Offsets::OFF_PLAYER_INVENTORY_MANAGER;
@@ -112,15 +170,34 @@ int __fastcall EquipSlotChanged_cb(uint32_t fieldOffset, uint32_t /*size*/,
     const int slot0 =
         static_cast<int>(fieldOffset - Offsets::OFF_DESC_PLAYER_EQUIP_FIRST) >> 3;
     if (slot0 >= 0 && slot0 < Offsets::DESC_PLAYER_EQUIP_SLOTS) {
-        Event::Custom::FireIdSuccess(Event::Custom::Lookup(kEvtEquipmentChanged),
-                                     slot0 + 1,
+        Event::Custom::FireIdSuccess(_r.Slot(), slot0 + 1,
                                      SlotHasItem(guidLo, guidHi, slot0));
         // Gear swap changes item +healing and Spirit/Armor — invalidate the
         // GetSpellBonusHealing cache.
         Player::StatSignal::Notify();
+        // Mark only; the fire is merged onto the next WorldTick so one
+        // action that changes two weapon slots yields one event.
+        if (IsWeaponSlot(slot0))
+            g_weaponDirty = true;
     }
     return 1;
 }
+
+// Drain for WEAPON_SLOT_CHANGED. The slot check runs BEFORE clearing the
+// flag: while the reservation is unclaimed (`Slot()` -1, between static
+// init and the first `frame:RegisterEvent`) the change is held rather than
+// swallowed. Non-subscribers pay one already-false branch per frame.
+void OnWorldTick() {
+    if (!g_weaponDirty)
+        return;
+    const int slot = _r3.Slot();
+    if (slot < 0)
+        return;
+    g_weaponDirty = false;
+    Event::Custom::Fire(slot, "");
+}
+
+const Tick::WorldTick::AutoSubscribe _weaponTick{&OnWorldTick};
 
 // Co-hook on the engine's inventory observer setup: after it registers the
 // bag-range observers, register ours for the equipment range it skips.
@@ -197,8 +274,7 @@ uint32_t ItemDurability(uint64_t guid) {
     const uint8_t *item = EquipmentSet::Locations::ResolveItemByGUID(guid);
     if (item == nullptr)
         return 0;
-    const uint8_t *descriptor = *reinterpret_cast<const uint8_t *const *>(
-        item + Offsets::OFF_ITEM_DESCRIPTOR);
+    const uint8_t *descriptor = Item::ObjectFields(item);
     if (descriptor == nullptr)
         return 0;
     return *reinterpret_cast<const uint32_t *>(
@@ -229,7 +305,7 @@ void __fastcall AlertsRecompute_h() {
         return;
     }
     if (changed)
-        Event::Custom::Fire(Event::Custom::Lookup(kEvtDurability), "");
+        Event::Custom::Fire(_r2.Slot(), "");
 }
 
 static const Game::HookAutoRegister _alertsHook{

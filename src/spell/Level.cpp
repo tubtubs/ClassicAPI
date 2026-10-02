@@ -14,6 +14,7 @@
 #include "Game.h"
 #include "Offsets.h"
 #include "spell/Lookup.h"
+#include "talent/SpellSet.h"
 
 #include <cstdint>
 #include <unordered_set>
@@ -22,56 +23,16 @@ namespace Spell::Level {
 
 namespace {
 
-using ResolveUnitToken_t = void *(__fastcall *)(const char *token);
-
 // Reads the local player's descriptor — same pattern as
 // Unit::Combat::Script_InCombatLockdown. Returns nullptr at login
 // screen / character select / loading transition where the
 // CGPlayer doesn't exist yet.
 const uint8_t *PlayerDescriptor() {
-    auto fn = reinterpret_cast<ResolveUnitToken_t>(Offsets::FUN_RESOLVE_UNIT_TOKEN);
-    auto *player = static_cast<const uint8_t *>(fn("player"));
+    auto *player = static_cast<const uint8_t *>(Game::ResolveUnitToken("player"));
     if (player == nullptr)
         return nullptr;
-    return *reinterpret_cast<const uint8_t *const *>(
-        player + Offsets::OFF_UNIT_DESCRIPTOR);
-}
-
-// Builds (or returns the cached) set of every spellID that appears
-// in `Talent.dbc` — across all 9 rank slots of every talent record.
-// Used to skip talent-tree spells in `GetCurrentLevelSpells`; modern
-// `GetCurrentLevelSpells` only reports auto-learned / trainable
-// class spells, never talents (which are point-purchased separately).
-//
-// Cache survives across calls in a session (Talent.dbc is a static
-// DBC). First call before the engine has loaded the DBC (e.g.,
-// pre-login) leaves the set empty; subsequent calls retry until
-// non-empty.
-std::unordered_set<int> &TalentSpellSet() {
-    static std::unordered_set<int> set;
-    if (!set.empty())
-        return set;
-    const uint8_t *const *records = *reinterpret_cast<const uint8_t *const *const *>(
-        static_cast<uintptr_t>(Offsets::VAR_TALENT_DBC_RECORDS));
-    const int count = *reinterpret_cast<const int *>(
-        static_cast<uintptr_t>(Offsets::VAR_TALENT_DBC_COUNT));
-    if (records == nullptr || count <= 0)
-        return set;
-    // Each Talent.dbc record stores rank-N spellIDs at +0x10 + N*4
-    // for N = 0..8 (9 ranks). Many slots are 0 for unused ranks.
-    for (int i = 1; i <= count; ++i) {
-        const uint8_t *rec = records[i];
-        if (rec == nullptr)
-            continue;
-        auto *ranks = reinterpret_cast<const uint32_t *>(
-            rec + Offsets::OFF_TALENT_SPELL_RANK);
-        for (int j = 0; j < 9; ++j) {
-            const uint32_t spellID = ranks[j];
-            if (spellID != 0)
-                set.insert(static_cast<int>(spellID));
-        }
-    }
-    return set;
+    return Game::Read<const uint8_t *>(
+        player, Offsets::OFF_UNIT_DESCRIPTOR);
 }
 
 // Looks up the `BaseLevel` field of a Spell.dbc record. Returns 0
@@ -80,41 +41,39 @@ int SpellBaseLevel(int spellID) {
     const uint8_t *record = Spell::Lookup::RecordForID(spellID);
     if (record == nullptr)
         return 0;
-    return *reinterpret_cast<const int32_t *>(
-        record + Offsets::OFF_SPELL_RECORD_BASE_LEVEL);
+    return Game::Read<int32_t>(
+        record, Offsets::OFF_SPELL_RECORD_BASE_LEVEL);
 }
 
-// Spell.dbc attribute fields/bits used to filter learnable-spell
-// results down to what's actually user-facing.
+// Spell.dbc attribute filter for the learnable-spell walk. Only the
+// verified HIDDEN_CLIENTSIDE bit is used:
 //
-//   Attributes   (+0x18)
-//     bit 0x80  = HIDDEN_CLIENTSIDE — engine-internal helpers like
-//                 "Defensive Stance Passive" (7376) that pair with
-//                 a user-visible spell (Defensive Stance, 71) and
-//                 never appear in the spellbook. Skip these.
+//   Attributes (+0x18) bit 0x80 = HIDDEN_CLIENTSIDE — engine-internal
+//   helpers like "Defensive Stance Passive" (7376) that pair with a
+//   user-visible spell (Defensive Stance, 71) and never appear in the
+//   spellbook. Skip these.
 //
-//   AttributesEx2 (+0x24)
-//     bit 0x02000000 = HIDE_FROM_AUTOLEARN — the same gate Cata's
-//                       GetCurrentLevelSpells checks
-//                       (FUN_00911c60's `(spellData[+0x24] &
-//                       0x02000000) == 0`). Catches proc-only and
-//                       engine-internal spells with a BaseLevel.
-constexpr int OFF_SPELL_RECORD_ATTRIBUTES = 0x18;
-constexpr int OFF_SPELL_RECORD_ATTRIBUTES_EX2 = 0x24;
+// A prior version also tested AttributesEx3 (+0x24) bit 0x02000000 as a
+// "hide from auto-learn" gate ported from a MoP function (FUN_00911c60).
+// That was invalid on every count: FUN_00911c60 is outside 1.12's .text
+// and its `+0x24` is not 1.12's AttributesEx3. Verified against Spell.dbc,
+// the 1.12 bit is a sparse grab-bag (44 / 27925 records: passive procs,
+// odd DoT ranks, the Night Elf priest Starshards line, Turtle customs) —
+// not an auto-learn flag — so it could only wrongly hide legitimate
+// learnable spells (Starshards carries it). Removed. The authoritative
+// auto-learn signal is SkillLineAbility.learnOnGetSkill (col 9: 2 =
+// race/class, 1 = profession, 0 = trainer-taught), not a Spell.dbc bit;
+// this feature deliberately reports the broader "trainable at level" set,
+// so it applies no learnOnGetSkill filter.
 constexpr uint32_t SPELL_ATTR_HIDDEN_CLIENTSIDE = 0x80;
-constexpr uint32_t SPELL_ATTR_EX2_HIDE_FROM_AUTOLEARN = 0x02000000;
 
-bool SpellHiddenFromAutoLearn(int spellID) {
+bool SpellHiddenFromSpellbook(int spellID) {
     const uint8_t *record = Spell::Lookup::RecordForID(spellID);
     if (record == nullptr)
         return false;
-    const uint32_t attributes = *reinterpret_cast<const uint32_t *>(
-        record + OFF_SPELL_RECORD_ATTRIBUTES);
-    if ((attributes & SPELL_ATTR_HIDDEN_CLIENTSIDE) != 0)
-        return true;
-    const uint32_t attrEx2 = *reinterpret_cast<const uint32_t *>(
-        record + OFF_SPELL_RECORD_ATTRIBUTES_EX2);
-    return (attrEx2 & SPELL_ATTR_EX2_HIDE_FROM_AUTOLEARN) != 0;
+    const uint32_t attributes = Game::Read<uint32_t>(
+        record, Offsets::OFF_SPELL_RECORD_ATTRIBUTES);
+    return (attributes & SPELL_ATTR_HIDDEN_CLIENTSIDE) != 0;
 }
 
 // ---- Target-level gate for ranked beneficial auras ----------------------
@@ -132,17 +91,10 @@ bool SpellHiddenFromAutoLearn(int spellID) {
 // checks are NOT in the 1.12 client's Spell.dbc — server-only columns — so
 // the spellLevel rule is the only client-readable target-level mechanism.)
 
-constexpr int OFF_SPELL_MAX_LEVEL = 0x6C;         // uint32 (scaling cap level)
-constexpr int OFF_SPELL_SPELL_LEVEL = 0x74;       // uint32 (rank's effective level)
-constexpr int OFF_SPELL_EFFECT = 0xF4;            // uint32[3] effect type
-constexpr int OFF_SPELL_EFFECT_TARGET_A = 0x148;  // uint32[3] implicit target A
-constexpr int OFF_SPELL_RANK = 0x204;             // char*[9] localized rank text
-constexpr uint32_t SPELL_ATTR_PASSIVE = 0x40;                    // Attributes bit
-constexpr uint32_t SPELL_EFFECT_APPLY_AURA = 6;
 constexpr uint32_t SPELL_EFFECT_APPLY_AREA_AURA_PARTY = 35;
 
 int LocaleIndex() {
-    return *reinterpret_cast<const int *>(
+    return Game::Read<int>(
         static_cast<uintptr_t>(Offsets::VAR_LOCALE_INDEX));
 }
 
@@ -177,8 +129,8 @@ bool IsPositiveRankTarget(uint32_t t) {
 // single-rank buffs (Power Infusion / Innervate / Blessing of Kings, all
 // empty Rank and un-gated) vs ranked ones (Divine Spirit / Fortitude).
 bool HasRankString(const uint8_t *record) {
-    const char *rank = *reinterpret_cast<const char *const *>(
-        record + OFF_SPELL_RANK + LocaleIndex() * 4);
+    const char *rank = Game::Read<const char *>(
+        record, Offsets::OFF_SPELL_RECORD_RANK + LocaleIndex() * 4);
     return rank != nullptr && *rank != '\0';
 }
 
@@ -186,22 +138,22 @@ bool HasRankString(const uint8_t *record) {
 // the spell isn't subject to the ranked-positive-aura target-level rule.
 int RequiredTargetLevel(const uint8_t *record) {
     const int spellLevel =
-        *reinterpret_cast<const int *>(record + OFF_SPELL_SPELL_LEVEL);
+        Game::Read<int>(record, Offsets::OFF_SPELL_RECORD_SPELL_LEVEL);
     if (spellLevel <= 10) // targetLevel + 10 >= spellLevel holds for any level
         return 0;
     const uint32_t attr =
-        *reinterpret_cast<const uint32_t *>(record + OFF_SPELL_RECORD_ATTRIBUTES);
-    if (attr & SPELL_ATTR_PASSIVE)
+        Game::Read<uint32_t>(record, Offsets::OFF_SPELL_RECORD_ATTRIBUTES);
+    if (attr & Offsets::SPELL_ATTR_PASSIVE)
         return 0;
     if (!HasRankString(record)) // single-rank spell → not gated
         return 0;
 
-    auto *effect = reinterpret_cast<const uint32_t *>(record + OFF_SPELL_EFFECT);
+    auto *effect = Game::Ptr<const uint32_t>(record, Offsets::OFF_SPELL_RECORD_EFFECT);
     auto *targetA =
-        reinterpret_cast<const uint32_t *>(record + OFF_SPELL_EFFECT_TARGET_A);
+        Game::Ptr<const uint32_t>(record, Offsets::OFF_SPELL_RECORD_EFFECT_IMPLICIT_TARGET_A);
     bool positiveAura = false;
     for (int i = 0; i < 3; ++i) {
-        if ((effect[i] == SPELL_EFFECT_APPLY_AURA &&
+        if ((effect[i] == Offsets::SPELL_EFFECT_APPLY_AURA &&
              IsPositiveRankTarget(targetA[i])) ||
             effect[i] == SPELL_EFFECT_APPLY_AREA_AURA_PARTY) {
             positiveAura = true;
@@ -229,13 +181,13 @@ int __fastcall Script_GetSpellLevelInfo(void *L) {
         return 0;
     Game::Lua::PushNumber(
         L, static_cast<double>(
-               *reinterpret_cast<const int *>(record + OFF_SPELL_SPELL_LEVEL)));
+               Game::Read<int>(record, Offsets::OFF_SPELL_RECORD_SPELL_LEVEL)));
     Game::Lua::PushNumber(
         L, static_cast<double>(
-               *reinterpret_cast<const int *>(record + Offsets::OFF_SPELL_RECORD_BASE_LEVEL)));
+               Game::Read<int>(record, Offsets::OFF_SPELL_RECORD_BASE_LEVEL)));
     Game::Lua::PushNumber(
         L, static_cast<double>(
-               *reinterpret_cast<const int *>(record + OFF_SPELL_MAX_LEVEL)));
+               Game::Read<int>(record, Offsets::OFF_SPELL_RECORD_MAX_LEVEL)));
     return 3;
 }
 
@@ -316,8 +268,8 @@ int __fastcall Script_GetCurrentLevelSpells(void *L) {
 
     const uint8_t classByte = *(desc + Offsets::OFF_UNIT_DESCRIPTOR_CLASS_BYTE);
     const uint8_t raceByte = *(desc + Offsets::OFF_UNIT_DESCRIPTOR_RACE_BYTE);
-    const int32_t playerLevel = *reinterpret_cast<const int32_t *>(
-        desc + Offsets::OFF_UNIT_FIELD_LEVEL);
+    const int32_t playerLevel = Game::Read<int32_t>(
+        desc, Offsets::OFF_UNIT_FIELD_LEVEL);
     if (classByte == 0 || raceByte == 0 || playerLevel <= 0)
         return 1;
 
@@ -345,9 +297,9 @@ int __fastcall Script_GetCurrentLevelSpells(void *L) {
         (1u << 0)  | (1u << 1)  | (1u << 2)  | (1u << 3)  | (1u << 4)  |
         (1u << 6)  | (1u << 7)  | (1u << 8)  | (1u << 10);
 
-    const uint8_t *const *records = *reinterpret_cast<const uint8_t *const *const *>(
+    const uint8_t *const *records = Game::Read<const uint8_t *const *>(
         static_cast<uintptr_t>(Offsets::VAR_SKILL_LINE_ABILITY_RECORDS));
-    const int count = *reinterpret_cast<const int *>(
+    const int count = Game::Read<int>(
         static_cast<uintptr_t>(Offsets::VAR_SKILL_LINE_ABILITY_COUNT));
     if (records == nullptr || count <= 0)
         return 1;
@@ -365,14 +317,14 @@ int __fastcall Script_GetCurrentLevelSpells(void *L) {
         if (rec == nullptr)
             continue;
 
-        const uint32_t recClassMask = *reinterpret_cast<const uint32_t *>(
-            rec + Offsets::OFF_SLA_CLASS_MASK);
-        const uint32_t recRaceMask = *reinterpret_cast<const uint32_t *>(
-            rec + Offsets::OFF_SLA_RACE_MASK);
-        const uint32_t recExcludeClass = *reinterpret_cast<const uint32_t *>(
-            rec + Offsets::OFF_SLA_EXCLUDE_CLASS);
-        const uint32_t recExcludeRace = *reinterpret_cast<const uint32_t *>(
-            rec + Offsets::OFF_SLA_EXCLUDE_RACE);
+        const uint32_t recClassMask = Game::Read<uint32_t>(
+            rec, Offsets::OFF_SLA_CLASS_MASK);
+        const uint32_t recRaceMask = Game::Read<uint32_t>(
+            rec, Offsets::OFF_SLA_RACE_MASK);
+        const uint32_t recExcludeClass = Game::Read<uint32_t>(
+            rec, Offsets::OFF_SLA_EXCLUDE_CLASS);
+        const uint32_t recExcludeRace = Game::Read<uint32_t>(
+            rec, Offsets::OFF_SLA_EXCLUDE_RACE);
 
         // Skip if explicitly excluded.
         if ((recExcludeClass & playerClassBit) != 0)
@@ -414,8 +366,8 @@ int __fastcall Script_GetCurrentLevelSpells(void *L) {
         if (!isClassSpell && !isRacial)
             continue;
 
-        const int spellID = *reinterpret_cast<const int *>(
-            rec + Offsets::OFF_SLA_SPELL_ID);
+        const int spellID = Game::Read<int>(
+            rec, Offsets::OFF_SLA_SPELL_ID);
         if (spellID <= 0)
             continue;
         if (SpellBaseLevel(spellID) != queryLevel)
@@ -423,14 +375,11 @@ int __fastcall Script_GetCurrentLevelSpells(void *L) {
         // Skip talents — they're class spells in SLA but learned via
         // talent points, not auto-granted at level. Modern's
         // GetCurrentLevelSpells excludes them too.
-        if (TalentSpellSet().count(spellID) != 0)
+        if (Talent::SpellSet::IsTalentRank(spellID))
             continue;
-        // Skip spells flagged "hide from auto-learn list" — the
-        // same AttributesEx2 bit Cata's GetCurrentLevelSpells
-        // checks (FUN_00911c60). Catches engine-internal or proc-
-        // only spells that have a BaseLevel but aren't meant to
-        // surface as learnable.
-        if (SpellHiddenFromAutoLearn(spellID))
+        // Skip engine-internal spellbook-hidden spells (HIDDEN_CLIENTSIDE):
+        // they can carry a BaseLevel but never surface as learnable.
+        if (SpellHiddenFromSpellbook(spellID))
             continue;
         if (!seen.insert(spellID).second)
             continue;
@@ -443,17 +392,67 @@ int __fastcall Script_GetCurrentLevelSpells(void *L) {
     return 1;
 }
 
+// --- Documentation ----------------------------------------------------------
+
+const Game::Doc::Field kSpellIDArgs[] = {
+    Game::Doc::Req("spellID", "number", "The spell to examine."),
+};
+
+const Game::Doc::Field kLevelLearnedRets[] = {
+    Game::Doc::Req("level", "number",
+                   "The level the spell becomes available, or 0 when it has no "
+                   "level requirement."),
+};
+const Game::Doc::Function kGetSpellLevelLearned{
+    "The level at which a spell becomes available.", kSpellIDArgs, kLevelLearnedRets};
+
+const Game::Doc::Field kCurrentLevelSpellsArgs[] = {
+    Game::Doc::Opt("level", "number", nullptr,
+                   "The level to ask about; defaults to the player's own level."),
+};
+const Game::Doc::Field kCurrentLevelSpellsRets[] = {
+    Game::Doc::Req("spellIDs", "table",
+                   "A 1-based array of spell IDs, empty when nothing matches."),
+};
+const Game::Doc::Function kGetCurrentLevelSpells{
+    "The spells the player's class and race can train at a given level.",
+    kCurrentLevelSpellsArgs, kCurrentLevelSpellsRets};
+
+const Game::Doc::Field kRequiredTargetLevelRets[] = {
+    Game::Doc::Opt("level", "number", nullptr,
+                   "The lowest target level, 0 when the spell has no such limit; "
+                   "nil for an unknown spell."),
+};
+const Game::Doc::Function kGetSpellRequiredTargetLevel{
+    "The lowest level a target must be for this rank of the spell to apply to it.",
+    kSpellIDArgs, kRequiredTargetLevelRets, "SpellGlobals"};
+
+const Game::Doc::Field kLevelInfoRets[] = {
+    Game::Doc::Opt("spellLevel", "number", nullptr,
+                   "The level of this rank; nil for an unknown spell."),
+    Game::Doc::Opt("baseLevel", "number", nullptr, "The base level of the spell."),
+    Game::Doc::Opt("maxLevel", "number", nullptr,
+                   "The level at which per-level scaling stops, or 0 for no cap."),
+};
+const Game::Doc::Function kGetSpellLevelInfo{
+    "The three level values of a spell: its rank level, base level, and scaling cap.",
+    kSpellIDArgs, kLevelInfoRets};
+
 void RegisterLuaFunctions() {
     Game::Lua::RegisterTableFunction("C_SpellBook", "GetSpellLevelLearned",
-                                      &Script_GetSpellLevelLearned);
+                                      &Script_GetSpellLevelLearned,
+                                      &kGetSpellLevelLearned);
     Game::Lua::RegisterTableFunction("C_SpellBook", "GetCurrentLevelSpells",
-                                      &Script_GetCurrentLevelSpells);
+                                      &Script_GetCurrentLevelSpells,
+                                      &kGetCurrentLevelSpells);
     Game::Lua::RegisterGlobalFunction("GetSpellRequiredTargetLevel",
-                                      &Script_GetSpellRequiredTargetLevel);
+                                      &Script_GetSpellRequiredTargetLevel,
+                                      &kGetSpellRequiredTargetLevel);
     Game::Lua::RegisterTableFunction("C_Spell", "GetSpellLevelInfo",
-                                      &Script_GetSpellLevelInfo);
+                                      &Script_GetSpellLevelInfo, &kGetSpellLevelInfo);
     Game::Lua::RegisterTableFunction("C_Spell", "GetSpellRequiredTargetLevel",
-                                      &Script_GetSpellRequiredTargetLevel);
+                                      &Script_GetSpellRequiredTargetLevel,
+                                      &kGetSpellRequiredTargetLevel);
 }
 
 const Game::ModuleAutoRegister _autoreg{&RegisterLuaFunctions};

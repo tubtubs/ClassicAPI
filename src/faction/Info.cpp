@@ -69,10 +69,7 @@ void PushFlag(void *L, bool value) {
 // `[player + 0xE68]`. Returns nullptr if "player" isn't resolvable
 // or the sub-struct is uninitialized (pre-login / glue).
 const uint8_t *PlayerInfo() {
-    using ResolveUnitToken_t = void *(__fastcall *)(const char *token);
-    auto resolve = reinterpret_cast<ResolveUnitToken_t>(
-        Offsets::FUN_RESOLVE_UNIT_TOKEN);
-    auto *player = static_cast<const uint8_t *>(resolve("player"));
+    auto *player = static_cast<const uint8_t *>(Game::ResolveUnitToken("player"));
     if (player == nullptr)
         return nullptr;
     return *reinterpret_cast<const uint8_t *const *>(
@@ -410,6 +407,30 @@ static int __fastcall Script_C_Reputation_GetWatchedFactionData(void *L) {
     return 1;
 }
 
+// `C_Reputation.GetFactionDataByID(factionID)` — modern table-shaped
+// accessor keyed by faction ID rather than by displayed-list position.
+// Returns nil when the ID has no `Faction.dbc` record.
+//
+// Unlike the index form, this doesn't need the faction to be in the
+// player's displayed reputation list: `ReadFactionData` fills an
+// unencountered faction cleanly (currentStanding 0, not at war), so a
+// lookup works for any real faction.
+static int __fastcall Script_C_Reputation_GetFactionDataByID(void *L) {
+    if (!Game::Lua::IsNumber(L, 1)) {
+        Game::Lua::Error(L, "Usage: C_Reputation.GetFactionDataByID(factionID)");
+        return 0;
+    }
+    const int factionID = static_cast<int>(Game::Lua::ToNumber(L, 1));
+
+    FactionData d;
+    if (!ReadFactionData(factionID, &d))
+        return 0; // nil — no such faction
+
+    Game::Lua::SetTop(L, 0);
+    PushFactionDataTable(L, d);
+    return 1;
+}
+
 // `C_Reputation.GetFactionDataByIndex(factionSortIndex)` — modern
 // table-shaped accessor over the displayed reputation list. 1-based
 // index covering the same range as vanilla's `GetFactionInfo(index)`
@@ -441,6 +462,182 @@ static int __fastcall Script_C_Reputation_GetFactionDataByIndex(void *L) {
     Game::Lua::SetTop(L, 0);
     PushFactionDataTable(L, d);
     return 1;
+}
+
+// `C_Reputation.ToggleFactionAtWarByID(factionID)` — ClassicAPI
+// extension. Flips a faction's at-war state by ID rather than by
+// displayed-list position.
+//
+// Mirrors the stock `FactionToggleAtWar(index)` body exactly, minus the
+// index resolve: read the current at-war flag, negate it, hand it to the
+// engine's own setter. Every rule therefore stays with the engine —
+// refusing to make peace below -3000 standing, honouring the
+// peace-forced flag, the loot-session bail, and sending
+// `CMSG_SET_FACTION_ATWAR`. Going through the engine's setter also means
+// `Faction::UnitFactionPolyfill`'s hook on it fires `UNIT_FACTION`
+// ("any future C++ caller of the setter inherits the polyfill"), and its
+// change-detection keeps that silent when the engine refuses the toggle.
+//
+// Non-positive IDs are ignored (the stock path likewise skips
+// factionID 0, which is what its resolver returns for header rows).
+static int __fastcall Script_C_Reputation_ToggleFactionAtWarByID(void *L) {
+    if (!Game::Lua::IsNumber(L, 1)) {
+        Game::Lua::Error(L,
+            "Usage: C_Reputation.ToggleFactionAtWarByID(factionID)");
+        return 0;
+    }
+    const int factionID = static_cast<int>(Game::Lua::ToNumber(L, 1));
+    if (factionID <= 0)
+        return 0;
+
+    // `newState` is declared `int`, not `char`, to match the detour
+    // `Faction::UnitFactionPolyfill` installs on this setter: a `char`
+    // argument only defines the low byte of EDX, leaving the detour's
+    // `int` parameter with undefined high bits.
+    using GetAtWar_t = unsigned int(__fastcall *)(int factionID);
+    using SetAtWar_t = void(__fastcall *)(int factionID, int newState);
+    auto getAtWar = reinterpret_cast<GetAtWar_t>(
+        static_cast<uintptr_t>(Offsets::FUN_FACTION_GET_AT_WAR));
+    auto setAtWar = reinterpret_cast<SetAtWar_t>(
+        static_cast<uintptr_t>(Offsets::FUN_FACTION_SET_AT_WAR));
+
+    setAtWar(factionID, (getAtWar(factionID) != 0) ? 0 : 1);
+    return 0;
+}
+
+// `factionID` → its 0..63 reputation-slot index, or -1 when the faction
+// has no slot (no record, or a header category). Same `Faction.dbc`
+// `RepListIndex` field `ReadFactionData` reads.
+static int RepSlotForFaction(int factionID) {
+    if (factionID <= 0)
+        return -1;
+    const uint8_t *record = FactionRecord(factionID);
+    if (record == nullptr)
+        return -1;
+    const int repListIndex = *reinterpret_cast<const int32_t *>(
+        record + Offsets::OFF_FACTION_REP_LIST_INDEX);
+    if (repListIndex < 0 || repListIndex >= Offsets::MAX_REP_SLOTS)
+        return -1;
+    return repListIndex;
+}
+
+// Whether a reputation slot carries the INACTIVE flag.
+static bool RepSlotIsInactive(int repSlot) {
+    auto *slot = reinterpret_cast<const uint8_t *>(
+        static_cast<uintptr_t>(Offsets::VAR_PLAYER_REP_SLOTS) +
+        static_cast<uintptr_t>(repSlot) * Offsets::REP_SLOT_STRIDE);
+    return (*(slot + Offsets::OFF_REP_SLOT_FLAGS) &
+            Offsets::REP_SLOT_FLAG_INACTIVE) != 0;
+}
+
+// `C_Reputation.IsFactionActive(factionSortIndex)` — whether the faction
+// at a 1-based displayed-list position is NOT filed under "Inactive".
+//
+// Runs the same chain as the engine's own inactive check (resolve the
+// index to a faction id, then read the slot's INACTIVE bit) and returns
+// the inverse as a real boolean. A position that names no faction — out
+// of range, or a category header — reports `false`.
+static int __fastcall Script_C_Reputation_IsFactionActive(void *L) {
+    if (!Game::Lua::IsNumber(L, 1)) {
+        Game::Lua::Error(L,
+            "Usage: C_Reputation.IsFactionActive(factionSortIndex)");
+        return 0;
+    }
+    const int idx = static_cast<int>(Game::Lua::ToNumber(L, 1)) - 1;
+    const int maxIdx = *reinterpret_cast<const int *>(
+        static_cast<uintptr_t>(Offsets::VAR_FACTION_VISIBLE_MAX_INDEX));
+
+    const int factionID = (idx >= 0 && idx <= maxIdx) ? Resolver()(idx) : 0;
+    const int repSlot = RepSlotForFaction(factionID);
+
+    Game::Lua::SetTop(L, 0);
+    Game::Lua::PushBool(L, repSlot >= 0 && !RepSlotIsInactive(repSlot));
+    return 1;
+}
+
+// `C_Reputation.IsFactionActiveByID(factionID)` — ClassicAPI extension.
+// The same answer keyed by faction id. Reports `false` for a faction
+// with no reputation slot.
+static int __fastcall Script_C_Reputation_IsFactionActiveByID(void *L) {
+    if (!Game::Lua::IsNumber(L, 1)) {
+        Game::Lua::Error(L,
+            "Usage: C_Reputation.IsFactionActiveByID(factionID)");
+        return 0;
+    }
+    const int repSlot =
+        RepSlotForFaction(static_cast<int>(Game::Lua::ToNumber(L, 1)));
+
+    Game::Lua::SetTop(L, 0);
+    Game::Lua::PushBool(L, repSlot >= 0 && !RepSlotIsInactive(repSlot));
+    return 1;
+}
+
+// Shared body for the two by-ID inactive setters below. Hands the id to
+// the engine's own inactive setter, which flips the rep slot's INACTIVE
+// bit, tells the server, and rebuilds the displayed faction list so the
+// faction moves into or out of the "Inactive" category. That setter is
+// also what `Faction::UnitFactionPolyfill` hooks, so `UNIT_FACTION`
+// fires when the flag actually changes.
+//
+// `newState` is `int` rather than `char` to match that detour's
+// signature — see the note in ToggleFactionAtWarByID.
+static int SetFactionInactiveByID(void *L, int newState, const char *usage) {
+    if (!Game::Lua::IsNumber(L, 1)) {
+        Game::Lua::Error(L, usage);
+        return 0;
+    }
+    const int factionID = static_cast<int>(Game::Lua::ToNumber(L, 1));
+    if (factionID <= 0)
+        return 0;
+
+    using SetInactive_t = void(__fastcall *)(int factionID, int newState);
+    auto fn = reinterpret_cast<SetInactive_t>(
+        static_cast<uintptr_t>(Offsets::FUN_FACTION_SET_INACTIVE));
+    fn(factionID, newState);
+    return 0;
+}
+
+// `C_Reputation.SetFactionInactiveByID(factionID)` — ClassicAPI
+// extension. Moves a faction into the "Inactive" category by ID rather
+// than by displayed-list position.
+static int __fastcall Script_C_Reputation_SetFactionInactiveByID(void *L) {
+    return SetFactionInactiveByID(
+        L, 1, "Usage: C_Reputation.SetFactionInactiveByID(factionID)");
+}
+
+// `C_Reputation.SetFactionActiveByID(factionID)` — the inverse: takes a
+// faction back out of the "Inactive" category.
+static int __fastcall Script_C_Reputation_SetFactionActiveByID(void *L) {
+    return SetFactionInactiveByID(
+        L, 0, "Usage: C_Reputation.SetFactionActiveByID(factionID)");
+}
+
+// `C_Reputation.SetSelectedFactionByID(factionID)` — ClassicAPI
+// extension. Selects a faction in the reputation pane by ID rather
+// than by displayed-list position, the same convenience
+// `SetWatchedFactionByID` gives over `SetWatchedFactionIndex`.
+//
+// The engine already stores the selection AS a factionID
+// (`VAR_FACTION_SELECTED_ID`) — the stock index form only resolves its
+// argument to an id before storing it — so this writes the id straight
+// through, with no list walk and no dependence on the faction being
+// currently listed. `GetSelectedFaction()` maps it back to an index,
+// reporting 0 while the faction isn't in the displayed list.
+//
+// Negative IDs are ignored; 0 clears the selection.
+static int __fastcall Script_C_Reputation_SetSelectedFactionByID(void *L) {
+    if (!Game::Lua::IsNumber(L, 1)) {
+        Game::Lua::Error(L,
+            "Usage: C_Reputation.SetSelectedFactionByID(factionID)");
+        return 0;
+    }
+    const int factionID = static_cast<int>(Game::Lua::ToNumber(L, 1));
+    if (factionID < 0)
+        return 0;
+
+    *reinterpret_cast<int32_t *>(
+        static_cast<uintptr_t>(Offsets::VAR_FACTION_SELECTED_ID)) = factionID;
+    return 0;
 }
 
 // `C_Reputation.SetWatchedFactionByID(factionID)` — sets the faction
@@ -478,10 +675,46 @@ static void RegisterLuaFunctions() {
     Game::Lua::RegisterGlobalFunction("GetFactionParentID", &Script_GetFactionParentID);
     Game::Lua::RegisterTableFunction("C_Reputation", "SetWatchedFactionByID",
                                      &Script_C_Reputation_SetWatchedFactionByID);
+    Game::Lua::RegisterTableFunction("C_Reputation", "SetSelectedFactionByID",
+                                     &Script_C_Reputation_SetSelectedFactionByID);
+    Game::Lua::RegisterTableFunction("C_Reputation", "ToggleFactionAtWarByID",
+                                     &Script_C_Reputation_ToggleFactionAtWarByID);
+    Game::Lua::RegisterTableFunction("C_Reputation", "IsFactionActive",
+                                     &Script_C_Reputation_IsFactionActive);
+    Game::Lua::RegisterTableFunction("C_Reputation", "IsFactionActiveByID",
+                                     &Script_C_Reputation_IsFactionActiveByID);
+    Game::Lua::RegisterTableFunction(
+        "C_Reputation", "IsFactionInactive",
+        reinterpret_cast<Game::Lua::CFunction>(
+            static_cast<uintptr_t>(Offsets::FUN_SCRIPT_IS_FACTION_INACTIVE)));
+    Game::Lua::RegisterTableFunction("C_Reputation", "SetFactionInactiveByID",
+                                     &Script_C_Reputation_SetFactionInactiveByID);
+    Game::Lua::RegisterTableFunction("C_Reputation", "SetFactionActiveByID",
+                                     &Script_C_Reputation_SetFactionActiveByID);
+    Game::Lua::RegisterTableFunction(
+        "C_Reputation", "SetFactionInactive",
+        reinterpret_cast<Game::Lua::CFunction>(
+            static_cast<uintptr_t>(Offsets::FUN_SCRIPT_SET_FACTION_INACTIVE)));
+    Game::Lua::RegisterTableFunction(
+        "C_Reputation", "SetFactionActive",
+        reinterpret_cast<Game::Lua::CFunction>(
+            static_cast<uintptr_t>(Offsets::FUN_SCRIPT_SET_FACTION_ACTIVE)));
+    Game::Lua::RegisterTableFunction(
+        "C_Reputation", "ToggleFactionAtWar",
+        reinterpret_cast<Game::Lua::CFunction>(
+            static_cast<uintptr_t>(Offsets::FUN_SCRIPT_FACTION_TOGGLE_AT_WAR)));
+    // The stock global, mirrored into the namespace — the engine's own
+    // handler already has the Lua C ABI, so it registers as-is.
+    Game::Lua::RegisterTableFunction(
+        "C_Reputation", "SetSelectedFaction",
+        reinterpret_cast<Game::Lua::CFunction>(
+            static_cast<uintptr_t>(Offsets::FUN_SCRIPT_SET_SELECTED_FACTION)));
     Game::Lua::RegisterTableFunction("C_Reputation", "GetWatchedFactionData",
                                      &Script_C_Reputation_GetWatchedFactionData);
     Game::Lua::RegisterTableFunction("C_Reputation", "GetFactionStandings",
                                      &Script_C_Reputation_GetFactionStandings);
+    Game::Lua::RegisterTableFunction("C_Reputation", "GetFactionDataByID",
+                                     &Script_C_Reputation_GetFactionDataByID);
     Game::Lua::RegisterTableFunction("C_Reputation", "GetFactionDataByIndex",
                                      &Script_C_Reputation_GetFactionDataByIndex);
 }

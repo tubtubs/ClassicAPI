@@ -53,7 +53,9 @@
 #include "Game.h"
 #include "Offsets.h"
 #include "cache/QueryLoad.h"
+#include "creature/Info.h"
 #include "dbc/Lookup.h"
+#include "dbc/Names.h"
 #include "event/Custom.h"
 
 #include <cstdint>
@@ -93,14 +95,14 @@ int __fastcall Script_GetCreatureInfoByID(void *L) {
     if (rec == nullptr)
         return 0; // not cached -> nil
 
-    const char *name = *reinterpret_cast<const char *const *>(rec + Offsets::OFF_CREATURE_NAME);
+    const char *name = Game::Read<const char *>(rec, Offsets::OFF_CREATURE_NAME);
     const char *subName =
-        *reinterpret_cast<const char *const *>(rec + Offsets::OFF_CREATURE_SUBNAME);
-    const uint32_t type = *reinterpret_cast<const uint32_t *>(rec + Offsets::OFF_CREATURE_TYPE);
-    const uint32_t family = *reinterpret_cast<const uint32_t *>(rec + Offsets::OFF_CREATURE_FAMILY);
-    const uint32_t rank = *reinterpret_cast<const uint32_t *>(rec + Offsets::OFF_CREATURE_RANK);
+        Game::Read<const char *>(rec, Offsets::OFF_CREATURE_SUBNAME);
+    const uint32_t type = Game::Read<uint32_t>(rec, Offsets::OFF_CREATURE_TYPE);
+    const uint32_t family = Game::Read<uint32_t>(rec, Offsets::OFF_CREATURE_FAMILY);
+    const uint32_t rank = Game::Read<uint32_t>(rec, Offsets::OFF_CREATURE_RANK);
     const uint32_t displayID =
-        *reinterpret_cast<const uint32_t *>(rec + Offsets::OFF_CREATURE_DISPLAYID);
+        Game::Read<uint32_t>(rec, Offsets::OFF_CREATURE_DISPLAYID);
 
     Game::Lua::NewTable(L);
     Game::Lua::SetFieldNumber(L, "creatureID", creatureID);
@@ -143,17 +145,10 @@ int __fastcall Script_GetRaceInfo(void *L) {
         return 0; // nil
     const int raceID = static_cast<int>(Game::Lua::ToNumber(L, 1));
     const char *file =
-        (raceID > 0) ? DBC::StringField(Offsets::VAR_CHRRACES_RECORDS,
-                                        Offsets::VAR_CHRRACES_COUNT,
-                                        static_cast<uint32_t>(raceID),
-                                        Offsets::OFF_CHRRACES_FILENAME)
-                     : nullptr;
+        (raceID > 0) ? DBC::RaceToken(static_cast<uint32_t>(raceID)) : nullptr;
     if (file == nullptr)
         return 0; // unknown id -> nil
-    const char *name = DBC::LocalizedField(Offsets::VAR_CHRRACES_RECORDS,
-                                           Offsets::VAR_CHRRACES_COUNT,
-                                           static_cast<uint32_t>(raceID),
-                                           Offsets::OFF_CHRRACES_NAMES);
+    const char *name = DBC::RaceName(static_cast<uint32_t>(raceID));
 
     Game::Lua::NewTable(L);
     Game::Lua::SetFieldString(L, "raceName", name); // NULL coerced to ""
@@ -169,17 +164,10 @@ int __fastcall Script_GetClassInfo(void *L) {
         return 0; // nil
     const int classID = static_cast<int>(Game::Lua::ToNumber(L, 1));
     const char *file =
-        (classID > 0) ? DBC::StringField(Offsets::VAR_CHRCLASSES_RECORDS,
-                                         Offsets::VAR_CHRCLASSES_COUNT,
-                                         static_cast<uint32_t>(classID),
-                                         Offsets::OFF_CHRCLASSES_FILENAME)
-                      : nullptr;
+        (classID > 0) ? DBC::ClassToken(static_cast<uint32_t>(classID)) : nullptr;
     if (file == nullptr)
         return 0; // unknown id -> nil
-    const char *name = DBC::LocalizedField(Offsets::VAR_CHRCLASSES_RECORDS,
-                                           Offsets::VAR_CHRCLASSES_COUNT,
-                                           static_cast<uint32_t>(classID),
-                                           Offsets::OFF_CHRCLASSES_NAMES);
+    const char *name = DBC::ClassName(static_cast<uint32_t>(classID));
 
     Game::Lua::NewTable(L);
     Game::Lua::SetFieldString(L, "className", name); // NULL coerced to ""
@@ -225,7 +213,7 @@ int __fastcall Script_GetCreatureFamilyIDs(void *L) {
     Game::Lua::NewTable(L);
 
     const int count =
-        *reinterpret_cast<const int *>(Offsets::VAR_CREATUREFAMILY_COUNT);
+        Game::Read<int>(Offsets::VAR_CREATUREFAMILY_COUNT);
     int n = 0;
     for (int id = 1; id <= count; ++id) {
         const char *name = DBC::LocalizedField(Offsets::VAR_CREATUREFAMILY_RECORDS,
@@ -262,8 +250,8 @@ int __fastcall Script_GetFactionInfo(void *L) {
                                        static_cast<uint32_t>(raceID));
     if (crRec == nullptr)
         return 0; // unknown race
-    const int ftId = *reinterpret_cast<const int *>(
-        crRec + Offsets::OFF_CHRRACES_FACTION_TEMPLATE);
+    const int ftId = Game::Read<int>(
+        crRec, Offsets::OFF_CHRRACES_FACTION_TEMPLATE);
     if (ftId <= 0)
         return 0;
 
@@ -272,31 +260,31 @@ int __fastcall Script_GetFactionInfo(void *L) {
                                        static_cast<uint32_t>(ftId));
     if (ftRec == nullptr)
         return 0;
-    const uint32_t mask = *reinterpret_cast<const uint32_t *>(
-        ftRec + Offsets::OFF_FACTIONTEMPLATE_GROUP_MASK);
+    const uint32_t mask = Game::Read<uint32_t>(
+        ftRec, Offsets::OFF_FACTIONTEMPLATE_GROUP_MASK);
 
     // FactionGroup is stored contiguously (records-base + i*stride), not as a
     // pointer array — iterate by hand rather than via DBC::Record.
-    auto *fgBase = *reinterpret_cast<const uint8_t *const *>(
+    auto *fgBase = Game::Read<const uint8_t *>(
         Offsets::VAR_FACTIONGROUP_RECORDS);
     const int fgCount =
-        *reinterpret_cast<const int *>(Offsets::VAR_FACTIONGROUP_COUNT);
-    const int locale = *reinterpret_cast<const int *>(Offsets::VAR_LOCALE_INDEX);
+        Game::Read<int>(Offsets::VAR_FACTIONGROUP_COUNT);
+    const int locale = Game::Read<int>(Offsets::VAR_LOCALE_INDEX);
     if (fgBase == nullptr)
         return 0;
 
     for (int i = 0; i < fgCount; ++i) {
         const uint8_t *row = fgBase + i * Offsets::FACTIONGROUP_STRIDE;
-        const int bit = *reinterpret_cast<const int *>(
-            row + Offsets::OFF_FACTIONGROUP_BIT);
+        const int bit = Game::Read<int>(
+            row, Offsets::OFF_FACTIONGROUP_BIT);
         if ((mask & (1u << (bit & 0x1F))) == 0)
             continue;
-        const char *loc = *reinterpret_cast<const char *const *>(
-            row + Offsets::OFF_FACTIONGROUP_NAMES + locale * 4);
+        const char *loc = Game::Read<const char *>(
+            row, Offsets::OFF_FACTIONGROUP_NAMES + locale * 4);
         if (loc == nullptr || *loc == '\0')
             continue; // "Player" / "Monster" have empty localized names
-        const char *eng = *reinterpret_cast<const char *const *>(
-            row + Offsets::OFF_FACTIONGROUP_ENGLISH);
+        const char *eng = Game::Read<const char *>(
+            row, Offsets::OFF_FACTIONGROUP_ENGLISH);
 
         Game::Lua::NewTable(L);
         Game::Lua::SetFieldString(L, "name", loc);
@@ -336,7 +324,7 @@ int __fastcall Script_GetCreatureTypeIDs(void *L) {
     Game::Lua::NewTable(L);
 
     const int count =
-        *reinterpret_cast<const int *>(Offsets::VAR_CREATURETYPE_COUNT);
+        Game::Read<int>(Offsets::VAR_CREATURETYPE_COUNT);
     int n = 0;
     for (int id = 1; id <= count; ++id) {
         const char *name = DBC::LocalizedField(Offsets::VAR_CREATURETYPE_RECORDS,
@@ -373,11 +361,22 @@ void RegisterLuaFunctions() {
     Game::Lua::RegisterTableFunction("C_CreatureInfo", "GetCreatureTypeIDs",
                                      &Script_GetCreatureTypeIDs);
     Cache::QueryLoad::Register(reinterpret_cast<void *>(Offsets::VAR_CREATURE_CACHE),
-                               kCreatureDataLoadResult, Offsets::FUN_CREATURE_GET_RECORD);
+                               &_reserveLoadResult, Offsets::FUN_CREATURE_GET_RECORD);
 }
 
 const Game::ModuleAutoRegister _autoreg{&RegisterLuaFunctions};
 
 } // namespace
+
+// Public accessor for Model::DisplayInfo's SetCreature — the same peek
+// GetCreatureInfoByID uses, reduced to the display-ID field. 0 = uncached.
+uint32_t DisplayID(uint32_t creatureID) {
+    if (creatureID == 0)
+        return 0;
+    const uint8_t *rec = PeekCreature(creatureID);
+    if (rec == nullptr)
+        return 0;
+    return Game::Read<uint32_t>(rec, Offsets::OFF_CREATURE_DISPLAYID);
+}
 
 } // namespace Creature::Info

@@ -25,6 +25,32 @@
 // place.
 namespace Map::Area {
 
+// The world map's detail canvas in pixels (`WorldMapDetailFrame`) and the
+// size of one background tile — both taken from the client's own
+// `WorldMapFrame.xml`, where the frame is 1002x668 and each of the twelve
+// `WorldMapDetailTile` textures is 256x256 (tile 5 anchors below tile 1, so
+// the grid is 4 wide by 3 tall). A map's background is that grid, and
+// `WorldMapOverlay` placement/hit rects are authored in the same space.
+//
+// These are deliberately CONSTANTS rather than a live read of
+// `WorldMapDetailFrame`, which would look like the more "engine-driven"
+// choice and is in fact the wrong one, twice over:
+//
+//   - The frame is addon-mutable. Map addons resize and rescale it, but the
+//     DBC coordinates these normalize don't move — they were authored
+//     against the shipped size. Reading the frame live would silently skew
+//     every overlay the moment someone scaled the map.
+//   - They are LOGICAL sizes, not on-disk ones. An HD map patch ships
+//     larger tile files; `Map::Overlays` detects that from the real BLP
+//     dimensions and scales. Reporting a patched tile's true size here
+//     would break the `canvas / tile` division that yields the 4x3 grid.
+//
+// So the authored value is the truth, and the runtime one is the mutable
+// approximation — the reverse of the usual case.
+constexpr double kMapCanvasWidth = 1002.0;
+constexpr double kMapCanvasHeight = 668.0;
+constexpr int kMapTileSize = 256;
+
 // WorldMapArea row for an AreaTable `areaID` (the stable zone identity
 // `C_Map.GetBestMapForUnit` returns). Linear walk of the ~175-row table.
 // Returns -1 when no row carries that areaID.
@@ -75,5 +101,46 @@ bool PercentInZone(int areaID, float x, float y, double *outMapX, double *outMap
 // Returns false when the map has no usable continent row. This is the
 // projection retail's TaxiNodeInfo.position uses.
 bool ContinentPercent(int mapID, float x, float y, double *outPx, double *outPy);
+
+// --- uiMapID identity ------------------------------------------------------
+//
+// A ClassicAPI `uiMapID` names either a zone or a whole map:
+//   positive  = an `AreaTable.dbc` area id (a zone) — what
+//               `C_Map.GetBestMapForUnit` returns.
+//   negative  = -(WorldMapArea row) — continent / world / instance maps,
+//               which carry no AreaTable id (their rows have areaID 0).
+// The negative half mirrors the engine's own two-namespaces-in-one-int idiom
+// (a quest's `zoneOrSort`: positive = AreaTable zone, negative = -QuestSort
+// row), so the two id spaces can never collide.
+
+// WorldMapArea row for a `uiMapID` in either namespace. Returns -1 when the
+// id resolves to no row.
+int RowForUiMapID(int uiMapID);
+
+// The `uiMapID` that names WorldMapArea row `row` — its areaID when it has
+// one, else -(row). Returns 0 for an unreadable row.
+int UiMapIDForRow(int row);
+
+// The continent-level WorldMapArea row for a `Map.dbc` map: the areaID == 0
+// row with a non-degenerate rect (the same selection `ContinentPercent`
+// makes, so the stray zero-rect "World" row never wins). -1 when none.
+int ContinentRowForMapID(int mapID);
+
+// Reads WorldMapArea row `row`'s placement rect and its `Map.dbc` map id.
+// Every out-parameter is optional (pass null to skip it). False when the row
+// is unreadable.
+bool RowRect(int row, double *outLeft, double *outRight, double *outTop,
+             double *outBottom, int *outMapID);
+
+// Projects world (x, y) into row `row`'s rect as 0..1 (`outPx` horizontal off
+// world Y, `outPy` vertical off world X). Unlike `PercentInZone` there is NO
+// containment gate — a point outside the rect yields a value outside 0..1, and
+// the caller decides whether that is meaningful. False for a missing or
+// degenerate rect.
+bool PercentInRow(int row, float x, float y, double *outPx, double *outPy);
+
+// Inverse of `PercentInRow`: a 0..1 position on row `row` back to
+// continent-space world coordinates. False for a missing or degenerate rect.
+bool WorldFromRow(int row, double px, double py, double *outX, double *outY);
 
 } // namespace Map::Area

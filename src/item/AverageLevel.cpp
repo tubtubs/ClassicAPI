@@ -55,6 +55,8 @@
 #include "item/Data.h"
 #include "item/ID.h"
 #include "item/Location.h"
+#include "item/Record.h"
+#include "object/Resolve.h"
 #include "unit/Identity.h"
 
 #include <algorithm>
@@ -64,10 +66,6 @@
 namespace Item::AverageLevel {
 
 namespace {
-
-using GetItemRecord_t = const uint8_t *(__thiscall *)(void *cache, uint32_t itemID,
-                                                      const uint64_t *guid, void *callback,
-                                                      void *userData, int unused);
 
 // 1-based slot range used by both walks.
 constexpr int kFirstSlot = 1;
@@ -119,13 +117,6 @@ constexpr uint32_t kSlotMaskByInvType[29] = {
 constexpr int kInvTypeMax = static_cast<int>(sizeof(kSlotMaskByInvType) /
                                               sizeof(kSlotMaskByInvType[0])) - 1;
 
-const uint8_t *PeekItemRecord(uint32_t itemID) {
-    auto fn = reinterpret_cast<GetItemRecord_t>(Offsets::FUN_DBCACHE_ITEMSTATS_GET_RECORD);
-    auto *cache = reinterpret_cast<void *>(Offsets::VAR_ITEMDB_CACHE);
-    const uint64_t zeroGuid = 0;
-    return fn(cache, itemID, &zeroGuid, nullptr, nullptr, 0);
-}
-
 // Returns (itemLevel, inventoryType) for the CGItem, or (0, 0) if
 // the itemID is unresolvable or the cache record hasn't loaded.
 struct ItemInfo {
@@ -139,7 +130,7 @@ ItemInfo ReadItemInfo(const uint8_t *cgItem) {
     const int itemID = Item::ID::FromCGItem(cgItem);
     if (itemID <= 0)
         return {0, 0};
-    const uint8_t *record = PeekItemRecord(static_cast<uint32_t>(itemID));
+    const uint8_t *record = Item::PeekRecord(static_cast<uint32_t>(itemID));
     if (record == nullptr) {
         // Equipped or bagged item with no cache record yet — queue a
         // warmup so the next call gets populated data. Cheap on cache
@@ -147,29 +138,18 @@ ItemInfo ReadItemInfo(const uint8_t *cgItem) {
         Item::Data::WarmCache(static_cast<uint32_t>(itemID));
         return {0, 0};
     }
-    return {*reinterpret_cast<const uint32_t *>(record + Offsets::OFF_ITEMSTATS_ITEM_LEVEL),
-            *reinterpret_cast<const uint32_t *>(record + Offsets::OFF_ITEMSTATS_INVENTORY_TYPE)};
+    return {Game::Read<uint32_t>(record, Offsets::OFF_ITEMSTATS_ITEM_LEVEL),
+            Game::Read<uint32_t>(record, Offsets::OFF_ITEMSTATS_INVENTORY_TYPE)};
 }
 
 // Bank-walk helpers — bypass the bank-window gate on `GetItemBySlot`
 // by reading the player's invMgr GUID array directly. Same shape as
 // `C_Item.GetItemCount`'s bank path.
-using ResolveObjectByGuid_t = void *(__fastcall *)(int type,
-                                                    const char *debugName,
-                                                    uint32_t guidLo,
-                                                    uint32_t guidHi,
-                                                    int priority);
-
 const uint8_t *ResolveByGuid(int type, uint64_t guid) {
     if (guid == 0)
         return nullptr;
-    auto fn = reinterpret_cast<ResolveObjectByGuid_t>(
-        Offsets::FUN_OBJECT_RESOLVE_BY_GUID);
     return static_cast<const uint8_t *>(
-        fn(type, "AverageLevel",
-           static_cast<uint32_t>(guid),
-           static_cast<uint32_t>(guid >> 32),
-           0x172));
+        Object::ByGuid(type, guid, "AverageLevel", 0x172));
 }
 
 // Collects a single CGItem into `candidates` if it could equip in
@@ -204,12 +184,12 @@ void WalkGuidArrayRange(const uint8_t *invMgr, int firstSlot, int lastSlot,
                         std::vector<Candidate> &candidates) {
     if (invMgr == nullptr)
         return;
-    auto *guidArray = *reinterpret_cast<const uint64_t *const *>(
-        invMgr + Offsets::OFF_INVMGR_GUID_ARRAY);
+    auto *guidArray = Game::Read<const uint64_t *>(
+        invMgr, Offsets::OFF_INVMGR_GUID_ARRAY);
     if (guidArray == nullptr)
         return;
     for (int slot = firstSlot; slot <= lastSlot; ++slot) {
-        const uint8_t *item = ResolveByGuid(Offsets::OBJ_TYPE_ITEM, guidArray[slot]);
+        const uint8_t *item = ResolveByGuid(Offsets::TYPEMASK_ITEM, guidArray[slot]);
         if (item == nullptr)
             continue;
         CollectBagOrBankItem(item, candidates);
@@ -223,13 +203,13 @@ void WalkBankBags(std::vector<Candidate> &candidates) {
     auto *playerInvMgr = Unit::Identity::PlayerInventoryManager();
     if (playerInvMgr == nullptr)
         return;
-    auto *playerGuidArray = *reinterpret_cast<const uint64_t *const *>(
-        playerInvMgr + Offsets::OFF_INVMGR_GUID_ARRAY);
+    auto *playerGuidArray = Game::Read<const uint64_t *>(
+        playerInvMgr, Offsets::OFF_INVMGR_GUID_ARRAY);
     if (playerGuidArray == nullptr)
         return;
     for (int slot = Offsets::INVMGR_BANK_BAG_FIRST_SLOT;
          slot <= Offsets::INVMGR_BANK_BAG_LAST_SLOT; ++slot) {
-        const uint8_t *bag = ResolveByGuid(Offsets::OBJ_TYPE_CONTAINER,
+        const uint8_t *bag = ResolveByGuid(Offsets::TYPEMASK_CONTAINER,
                                             playerGuidArray[slot]);
         if (bag == nullptr)
             continue;

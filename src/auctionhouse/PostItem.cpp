@@ -55,8 +55,10 @@
 #include "Game.h"
 #include "Offsets.h"
 #include "event/Custom.h"
+#include "item/CGItem.h"
 #include "item/ID.h"
 #include "item/Location.h"
+#include "item/Record.h"
 #include "item/Swap.h"
 #include "tick/WorldTick.h"
 
@@ -66,12 +68,9 @@ namespace AuctionHouse::PostItem {
 
 namespace {
 
-constexpr const char *kEvtStart = "AUCTION_MULTISELL_START";
-constexpr const char *kEvtUpdate = "AUCTION_MULTISELL_UPDATE";
-constexpr const char *kEvtFailure = "AUCTION_MULTISELL_FAILURE";
-const Event::Custom::AutoReserve _r1{kEvtStart};
-const Event::Custom::AutoReserve _r2{kEvtUpdate};
-const Event::Custom::AutoReserve _r3{kEvtFailure};
+const Event::Custom::AutoReserve _evtStart{"AUCTION_MULTISELL_START"};
+const Event::Custom::AutoReserve _evtUpdate{"AUCTION_MULTISELL_UPDATE"};
+const Event::Custom::AutoReserve _evtFailure{"AUCTION_MULTISELL_FAILURE"};
 
 // Generous per-step abort bound. A split or a post is one server round-trip
 // (~tens of frames); 600 frames (~10s at 60fps) means "something's wrong"
@@ -97,30 +96,18 @@ Job g_job{};
 
 // --- small CGItem / cache readers ---------------------------------------
 
-using GetItemRecord_t = const uint8_t *(__thiscall *)(void *cache, uint32_t itemID,
-                                                      const uint64_t *guid, void *callback,
-                                                      void *userData, int unused);
-const uint8_t *PeekItemRecord(uint32_t itemID) {
-    auto fn = reinterpret_cast<GetItemRecord_t>(Offsets::FUN_DBCACHE_ITEMSTATS_GET_RECORD);
-    auto *cache = reinterpret_cast<void *>(Offsets::VAR_ITEMDB_CACHE);
-    const uint64_t zeroGuid = 0;
-    return fn(cache, itemID, &zeroGuid, nullptr, nullptr, 0);
-}
-
 int CGItemCount(const uint8_t *item) {
-    auto *desc = *reinterpret_cast<const uint8_t *const *>(
-        item + Offsets::OFF_ITEM_DESCRIPTOR);
+    auto *desc = Item::ObjectFields(item);
     if (desc == nullptr)
         return 0;
-    return *reinterpret_cast<const int *>(desc + Offsets::OFF_DESCRIPTOR_STACK_COUNT);
+    return Game::Read<int>(desc, Offsets::OFF_DESCRIPTOR_STACK_COUNT);
 }
 
 uint64_t CGItemGuid(const uint8_t *item) {
-    auto *inst = *reinterpret_cast<const uint8_t *const *>(
-        item + Offsets::OFF_ITEM_INSTANCE_BLOCK);
+    auto *inst = Item::InstanceBlock(item);
     if (inst == nullptr)
         return 0;
-    return *reinterpret_cast<const uint64_t *>(inst + Offsets::OFF_INSTANCE_BLOCK_GUID);
+    return Game::Read<uint64_t>(inst, Offsets::OFF_INSTANCE_BLOCK_GUID);
 }
 
 struct SlotInfo {
@@ -145,18 +132,18 @@ SlotInfo ReadSlot(void *L, int bag, int slot) {
 // --- auction-house globals ----------------------------------------------
 
 uint64_t AuctioneerGuid() {
-    const uint32_t lo = *reinterpret_cast<const uint32_t *>(
+    const uint32_t lo = Game::Read<uint32_t>(
         Offsets::VAR_AUCTION_AUCTIONEER_GUID_LO);
-    const uint32_t hi = *reinterpret_cast<const uint32_t *>(
+    const uint32_t hi = Game::Read<uint32_t>(
         Offsets::VAR_AUCTION_AUCTIONEER_GUID_HI);
     return (static_cast<uint64_t>(hi) << 32) | lo;
 }
 bool AHOpen() { return AuctioneerGuid() != 0; }
 
 void SetSellGuid(uint64_t guid) {
-    *reinterpret_cast<uint32_t *>(Offsets::VAR_AUCTION_SELL_GUID_LO) =
+    Game::Ref<uint32_t>(Offsets::VAR_AUCTION_SELL_GUID_LO) =
         static_cast<uint32_t>(guid);
-    *reinterpret_cast<uint32_t *>(Offsets::VAR_AUCTION_SELL_GUID_HI) =
+    Game::Ref<uint32_t>(Offsets::VAR_AUCTION_SELL_GUID_HI) =
         static_cast<uint32_t>(guid >> 32);
 }
 
@@ -188,11 +175,11 @@ bool BagIsGeneral(int bag) {
     const int id = Item::ID::FromCGItem(bagItem);
     if (id == 0)
         return false;
-    const uint8_t *rec = PeekItemRecord(static_cast<uint32_t>(id));
+    const uint8_t *rec = Item::PeekRecord(static_cast<uint32_t>(id));
     if (rec == nullptr)
         return false;
-    return *reinterpret_cast<const uint32_t *>(
-               rec + Offsets::OFF_ITEMSTATS_BAG_FAMILY) == 0;
+    return Game::Read<uint32_t>(
+               rec, Offsets::OFF_ITEMSTATS_BAG_FAMILY) == 0;
 }
 
 bool FindFreeGeneralSlot(void *L, int *outBag, int *outSlot) {
@@ -216,7 +203,7 @@ bool FindFreeGeneralSlot(void *L, int *outBag, int *outSlot) {
 void Finish(bool success) {
     g_job.active = false;
     if (!success)
-        Event::Custom::Fire(Event::Custom::Lookup(kEvtFailure), "");
+        Event::Custom::Fire(_evtFailure.Slot(), "");
     // success needs no event: the last PostWait already fired
     // AUCTION_MULTISELL_UPDATE(total, total).
 }
@@ -289,7 +276,7 @@ void Tick() {
         // Post confirmed once the server pulls the item out of the slot.
         if (w.item == nullptr || w.guid != g_job.postGuid) {
             ++g_job.postedStacks;
-            Event::Custom::Fire(Event::Custom::Lookup(kEvtUpdate), "%d%d",
+            Event::Custom::Fire(_evtUpdate.Slot(), "%d%d",
                                 g_job.postedStacks, g_job.totalStacks);
             g_job.phase = Phase::Idle;
             g_job.waitTicks = 0;
@@ -410,7 +397,7 @@ int __fastcall Script_C_AuctionHouse_PostItem(void *L) {
     g_job.runTime = runTime;
     g_job.phase = Phase::Idle;
 
-    Event::Custom::Fire(Event::Custom::Lookup(kEvtStart), "");
+    Event::Custom::Fire(_evtStart.Slot(), "");
     Game::Lua::PushBool(L, true);
     return 1;
 }

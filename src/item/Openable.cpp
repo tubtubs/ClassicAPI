@@ -27,29 +27,16 @@
 
 #include "Game.h"
 #include "Offsets.h"
+#include "item/CGItem.h"
 #include "item/Data.h"
 #include "item/ID.h"
 #include "item/Location.h"
 #include "item/Openable.h"
+#include "item/Record.h"
 
 #include <cstdint>
 
 namespace Item::Openable {
-
-namespace {
-
-using GetItemRecord_t = const uint8_t *(__thiscall *)(void *cache, uint32_t itemID,
-                                                      const uint64_t *guid, void *callback,
-                                                      void *userData, int unused);
-
-const uint8_t *PeekItemRecord(uint32_t itemID) {
-    auto fn = reinterpret_cast<GetItemRecord_t>(Offsets::FUN_DBCACHE_ITEMSTATS_GET_RECORD);
-    auto *cache = reinterpret_cast<void *>(Offsets::VAR_ITEMDB_CACHE);
-    const uint64_t zeroGuid = 0;
-    return fn(cache, itemID, &zeroGuid, nullptr, nullptr, 0);
-}
-
-} // namespace
 
 namespace {
 
@@ -59,8 +46,7 @@ namespace {
 uint32_t InstanceFlags(const uint8_t *cgItem) {
     if (cgItem == nullptr)
         return 0;
-    auto *descriptor = *reinterpret_cast<const uint8_t *const *>(
-        cgItem + Offsets::OFF_ITEM_DESCRIPTOR);
+    auto *descriptor = Item::ObjectFields(cgItem);
     if (descriptor == nullptr)
         return 0;
     return *reinterpret_cast<const uint32_t *>(
@@ -73,7 +59,7 @@ int PushIsItemOpenable(void *L, const uint8_t *cgItem) {
     const int itemID = Item::ID::FromCGItem(cgItem);
     if (itemID <= 0)
         return 0;
-    const uint8_t *record = PeekItemRecord(static_cast<uint32_t>(itemID));
+    const uint8_t *record = Item::PeekRecord(static_cast<uint32_t>(itemID));
     if (record == nullptr) {
         Item::Data::WarmCache(static_cast<uint32_t>(itemID));
         return 0;

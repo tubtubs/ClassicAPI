@@ -40,6 +40,7 @@
 #include "../event/Custom.h"
 #include "../event/SignalHook.h"
 #include "../guid/Guid.h"
+#include "../object/Resolve.h"
 #include "../tick/WorldTick.h"
 
 #include <cstdint>
@@ -104,12 +105,6 @@ using ClntObjMgrEnumVisibleObjectsCallback_t = int(__fastcall *)(void *ctx,
                                                                   uint64_t guid);
 using ClntObjMgrEnumVisibleObjects_t =
     int(__fastcall *)(ClntObjMgrEnumVisibleObjectsCallback_t cb, void *ctx);
-using ClntObjMgrObjectPtr_t = void *(__fastcall *)(uint32_t typeMask,
-                                                    const char *debugMsg,
-                                                    uint32_t guidLo,
-                                                    uint32_t guidHi,
-                                                    int debugCode);
-using ResolveUnitToken_t = void *(__fastcall *)(const char *token);
 using LootUnit_t = void(__thiscall *)(void *player, void *target,
                                       char useDistanceCheck);
 using CloseLootInner_t = void(__fastcall *)(int sendRelease,
@@ -147,18 +142,15 @@ constexpr float MIN_INTERACT_RANGE = 5.0f;
 // === Range / lootability helpers (identical to Loot::Nearby) ===
 
 bool IsLootableUnit(const void *unit) {
-    auto *fields = *reinterpret_cast<const uint8_t *const *>(
-        static_cast<const uint8_t *>(unit) + Offsets::OFF_UNIT_DESCRIPTOR);
-    const uint32_t flags = *reinterpret_cast<const uint32_t *>(
-        fields + Offsets::OFF_UNIT_FIELD_DYNAMIC_FLAGS);
+    auto *fields = Game::Read<const uint8_t *>(unit, Offsets::OFF_UNIT_DESCRIPTOR);
+    const uint32_t flags =
+        Game::Read<uint32_t>(fields, Offsets::OFF_UNIT_FIELD_DYNAMIC_FLAGS);
     return (flags & Offsets::UNIT_DYNFLAG_LOOTABLE) != 0;
 }
 
 float BoundingRadius(const void *unit) {
-    auto *fields = *reinterpret_cast<const uint8_t *const *>(
-        static_cast<const uint8_t *>(unit) + Offsets::OFF_UNIT_DESCRIPTOR);
-    return *reinterpret_cast<const float *>(
-        fields + Offsets::OFF_UNIT_FIELD_BOUNDING_RADIUS);
+    auto *fields = Game::Read<const uint8_t *>(unit, Offsets::OFF_UNIT_DESCRIPTOR);
+    return Game::Read<float>(fields, Offsets::OFF_UNIT_FIELD_BOUNDING_RADIUS);
 }
 
 const C3Vector *GetPosition(const void *unit, C3Vector *outBuf) {
@@ -194,8 +186,7 @@ bool InInteractRange(const void *player, const void *target) {
 // `FUN_LOOT_CONTROLLER` run, so the slot table is fully filled in
 // and the link builder works against it.
 void ScrapeCurrentLoot(LootEntry *out) {
-    const uint32_t coinRaw = *reinterpret_cast<const uint32_t *>(
-        Offsets::VAR_LOOT_LOOTABLE);
+    const uint32_t coinRaw = Game::Read<uint32_t>(Offsets::VAR_LOOT_LOOTABLE);
     out->coin = (coinRaw == 0xFFFFFFFFu) ? 0u : coinRaw;
 
     const bool hasCoin = coinRaw != 0;
@@ -243,8 +234,7 @@ void ScrapeCurrentLoot(LootEntry *out) {
 void LootCurrentWindow() {
     // Coin present when `VAR_LOOT_LOOTABLE` holds a real amount (0 = none;
     // 0xFFFFFFFF = already-looted sentinel, never seen on a fresh open).
-    const uint32_t coinRaw = *reinterpret_cast<const uint32_t *>(
-        Offsets::VAR_LOOT_LOOTABLE);
+    const uint32_t coinRaw = Game::Read<uint32_t>(Offsets::VAR_LOOT_LOOTABLE);
     if (coinRaw != 0 && coinRaw != 0xFFFFFFFFu) {
         auto LootMoney = reinterpret_cast<LootMoney_t>(Offsets::FUN_CMSG_LOOT_MONEY);
         LootMoney(s_scan.player);
@@ -276,7 +266,7 @@ void Complete() {
     s_scan.currentGuid = 0;
     s_scan.suppressEvents = false;
     s_scan.lootMode = false;
-    Event::Custom::Fire(Event::Custom::Lookup(kEventCompleted), "");
+    Event::Custom::Fire(_reserve.Slot(), "");
 }
 
 void TryStartNext() {
@@ -290,11 +280,7 @@ void TryStartNext() {
 }
 
 void StartLoot(uint64_t guid) {
-    auto ObjectPtr = reinterpret_cast<ClntObjMgrObjectPtr_t>(
-        Offsets::FUN_CLNT_OBJ_MGR_OBJECT_PTR);
-    void *target = ObjectPtr(Offsets::TYPEMASK_UNIT, nullptr,
-                             static_cast<uint32_t>(guid),
-                             static_cast<uint32_t>(guid >> 32), 0);
+    void *target = Object::ByGuid(Offsets::TYPEMASK_UNIT, guid, nullptr, 0);
     if (target == nullptr) {
         TryStartNext();
         return;
@@ -423,11 +409,7 @@ struct EnumCtx {
 };
 
 int __fastcall EnumCallback(EnumCtx *ctx, void * /*unusedEdx*/, uint64_t guid) {
-    auto ObjectPtr = reinterpret_cast<ClntObjMgrObjectPtr_t>(
-        Offsets::FUN_CLNT_OBJ_MGR_OBJECT_PTR);
-    void *obj = ObjectPtr(Offsets::TYPEMASK_UNIT, nullptr,
-                          static_cast<uint32_t>(guid),
-                          static_cast<uint32_t>(guid >> 32), 0);
+    void *obj = Object::ByGuid(Offsets::TYPEMASK_UNIT, guid, nullptr, 0);
     if (obj == nullptr)
         return 1;
     if (!IsLootableUnit(obj))
@@ -460,9 +442,7 @@ bool BeginWalk(bool lootMode, size_t maxCount) {
         return false;
     if (*reinterpret_cast<void *volatile *>(Offsets::VAR_LOCAL_PLAYER_PTR) == nullptr)
         return false;
-    auto Resolve = reinterpret_cast<ResolveUnitToken_t>(
-        Offsets::FUN_RESOLVE_UNIT_TOKEN);
-    void *player = Resolve("player");
+    void *player = Game::ResolveUnitToken("player");
     if (player == nullptr)
         return false;
 

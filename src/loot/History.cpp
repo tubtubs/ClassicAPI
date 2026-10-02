@@ -47,7 +47,9 @@
 
 #include "Game.h"
 #include "Offsets.h"
+#include "dbc/Names.h"
 #include "event/Custom.h"
+#include "time/Clock.h"
 #include "unit/Identity.h"
 
 #include <cstdint>
@@ -62,14 +64,7 @@ T Read(const void *base, int off) {
     return *reinterpret_cast<const T *>(static_cast<const uint8_t *>(base) + off);
 }
 
-// Engine millisecond clock — same source (and epoch) as Lua's `GetTime()`
-// (which reads this scaled by 0.001), so a value stored here is directly
-// comparable to `GetTime()` once divided by 1000.
-uint32_t NowMs() {
-    using TickCount_t = uint32_t(__fastcall *)();
-    return reinterpret_cast<TickCount_t>(
-        static_cast<uintptr_t>(Offsets::FUN_OS_TICKCOUNT_MS))();
-}
+using Time::Clock::NowMs;
 
 // Modern rollType constants (what C_LootHistory.GetPlayerInfo returns).
 constexpr int ROLL_PASS = 0;
@@ -97,33 +92,14 @@ const uint8_t *LookupPlayerRecord(uint64_t guid) {
 
 const char *NameFromRecord(const uint8_t *rec) {
     return rec != nullptr
-               ? reinterpret_cast<const char *>(rec + Offsets::OFF_PLAYER_INFO_NAME)
+               ? Game::Ptr<const char>(rec, Offsets::OFF_PLAYER_INFO_NAME)
                : nullptr;
 }
 
 uint32_t ClassIdFromRecord(const uint8_t *rec) {
     return rec != nullptr
-               ? *reinterpret_cast<const uint32_t *>(rec + Offsets::OFF_PLAYER_INFO_CLASS)
+               ? Game::Read<uint32_t>(rec, Offsets::OFF_PLAYER_INFO_CLASS)
                : 0;
-}
-
-// ChrClasses.dbc record ID -> class token ("WARRIOR", "MAGE", …). The DBC's
-// filename field is the token; RAID_CLASS_COLORS et al. key on it. nullptr if
-// the ID is out of range or the record is missing.
-const char *ClassTokenForId(uint32_t classId) {
-    if (classId == 0)
-        return nullptr;
-    const int count = *reinterpret_cast<const int *>(
-        static_cast<uintptr_t>(Offsets::VAR_CHRCLASSES_COUNT));
-    const uint8_t *const *records = *reinterpret_cast<const uint8_t *const *const *>(
-        static_cast<uintptr_t>(Offsets::VAR_CHRCLASSES_RECORDS));
-    if (records == nullptr || static_cast<int>(classId) > count)
-        return nullptr;
-    const uint8_t *rec = records[classId];
-    if (rec == nullptr)
-        return nullptr;
-    return *reinterpret_cast<const char *const *>(
-        rec + Offsets::OFF_CHRCLASSES_FILENAME);
 }
 
 constexpr int kNameLen = 48; // engine NameCache inline name[48]
@@ -336,7 +312,7 @@ int RecordAllPassed(const void *msg) {
 // the same field offsets as the message. This is the only place the random
 // fields are populated, so the result recorders leave them alone.
 void RecordStart() {
-    const uint8_t *node = *reinterpret_cast<const uint8_t *const *>(
+    const uint8_t *node = Game::Read<const uint8_t *>(
         static_cast<uintptr_t>(Offsets::VAR_LOOTROLL_STORE_HEAD));
     if (node == nullptr)
         return;
@@ -368,7 +344,7 @@ StartFn_t g_origStart = nullptr;
 // structurally: a new item appears or the ring evicts an old one (shifting
 // every index).
 void FireFullUpdate() {
-    Event::Custom::Fire(Event::Custom::Lookup(kFullUpdate), "");
+    Event::Custom::Fire(_evFullUpdate.Slot(), "");
 }
 
 // START_ROLL: let the original build the store node, then read the item's
@@ -397,8 +373,7 @@ void __fastcall Roll_h(void *msg, void *ctx, int a3) {
     if (structural)
         FireFullUpdate();
     if (itemIdx > 0)
-        Event::Custom::Fire(Event::Custom::Lookup(kRollChanged), "%d%d", itemIdx,
-                            playerIdx);
+        Event::Custom::Fire(_evRollChanged.Slot(), "%d%d", itemIdx, playerIdx);
 }
 
 void __fastcall Won_h(void *ctx, void *msg, int a3) {
@@ -412,7 +387,7 @@ void __fastcall Won_h(void *ctx, void *msg, int a3) {
     if (structural)
         FireFullUpdate();
     if (itemIdx > 0)
-        Event::Custom::Fire(Event::Custom::Lookup(kRollComplete), "%d", itemIdx);
+        Event::Custom::Fire(_evRollComplete.Slot(), "%d", itemIdx);
 }
 
 void __fastcall Passed_h(void *ctx, void *msg) {
@@ -426,7 +401,7 @@ void __fastcall Passed_h(void *ctx, void *msg) {
     if (structural)
         FireFullUpdate();
     if (itemIdx > 0)
-        Event::Custom::Fire(Event::Custom::Lookup(kRollComplete), "%d", itemIdx);
+        Event::Custom::Fire(_evRollComplete.Slot(), "%d", itemIdx);
 }
 
 const Game::HookAutoRegister _hookRoll{
@@ -506,7 +481,7 @@ int __fastcall Script_GetPlayerInfo(void *L) {
         Game::Lua::PushString(L, r.name);                    // 1 name
     else
         Game::Lua::PushNil(L);
-    const char *classToken = ClassTokenForId(r.classId);     // 2 class token
+    const char *classToken = DBC::ClassToken(r.classId);     // 2 class token
     if (classToken != nullptr)
         Game::Lua::PushString(L, classToken);
     else

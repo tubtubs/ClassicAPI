@@ -18,12 +18,28 @@ build instructions.
   - [`C_AddOns.GetAddOnNotes(indexOrName)`](#c_addonsgetaddonnotesindexorname)
   - [`C_AddOns.IsAddOnLoadable(indexOrName)`](#c_addonsisaddonloadableindexorname)
   - [`C_AddOns.IsAddOnLoaded(indexOrName)`](#c_addonsisaddonloadedindexorname)
+  - [`C_AddOns.LoadAddOn(indexOrName)`](#c_addonsloadaddonindexorname)
   - [`C_AddOns.GetAddOnSecurity(indexOrName)`](#c_addonsgetaddonsecurityindexorname)
   - [`C_AddOns.DoesAddOnExist(indexOrName)`](#c_addonsdoesaddonexistindexorname)
   - [`C_AddOns.GetAddOnOptionalDependencies(indexOrName)`](#c_addonsgetaddonoptionaldependenciesindexorname)
+  - [`C_AddOns.GetAddOnLocalTable(name)`](#c_addonsgetaddonlocaltablename)
+  - [Conditional and multi-flavor TOC loading](#conditional-and-multi-flavor-toc-loading)
+  - [SavedVariables loaded first](#savedvariables-loaded-first)
+
+- [APIDocumentation](#apidocumentation)
+  - [`/classicapi`](#classicapi)
+  - [`C_APIDocumentation.GetSystems()`](#c_apidocumentationgetsystems)
+  - [`C_APIDocumentation.GetSystem(system)`](#c_apidocumentationgetsystemsystem)
+  - [`_classicapi_UndocumentedAPI()`](#_classicapi_undocumentedapi)
 
 - [AuctionHouse](#auctionhouse)
   - [`C_AuctionHouse.PostItem(itemLocation, duration, quantity, numStacks, bid, buyout)`](#c_auctionhousepostitemitemlocation-duration-quantity-numstacks-bid-buyout)
+
+- [AuraUtil](#aurautil)
+  - [`AuraUtil.ForEachAura`](#aurautilforeachaura)
+  - [`AuraUtil.FindAura`](#aurautilfindaura)
+  - [`AuraUtil.FindAuraByName`](#aurautilfindaurabyname)
+  - [`AuraUtil.UnpackAuraData`](#aurautilunpackauradata)
 
 - [CharacterList](#characterlist)
   - [`GetSavedCharacterOrder(realm)` / `SetSavedCharacterOrder(realm, order)` — GlueXML only](#getsavedcharacterorderrealm--setsavedcharacterorderrealm-order--gluexml-only)
@@ -32,7 +48,10 @@ build instructions.
   - [`GetCurrentChatGUID()`](#getcurrentchatguid)
 
 - [Class](#class)
-  - [`FillLocalizedClassList(table [, isFemale])`](#filllocalizedclasslisttable-isfemale)
+  - [`FillLocalizedClassList(table [, isFemale])`](#filllocalizedclasslisttable--isfemale)
+
+- [ClassColor](#classcolor)
+  - [`C_ClassColor.GetClassColor(className)`](#c_classcolorgetclasscolorclassname)
 
 - [ColorUtil](#colorutil)
   - [`C_ColorUtil.ConvertRGBToHSV(r, g, b)`](#c_colorutilconvertrgbtohsvr-g-b)
@@ -46,10 +65,22 @@ build instructions.
 
 - [Combat](#combat)
   - [`InCombatLockdown()`](#incombatlockdown)
+  - [`StartAttack([target])`](#startattacktarget)
+  - [`StopAttack()`](#stopattack)
 
 - [Console](#console)
+  - [`ConsoleExec(command)`](#consoleexeccommand)
+  - [`ConsoleEcho(message [, colorType])`](#consoleechomessage--colortype)
+  - [`ConsolePrintAllMatchingCommands(prefix)`](#consoleprintallmatchingcommandsprefix)
+  - [`ConsoleIsActive()`](#consoleisactive)
+  - [`ConsoleGetColorFromType(colorType)`](#consolegetcolorfromtypecolortype)
+  - [`ConsoleGetFontHeight()`](#consolegetfontheight)
+  - [`SetConsoleKey(keyCode)`](#setconsolekeykeycode)
+  - [`CalculateStringEditDistance(a, b)`](#calculatestringeditdistancea-b)
+  - [`ConsoleGetAllCommands()`](#consolegetallcommands)
   - [`ExportInterfaceFiles art|code` (console command)](#exportinterfacefiles-artcode-console-command)
   - [`ExportDBCFiles` (console command)](#exportdbcfiles-console-command)
+  - [`ExportSoundFiles [subpath]` (console command)](#exportsoundfiles-subpath-console-command)
 
 - [Container](#container)
   - [`C_Container.GetContainerItemID(bagIndex, slotIndex)`](#c_containergetcontaineritemidbagindex-slotindex)
@@ -60,12 +91,21 @@ build instructions.
   - [`C_Container.GetContainerItemRepairCost(containerIndex, slotIndex)`](#c_containergetcontaineritemrepaircostcontainerindex-slotindex)
   - [`C_Container.GetContainerItemCharges(containerIndex, slotIndex)`](#c_containergetcontaineritemchargescontainerindex-slotindex)
   - [`C_Container.GetContainerNumFreeSlots(bagID)`](#c_containergetcontainernumfreeslotsbagid)
+  - [`C_Container.GetContainerFreeSlots(bagID)`](#c_containergetcontainerfreeslotsbagid)
+  - [`C_Container.GetContainerItemQuestInfo(containerIndex, slotIndex)`](#c_containergetcontaineritemquestinfocontainerindex-slotindex)
+  - [`C_Container.GetContainerItemEquipmentSetInfo(containerIndex, slotIndex)`](#c_containergetcontaineritemequipmentsetinfocontainerindex-slotindex)
   - [`C_Container.CalculateTotalNumberOfFreeBagSlots()`](#c_containercalculatetotalnumberoffreebagslots)
   - [`C_Container.IsContainerItemOpenable(containerIndex, slotIndex)`](#c_containeriscontaineritemopenablecontainerindex-slotindex)
   - [`C_Container.PlayerHasHearthstone()`](#c_containerplayerhashearthstone)
   - [`C_Container.UseHearthstone()`](#c_containerusehearthstone)
   - [`C_Container.SwapItems(srcBag, srcSlot, dstBag, dstSlot)`](#c_containerswapitemssrcbag-srcslot-dstbag-dstslot)
   - [`C_Container.MoveItem(srcBag, srcSlot, dstBag, dstSlot, count)`](#c_containermoveitemsrcbag-srcslot-dstbag-dstslot-count)
+  - [`C_Container.AutoStoreItem(srcBag, srcSlot [, dstBag])`](#c_containerautostoreitemsrcbag-srcslot--dstbag)
+  - [`C_Container.SortBags()`](#c_containersortbags)
+  - [`C_Container.SortBankBags()`](#c_containersortbankbags)
+  - [`C_Container.GetSortBagsRightToLeft()` / `C_Container.SetSortBagsRightToLeft(enable)`](#c_containergetsortbagsrighttoleft--c_containersetsortbagsrighttoleftenable)
+  - [`C_Container.GetBackpackAutosortDisabled()` / `C_Container.SetBackpackAutosortDisabled(disable)`](#c_containergetbackpackautosortdisabled--c_containersetbackpackautosortdisableddisable)
+  - [`C_Container.GetBankAutosortDisabled()` / `C_Container.SetBankAutosortDisabled(disable)`](#c_containergetbankautosortdisabled--c_containersetbankautosortdisableddisable)
 
 - [Creature](#creature)
   - [`C_CreatureInfo.GetCreatureID(guid)`](#c_creatureinfogetcreatureidguid)
@@ -79,8 +119,17 @@ build instructions.
   - [`C_CreatureInfo.GetCreatureTypeInfo(creatureTypeID)`](#c_creatureinfogetcreaturetypeinfocreaturetypeid)
   - [`C_CreatureInfo.GetCreatureTypeIDs()`](#c_creatureinfogetcreaturetypeids)
 
+- [Currency](#currency)
+  - [`GetCoinTextureString(amount [, fontHeight])` / `C_CurrencyInfo.GetCoinTextureString(amount [, fontHeight])`](#getcointexturestringamount--fontheight--c_currencyinfogetcointexturestringamount--fontheight)
+
 - [CVar](#cvar)
+  - [`C_CVar.GetCVarInfo(name)`](#c_cvargetcvarinfoname)
+  - [`C_CVar.DoesCVarExist(name)`](#c_cvardoescvarexistname)
+  - [`C_CVar.AreCVarsLoaded()`](#c_cvararecvarsloaded)
+  - [`C_CVar.GetCVarBitfield(name, index)` / `C_CVar.SetCVarBitfield(name, index, value)`](#c_cvargetcvarbitfieldname-index--c_cvarsetcvarbitfieldname-index-value)
+  - [`C_CVar.SetTempCVar(name, value)` / `C_CVar.RemoveTempCVar(name)`](#c_cvarsettempcvarname-value--c_cvarremovetempcvarname)
   - [`C_CVar.GetCVarBool(cvar)`](#c_cvargetcvarboolcvar)
+  - [The interface memory limit](#the-interface-memory-limit)
 
 - [Cursor](#cursor)
   - [`GetCursorInfo()`](#getcursorinfo)
@@ -102,6 +151,7 @@ build instructions.
   - [`C_EquipmentSet.IgnoreSlotForSave(slot)` / `UnignoreSlotForSave` / `IsSlotIgnoredForSave` / `ClearIgnoredSlotsForSave`](#c_equipmentsetignoreslotforsaveslot--unignoreslotforsave--isslotignoredforsave--clearignoredslotsforsave)
   - [`C_EquipmentSet.EquipmentSetContainsLockedItems(setID)`](#c_equipmentsetequipmentsetcontainslockeditemssetid)
   - [`C_EquipmentSet.UseEquipmentSet(setID)`](#c_equipmentsetuseequipmentsetsetid)
+  - [`C_EquipmentSet.PickupEquipmentSet(setID)`](#c_equipmentsetpickupequipmentsetsetid)
 
 - [Events](#events)
   - [`C_EventUtils.IsEventValid(eventName)`](#c_eventutilsiseventvalideventname)
@@ -115,22 +165,30 @@ build instructions.
   - [Player input-state events (`PLAYER_STARTED_MOVING` / `LOOKING` / `TURNING` + `STOPPED_*`)](#player-input-state-events)
   - [`GLOBAL_MOUSE_DOWN` / `GLOBAL_MOUSE_UP` events](#global_mouse_down--global_mouse_up-events)
   - [`AUCTION_MULTISELL_START` / `AUCTION_MULTISELL_UPDATE` / `AUCTION_MULTISELL_FAILURE` events](#c_auctionhousepostitemitemlocation-duration-quantity-numstacks-bid-buyout)
+  - [`CURSOR_CHANGED` event](#cursor_changed-event)
   - [`EQUIPMENT_SETS_CHANGED` event](#equipment_sets_changed-event)
   - [`EQUIPMENT_SWAP_PENDING` event](#equipment_swap_pending-event)
   - [`EQUIPMENT_SWAP_FINISHED` event](#equipment_swap_finished-event)
+  - [`WEAR_EQUIPMENT_SET` event](#wear_equipment_set-event)
   - [`FACTION_STANDING_CHANGED` event](#faction_standing_changed-event)
   - [`LOOT_HISTORY_ROLL_CHANGED` / `LOOT_HISTORY_ROLL_COMPLETE` / `LOOT_HISTORY_FULL_UPDATE` events](#loot_history_roll_changed--loot_history_roll_complete--loot_history_full_update-events)
+  - [`LEARNED_SPELL_IN_SKILL_LINE` event](#learned_spell_in_skill_line-event)
   - [`LOOT_SCAN_COMPLETED` event](#loot_scan_completed-event)
   - [`LOSS_OF_CONTROL_ADDED` / `LOSS_OF_CONTROL_UPDATE` events](#loss_of_control_added--loss_of_control_update-events)
   - [`MODIFIER_STATE_CHANGED` event](#modifier_state_changed-event)
   - [`NAME_PLATE_CREATED` / `NAME_PLATE_UNIT_ADDED` / `NAME_PLATE_UNIT_REMOVED` events](#name_plate_created--name_plate_unit_added--name_plate_unit_removed-events)
   - [`PLAYER_FOCUS_CHANGED` event](#player_focus_changed-event)
+  - [`PLAYER_SWING` event](#player_swing-event)
+  - [`PLAYER_SWING_RANGE_UPDATE` event](#player_swing_range_update-event)
   - [`QUEST_ACCEPTED` event](#quest_accepted-event)
   - [`QUEST_REMOVED` event](#quest_removed-event)
   - [`QUEST_TURNED_IN` event](#quest_turned_in-event)
+  - [`SOUNDKIT_FINISHED` event](#soundkit_finished-event)
   - [`UNIT_FACTION` event (fire-coverage fix)](#unit_faction-event-fire-coverage-fix)
   - [`UPDATE_MOUSEOVER_UNIT` event (loss-fire fix)](#update_mouseover_unit-event-loss-fire-fix)
   - [`UPDATE_SHAPESHIFT_FORM` event](#update_shapeshift_form-event)
+  - [`UNIT_SPELLCAST_*` events](#unit_spellcast_-events)
+  - [`WEAPON_SLOT_CHANGED` event](#weapon_slot_changed-event)
 
 - [Expansion](#expansion)
   - [`GetClassicExpansionLevel()`](#getclassicexpansionlevel)
@@ -143,15 +201,20 @@ build instructions.
   - [`GetFactionParentID(factionID)`](#getfactionparentidfactionid)
   - [`C_Reputation.GetFactionStandings()`](#c_reputationgetfactionstandings)
   - [`C_Reputation.GetWatchedFactionData()`](#c_reputationgetwatchedfactiondata)
+  - [`C_Reputation.GetFactionDataByID(factionID)`](#c_reputationgetfactiondatabyidfactionid)
   - [`C_Reputation.GetFactionDataByIndex(factionSortIndex)`](#c_reputationgetfactiondatabyindexfactionsortindex)
+  - [`C_Reputation.SetSelectedFactionByID(factionID)`](#c_reputationsetselectedfactionbyidfactionid)
   - [`C_Reputation.SetWatchedFactionByID(factionID)`](#c_reputationsetwatchedfactionbyidfactionid)
+  - [`C_Reputation.ToggleFactionAtWarByID(factionID)`](#c_reputationtogglefactionatwarbyidfactionid)
+  - [`C_Reputation.IsFactionActive(factionSortIndex)` / `C_Reputation.IsFactionActiveByID(factionID)`](#c_reputationisfactionactivefactionsortindex--c_reputationisfactionactivebyidfactionid)
+  - [`C_Reputation.SetFactionInactiveByID(factionID)` / `C_Reputation.SetFactionActiveByID(factionID)`](#c_reputationsetfactioninactivebyidfactionid--c_reputationsetfactionactivebyidfactionid)
   - [`C_Reputation.GetLastStandingChange()`](#c_reputationgetlaststandingchange)
 
 - [Focus](#focus)
   - [`FocusUnit(unit)`](#focusunitunit)
   - [`ClearFocus()`](#clearfocus)
   - [Unit token (`focus` / `focustarget`)](#unit-token-focus--focustarget)
-  - [Bindings (`FOCUSTARGET` / `TARGETFOCUS`)](#bindings-focustarget--targetfocus)
+  - [Bindings (`FOCUSTARGET` / `TARGETFOCUS`)](#predefined-focus-bindings-focustarget--targetfocus)
 
 - [Frame](#frame)
   - [`region:SetPoint("point")` (one-argument form)](#regionsetpointpoint-one-argument-form)
@@ -161,16 +224,70 @@ build instructions.
   - [`region:IsDragging()`](#regionisdragging)
   - [`GetMouseFoci()`](#getmousefoci)
   - [`frame:SetShown(shown)`](#framesetshownshown)
+  - [`fontstring:GetStringHeight()`](#fontstringgetstringheight)
+  - [`fontstring:GetUnboundedStringWidth()`](#fontstringgetunboundedstringwidth)
+  - [`fontstring:GetWrappedWidth()`](#fontstringgetwrappedwidth)
+  - [`fontstring:GetNumLines()`](#fontstringgetnumlines)
+  - [`fontstring:GetLineHeight()`](#fontstringgetlineheight)
+  - [`fontstring:IsTruncated()`](#fontstringistruncated)
+  - [`fontstring:SetMaxLines(maxLines)` / `fontstring:GetMaxLines()`](#fontstringsetmaxlinesmaxlines--fontstringgetmaxlines)
+  - [`fontstring:SetFormattedText(format [, ...])`](#fontstringsetformattedtextformat--)
+  - [`texture:SetRotation(angle [, cx, cy])`](#texturesetrotationangle--cx-cy)
+  - [`texture:SetVertexOffset(vertexIndex, offsetX, offsetY)`](#texturesetvertexoffsetvertexindex-offsetx-offsety)
+  - [`texture:SetMask(path)`](#texturesetmaskpath)
+  - [`frame:CreateMaskTexture([name, layer, ...])`](#framecreatemasktexturename-layer-)
+  - [`texture:AddMaskTexture(mask)`](#textureaddmasktexturemask)
+  - [`texture:RemoveMaskTexture([mask])`](#textureremovemasktexturemask)
+  - [`texture:GetNumMaskTextures()`](#texturegetnummasktextures)
+  - [`texture:GetMaskTexture(index)`](#texturegetmasktextureindex)
+  - [`texture:SetColorTexture(colorR, colorG, colorB [, a])`](#texturesetcolortexturecolorr-colorg-colorb--a)
+  - [`texture:SetAtlas(atlas [, useAtlasSize])`](#texturesetatlasatlas--useatlassize)
+  - [`texture:GetAtlas()`](#texturegetatlas)
+  - [`texture:ResetTexCoord()`](#textureresettexcoord)
+  - [`texture:SetSpriteSheetCell(cell, numRows, numColumns)`](#texturesetspritesheetcellcell-numrows-numcolumns)
+  - [`texture:SetDesaturation(amount)`](#texturesetdesaturationamount)
+  - [`texture:GetDesaturation()`](#texturegetdesaturation)
+  - [Texture size and shape](#texture-size-and-shape)
+  - [`fontstring:SetRotation(angle [, cx, cy])`](#fontstringsetrotationangle--cx-cy)
+  - [`editBox:SetCursorPosition(position)`](#editboxsetcursorpositionposition)
+  - [`editBox:GetCursorPosition()`](#editboxgetcursorposition)
+  - [`editBox:GetUTF8CursorPosition()`](#editboxgetutf8cursorposition)
+  - [`editBox:ClearHighlightText()`](#editboxclearhighlighttext)
+  - [`editBox:HasFocus()`](#editboxhasfocus)
+  - [`editBox:HasText()`](#editboxhastext)
+  - [`editBox:SetHighlightColor(r, g, b [, a])`](#editboxsethighlightcolorr-g-b--a)
+  - [`editBox:GetHighlightColor()`](#editboxgethighlightcolor)
+  - [`editBox:ClearHistory()`](#editboxclearhistory)
   - [`frame:SetResizeBounds(minWidth, minHeight [, maxWidth, maxHeight])`](#framesetresizeboundsminwidth-minheight--maxwidth-maxheight)
   - [`frame:HookScript(scriptType, handler)`](#framehookscriptscripttype-handler)
   - [`frame:IsEventRegistered(event)`](#frameiseventregisteredevent)
+  - [`frame:RegisterUnitEvent(event, ...units)`](#frameregisteruniteventevent-units)
   - [`frame:GetEffectiveAlpha()`](#framegeteffectivealpha)
   - [`frame:SetAttribute` / `SetAttributeNoHandler` / `ClearAttribute` / `GetAttribute` (+ unit-frame mouseover)](#framesetattributename-value--framesetattributenohandlername-value--frameclearattributename--framegetattribute)
   - [`SetModernScriptArgs(enable)` / `GetModernScriptArgs()`](#setmodernscriptargsenable--getmodernscriptargs)
+  - [`SecureCmdOptionParse(options [, quiet])`](#securecmdoptionparseoptions--quiet)
+  - [`RegisterStateDriver` / `UnregisterStateDriver`](#registerstatedriver--unregisterstatedriver)
+  - [`RegisterAttributeDriver` / `UnregisterAttributeDriver`](#registerattributedriver--unregisterattributedriver)
+  - [`RegisterUnitWatch` / `UnregisterUnitWatch` / `UnitWatchRegistered`](#registerunitwatch--unregisterunitwatch--unitwatchregistered)
+  - [`SecureButton_GetAttribute` / `SecureButton_GetUnit`](#securebutton_getattribute--securebutton_getunit)
+  - [`PreClick` / `PostClick` button scripts](#preclick--postclick-button-scripts)
+  - [`Button:RegisterForClicks("AnyUp" | "AnyDown" | ...)`](#buttonregisterforclicksanyup--anydown--)
+  - [`GetClickFrame(name)`](#getclickframename)
 
 - [FriendList](#friendlist)
   - [`C_FriendList.SendWhoQueryByName(name)`](#c_friendlistsendwhoquerybynamename)
   - [`C_FriendList.IsWhoQueryPending()`](#c_friendlistiswhoquerypending)
+  - [`C_FriendList.GetNumWhoResults()`](#c_friendlistgetnumwhoresults)
+  - [`C_FriendList.GetWhoInfo(index)`](#c_friendlistgetwhoinfoindex)
+  - [`C_FriendList.IsFriend(guid)`](#c_friendlistisfriendguid)
+  - [`C_FriendList.IsIgnored(token)`](#c_friendlistisignoredtoken)
+  - [`C_FriendList.IsIgnoredByGuid(guid)`](#c_friendlistisignoredbyguidguid)
+  - [`C_FriendList.GetNumFriends()`](#c_friendlistgetnumfriends)
+  - [`C_FriendList.GetNumOnlineFriends()`](#c_friendlistgetnumonlinefriends)
+  - [`C_FriendList.GetFriendInfo(name)`](#c_friendlistgetfriendinfoname)
+  - [`C_FriendList.GetFriendInfoByIndex(index)`](#c_friendlistgetfriendinfobyindexindex)
+  - [`C_FriendList.SetFriendNotes(name, notes)`](#c_friendlistsetfriendnotesname-notes)
+  - [`C_FriendList.SetFriendNotesByIndex(index, notes)`](#c_friendlistsetfriendnotesbyindexindex-notes)
 
 - [GameObject](#gameobject)
   - [`C_GameObjectInfo.GetGameObjectInfoByID(gameObjectID)`](#c_gameobjectinfogetgameobjectinfobyidgameobjectid)
@@ -191,12 +308,13 @@ build instructions.
   - [`GameTooltip:GetItem()`](#gametooltipgetitem)
   - [`GameTooltip:GetSpell()`](#gametooltipgetspell)
   - [`GameTooltip:HasItem()` / `GameTooltip:HasSpell()`](#gametooltiphasitem--gametooltiphasspell)
-  - [`GameTooltip:GetUnitGUID()` / `GameTooltip:HasUnit()`](#gametooltipgetunitguid--gametooltiphasunit)
+  - [`GameTooltip:GetUnit()` / `GameTooltip:GetUnitGUID()` / `GameTooltip:HasUnit()`](#gametooltipgetunit--gametooltipgetunitguid--gametooltiphasunit)
   - [`GameTooltip:GetGameObject()` / `GameTooltip:HasGameObject()`](#gametooltipgetgameobject--gametooltiphasgameobject)
   - [`GameTooltip:GetOwner()`](#gametooltipgetowner)
 
 - [Globals](#globals)
   - [`CLASSIC_API_VERSION`](#classic_api_version)
+  - [`INTERFACE_VERSION`](#interface_version)
   - [`LE_EXPANSION_*`](#le_expansion_)
   - [`LE_ITEM_QUALITY_*`](#le_item_quality_)
   - [`LE_UNIT_STAT_*`](#le_unit_stat_)
@@ -204,7 +322,11 @@ build instructions.
   - [`Enum.InventoryType`](#enuminventorytype)
   - [`Enum.ItemClass`](#enumitemclass)
   - [`Enum.ItemQuality`](#enumitemquality)
+  - [`Enum.PlayerSwingType`](#enumplayerswingtype)
   - [`Enum.PowerType`](#enumpowertype)
+  - [`Enum.SpellBookSpellBank`](#enumspellbookspellbank)
+  - [`Enum.SpellBookItemType`](#enumspellbookitemtype)
+  - [`Enum.UICursorType`](#enumuicursortype)
 
 - [Glue](#glue)
   - [`C_Glue.IsFirstLoadThisSession()`](#c_glueisfirstloadthissession)
@@ -236,8 +358,8 @@ build instructions.
   - [`GetInstanceInfo()`](#getinstanceinfo)
 
 - [Item](#item)
-  - [`C_Item.DoesItemExist(itemLocation)` / `C_Item.DoesItemExistByID(item)`](#c_itemdoesitemexititemlocation--c_itemdoesitemexistbyiditem)
-  - [`C_Item.EquipItemByName(itemInfo [, dstSlot])`](#c_itemequipitembynameiteminfo--dstslot)
+  - [`C_Item.DoesItemExist(itemLocation)` / `C_Item.DoesItemExistByID(item)`](#c_itemdoesitemexistitemlocation--c_itemdoesitemexistbyiditem)
+  - [`C_Item.EquipItemByName(item [, dstSlot])`](#c_itemequipitembynameitem--dstslot)
   - [`C_Item.GetCurrentItemLevel(itemLocation)` / `C_Item.GetDetailedItemLevelInfo(item)`](#c_itemgetcurrentitemlevelitemlocation--c_itemgetdetaileditemlevelinfoitem)
   - [`C_Item.GetItemCount(itemInfo, [includeBank], [includeUses])`](#c_itemgetitemcountiteminfo-includebank-includeuses)
   - [`C_Item.GetItemData(itemLocation)` / `C_Item.GetItemDataByID(item)`](#c_itemgetitemdataitemlocation--c_itemgetitemdatabyiditem)
@@ -264,6 +386,9 @@ build instructions.
   - [`GetItemSubClassInfo(classID, subClassID)` / `C_Item.GetItemSubClassInfo(classID, subClassID)`](#getitemsubclassinfoclassid-subclassid--c_itemgetitemsubclassinfoclassid-subclassid)
   - [`C_Item.GetItemUniqueness(itemLocation)` / `C_Item.GetItemUniquenessByID(item)`](#c_itemgetitemuniquenessitemlocation--c_itemgetitemuniquenessbyiditem)
   - [`C_Item.GetStackCount(itemLocation)`](#c_itemgetstackcountitemlocation)
+  - [`C_Item.GetWeaponEnchantInfo()`](#c_itemgetweaponenchantinfo)
+  - [`C_Item.GetItemTempEnchantInfo(itemLocation)`](#c_itemgetitemtempenchantinfoitemlocation)
+  - [`C_Item.GetEnchantInfo(enchantID)`](#c_itemgetenchantinfoenchantid)
   - [`C_Item.IsBound(itemLocation)`](#c_itemisbounditemlocation)
   - [`IsConsumableItem(item)` / `C_Item.IsConsumableItem(item)`](#isconsumableitemitem--c_itemisconsumableitemitem)
   - [`C_Item.IsEquippableItem(item)`](#c_itemisequippableitemitem)
@@ -280,9 +405,9 @@ build instructions.
   - [`C_Item.RequestLoadItemDataByID(item)` / `C_Item.RequestLoadItemData(itemLocation)`](#c_itemrequestloaditemdatabyiditem--c_itemrequestloaditemdataitemlocation)
   - [`C_Item.UnlockAllItems()`](#c_itemunlockallitems)
   - [`C_Item.UnlockItem(itemLocation)`](#c_itemunlockitemitemlocation)
-  - [`C_Item.UseAtCursor(itemInfo)`](#c_itemuseatcursoriteminfo)
-  - [`C_Item.UseAtUnit(itemInfo, unit)`](#c_itemuseatunititeminfo-unit)
-  - [`C_Item.UseItemByName(itemInfo [, unit])`](#c_itemuseitembynameiteminfo--unit)
+  - [`C_Item.UseAtCursor(item)`](#c_itemuseatcursoritem)
+  - [`C_Item.UseAtUnit(item, unit)`](#c_itemuseatunititem-unit)
+  - [`C_Item.UseItemByName(item [, unit])`](#c_itemuseitembynameitem--unit)
   - [`Get*ItemID` — companions to the engine's `Get*ItemLink` family](#getitemid--companions-to-the-engines-getitemlink-family)
   - [`GetAverageItemLevel()`](#getaverageitemlevel)
   - [`GetInventoryItemDurability(invSlot)`](#getinventoryitemdurabilityinvslot)
@@ -291,6 +416,10 @@ build instructions.
   - [`GetInventoryItemsForSlot(slot, returnTable [, transmogrify])`](#getinventoryitemsforslotslot-returntable--transmogrify)
   - [`GetItemIcon(itemID)` / `C_Item.GetItemIcon(itemLocation)` / `C_Item.GetItemIconByID(item)`](#getitemiconitemid--c_itemgetitemiconitemlocation--c_itemgetitemiconbyiditem)
   - [`OffhandHasWeapon()`](#offhandhasweapon)
+
+- [Launch](#launch)
+  - [`-config <name>` (launch switch)](#-config-name-launch-switch)
+  - [`-gluescript` / `-gluescriptFile` / `-gamescript` / `-gamescriptFile` (launch switches)](#-gluescript---gluescriptfile---gamescript---gamescriptfile-launch-switches)
 
 - [Loot](#loot)
   - [`C_Loot.GetNearbyLootableUnits()`](#c_lootgetnearbylootableunits)
@@ -309,13 +438,24 @@ build instructions.
 - [LossOfControl](#lossofcontrol)
   - [`C_LossOfControl.GetActiveLossOfControlDataCount()`](#c_lossofcontrolgetactivelossofcontroldatacount)
   - [`C_LossOfControl.GetActiveLossOfControlData(index)`](#c_lossofcontrolgetactivelossofcontroldataindex)
+  - [`C_LossOfControl.GetSchoolLockout([filterMask])`](#c_lossofcontrolgetschoollockoutfiltermask)
 
 - [Lua](#lua)
+  - [Lua 5.1 syntax](#lua-51-syntax)
+  - [Upvalue limit](#upvalue-limit)
+  - [String methods (`s:upper()`, `s:format(...)`)](#string-methods-supper-sformat)
+  - [`getfenv` / `setfenv` environment protection](#getfenv--setfenv-environment-protection)
   - [`select(index, ...)`](#selectindex-)
+  - [`unpack(list [, i [, j]])`](#unpacklist--i--j)
+  - [`xpcall(f, msgh [, arg1, ...])`](#xpcallf-msgh--arg1-)
+  - [`collectgarbage(opt [, arg])`](#collectgarbageopt--arg)
   - [`table.wipe(t)`](#tablewipet)
   - [`table.count(tbl)`](#tablecounttbl)
-  - [`Mixin(object, ...)` / `CreateFromMixins(...)`](#mixinobject--createfrommixins)
+  - [`table.maxn(t)`](#tablemaxnt)
+  - [Stale table lengths (5.1 healing)](#stale-table-lengths-51-healing)
+  - [`Mixin(object, ...)` / `CreateFromMixins(...)`](#mixinobject---createfrommixins)
   - [`string.match` / `string.gmatch`](#stringmatch--stringgmatch)
+  - [`string.gsub` table replacement](#stringgsub-table-replacement)
   - [`strsplit(sep, str [, pieces])`](#strsplitsep-str--pieces)
   - [`strjoin(delimiter, ...)`](#strjoindelimiter-)
   - [`strtrim(str [, chars])`](#strtrimstr--chars)
@@ -329,27 +469,54 @@ build instructions.
   - [`coroutine.yield(...)`](#coroutineyield)
   - [`coroutine.status(co)`](#coroutinestatusco)
   - [`coroutine.wrap(fn)`](#coroutinewrapfn)
+  - [`coroutine.running()`](#coroutinerunning)
   - [Async pattern (RunAsync + C_Timer.After)](#async-pattern-runasync--c_timerafter)
 
 - [Macros](#macros)
+  - [`/cast` and `/use`](#cast-and-use)
+  - [`/castsequence`](#castsequence)
+  - [`/castrandom` and `/userandom`](#castrandom-and-userandom)
+  - [More commands with `[conditions]`](#more-commands-with-conditions)
+  - [`#showtooltip` and `#show`](#showtooltip-and-show)
   - [Numeric spellIDs in `/cast` and `CastSpellByName`](#numeric-spellids-in-cast-and-castspellbyname)
   - [`CastSpellNoToggle` as a macro cast line](#castspellnotoggle-as-a-macro-cast-line)
+  - [`StopMacro()`](#stopmacro)
   - [`GetMacroSpell(macroSlot)`](#getmacrospellmacroslot)
+  - [`GetMacroItem(macroSlot)`](#getmacroitemmacroslot)
   - [`GetMacroIcons` / `GetMacroItemIcons` / `GetLooseMacroIcons` / `GetLooseMacroItemIcons`](#getmacroicons--getmacroitemicons--getloosemacroicons--getloosemacroitemicons)
   - [`C_Macro.CreateMacro` / `C_Macro.EditMacro`](#c_macrocreatemacro--c_macroeditmacro)
+  - [`C_Macro.GetMacroIcon(macroSlot)`](#c_macrogetmacroiconmacroslot)
+  - [`C_Macro.SetMacroDisplay(macroSlot, value)`](#c_macrosetmacrodisplaymacroslot-value)
 
 - [Mail](#mail)
   - [`GetSendMailItemLink([attachmentIndex])`](#getsendmailitemlinkattachmentindex)
   - [`GetInboxItemLink(messageIndex[, attachmentIndex])`](#getinboxitemlinkmessageindex-attachmentindex)
 
 - [Map](#map)
+  - [`C_Map.CanSetUserWaypointOnMap(uiMapID)`](#c_mapcansetuserwaypointonmapuimapid)
   - [`C_Map.GetAreaInfo(areaID)`](#c_mapgetareainfoareaid)
   - [`C_Map.GetAreas()`](#c_mapgetareas)
   - [`C_Map.GetAreaTriggerInfo(triggerID)` / `C_Map.GetAreaTriggers([mapID])`](#c_mapgetareatriggerinfotriggerid--c_mapgetareatriggersmapid)
   - [`C_Map.GetBestMapForUnit(unitToken)`](#c_mapgetbestmapforunitunittoken)
+  - [`C_Map.GetFallbackWorldMapID()`](#c_mapgetfallbackworldmapid)
   - [`C_Map.GetMapAreaIDs()`](#c_mapgetmapareaids)
+  - [`C_Map.GetMapArtLayers(uiMapID)`](#c_mapgetmapartlayersuimapid)
+  - [`C_Map.GetMapArtLayerTextures(uiMapID, layerIndex)`](#c_mapgetmapartlayertexturesuimapid-layerindex)
+  - [`C_Map.GetMapChildrenInfo(uiMapID)`](#c_mapgetmapchildreninfouimapid)
+  - [`C_Map.GetMapInfo(uiMapID)`](#c_mapgetmapinfouimapid)
+  - [`C_Map.GetMapInfoAtPosition(uiMapID, x, y)`](#c_mapgetmapinfoatpositionuimapid-x-y)
   - [`C_Map.GetMapOverlays([areaID])`](#c_mapgetmapoverlaysareaid)
+  - [`C_Map.GetMapPosFromWorldPos(continentID, worldPosition[, overrideUiMapID])`](#c_mapgetmapposfromworldposcontinentid-worldposition-overrideuimapid)
+  - [`C_Map.GetMapRectOnMap(uiMapID, topUiMapID)`](#c_mapgetmaprectonmapuimapid-topuimapid)
   - [`C_Map.GetMapWorldSize([areaID])`](#c_mapgetmapworldsizeareaid)
+  - [`C_Map.GetPlayerMapPosition(uiMapID, unitToken)`](#c_mapgetplayermappositionuimapid-unittoken)
+  - [`C_Map.GetUserWaypoint()` / `C_Map.HasUserWaypoint()` / `C_Map.ClearUserWaypoint()`](#c_mapgetuserwaypoint--c_maphasuserwaypoint--c_mapclearuserwaypoint)
+  - [`C_Map.GetUserWaypointHyperlink()` / `C_Map.GetUserWaypointFromHyperlink(hyperlink)`](#c_mapgetuserwaypointhyperlink--c_mapgetuserwaypointfromhyperlinkhyperlink)
+  - [`C_Map.GetUserWaypointPositionForMap(uiMapID)`](#c_mapgetuserwaypointpositionformapuimapid)
+  - [`C_Map.GetWorldPosFromMapPos(uiMapID, mapPosition)`](#c_mapgetworldposfrommapposuimapid-mapposition)
+  - [`C_Map.MapHasArt(uiMapID)`](#c_mapmaphasartuimapid)
+  - [`C_Map.SetUserWaypoint(uiMapPoint)`](#c_mapsetuserwaypointuimappoint)
+  - [`USER_WAYPOINT_UPDATED` event](#user_waypoint_updated-event)
 
 - [MapExplorationInfo](#mapexplorationinfo)
   - [`C_MapExplorationInfo.GetExploredMapTextures([areaID])`](#c_mapexplorationinfogetexploredmaptexturesareaid)
@@ -363,6 +530,10 @@ build instructions.
   - [`C_MerchantFrame.IsMerchantItemRefundable(slot)`](#c_merchantframeismerchantitemrefundableslot)
   - [`C_MerchantFrame.IsSellAllJunkEnabled()`](#c_merchantframeissellalljunkenabled)
 
+- [Model](#model)
+  - [`model:SetDisplayInfo(creatureDisplayID)`](#modelsetdisplayinfocreaturedisplayid)
+  - [`model:SetCreature(creatureID)`](#modelsetcreaturecreatureid)
+
 - [ChatBubbles](#chatbubbles)
   - [`C_ChatBubbles.GetAllChatBubbles([includeForbidden])`](#c_chatbubblesgetallchatbubblesincludeforbidden)
 
@@ -373,6 +544,8 @@ build instructions.
   - [`C_NamePlate.GetNamePlateForGUID(guidString)`](#c_nameplategetnameplateforguidguidstring)
   - [Unit tokens (`nameplateN`)](#unit-tokens-nameplaten)
   - [Unit tokens (`markN`)](#unit-tokens-markn)
+  - [Unit tokens (GUID literals)](#unit-tokens-guid-literals)
+  - [`IsUnitToken(value)`](#isunittokenvalue)
 
 - [NameCache](#namecache)
   - [`GetPlayerInfoByGUID(guid)`](#getplayerinfobyguidguid)
@@ -394,7 +567,9 @@ build instructions.
   - [`C_PlayerInfo.GUIDIsPlayer(guid)` / `GUIDIsCreature` / `GUIDIsPet` / `GUIDIsGameObject`](#c_playerinfoguidisplayerguid--guidiscreature--guidispet--guidisgameobject)
   - [`C_PlayerInfo.GetName / GetClass / GetRace / GetSex / IsConnected(playerLocation)`](#c_playerinfogetname--getclass--getrace--getsex--isconnectedplayerlocation)
 - [Quest](#quest)
-  - [`C_QuestLog.GetQuestIDForLogIndex(index)`](#c_questlogGetQuestIDForLogIndexindex)
+  - [`C_QuestLog.GetInfo(questLogIndex)`](#c_questloggetinfoquestlogindex)
+  - [`C_QuestLog.GetQuestLogTitle(questLogIndex)`](#c_questloggetquestlogtitlequestlogindex)
+  - [`C_QuestLog.GetQuestIDForLogIndex(index)`](#c_questloggetquestidforlogindexindex)
   - [`C_QuestLog.GetLogIndexForQuestID(questID)`](#c_questloggetlogindexforquestidquestid)
   - [`C_QuestLog.GetHeaderIndexForQuest(questID)`](#c_questloggetheaderindexforquestquestid)
   - [`C_QuestLog.RequestLoadQuestByID(questID)`](#c_questlogrequestloadquestbyidquestid)
@@ -406,6 +581,16 @@ build instructions.
   - [`C_QuestLog.IsQuestDataCachedByID(questID)`](#c_questlogisquestdatacachedbyidquestid)
   - [`GetQuestLogLeaderBoardID(objectiveIndex [, questIndex])`](#getquestlogleaderboardidobjectiveindex--questindex)
 
+- [Sound](#sound)
+  - [`PlaySound(soundKitID)` / `PlaySound(soundName)`](#playsoundsoundkitid--playsoundsoundname)
+  - [`C_Sound.PlaySound(soundKitID [, channel, forceNoDuplicates, runFinishCallback])`](#c_soundplaysoundsoundkitid--channel-forcenoduplicates-runfinishcallback)
+  - [`C_Sound.PlaySoundWithOptions(params)`](#c_soundplaysoundwithoptionsparams)
+  - [`C_Sound.GetSoundScaledVolume(soundHandle)`](#c_soundgetsoundscaledvolumesoundhandle)
+  - [`C_Sound.IsPlaying(soundHandle)`](#c_soundisplayingsoundhandle)
+  - [`C_Sound.PlayItemSound(soundType, item)`](#c_soundplayitemsoundsoundtype-item)
+  - [`C_Sound.PlayVocalErrorSound(vocalErrorSoundID)`](#c_soundplayvocalerrorsoundvocalerrorsoundid)
+  - [`MuteSoundFile(file)` / `UnmuteSoundFile(file)`](#mutesoundfilefile--unmutesoundfilefile)
+  - [`C_Sound.GetRecentSoundFiles()`](#c_soundgetrecentsoundfiles)
 - [Spell](#spell)
   - [`C_Spell.DoesSpellExist(spellID)`](#c_spelldoesspellexistspellid)
   - [`C_Spell.GetSchoolString(schoolMask)`](#c_spellgetschoolstringschoolmask)
@@ -417,10 +602,13 @@ build instructions.
   - [`C_Spell.GetSpellLink(spellID)`](#c_spellgetspelllinkspellid)
   - [`C_Spell.GetSpellDescription(spellID)`](#c_spellgetspelldescriptionspellid)
   - [`C_Spell.GetSpellMechanicByID(spellID)`](#c_spellgetspellmechanicbyidspellid)
+  - [`C_Spell.GetSpellEffectInfo(spellID)`](#c_spellgetspelleffectinfospellid)
   - [`C_Spell.GetSpellEffectMechanics(spellID)`](#c_spellgetspelleffectmechanicsspellid)
+  - [`C_Spell.GetSpellDispelType(spellID)`](#c_spellgetspelldispeltypespellid)
   - [`C_Spell.GetSpellRadius(spellID)` / `GetSpellRadius(slot, bookType)`](#c_spellgetspellradiusspellid--getspellradiusslot-booktype)
   - [`C_Spell.GetSpellPowerCost(spellIdentifier)`](#c_spellgetspellpowercostspellidentifier)
   - [`C_Spell.GetSpellReagents(spellID)`](#c_spellgetspellreagentsspellid)
+  - [`C_Spell.GetSpellCastCount(spellIdentifier)`](#c_spellgetspellcastcountspellidentifier)
   - [`C_Spell.GetSpellSubtext(spellIdentifier)`](#c_spellgetspellsubtextspellidentifier)
   - [`IsPassiveSpell(spellID)` / `IsPassiveSpell(slot, bookType)`](#ispassivespellspellid--ispassivespellslot-booktype)
   - [`C_Spell.IsSpellPassive(spellID)`](#c_spellisspellpassivespellid)
@@ -432,29 +620,42 @@ build instructions.
   - [`IsUsableSpell(spell)` / `IsUsableSpell(slot, bookType)`](#isusablespellspell--isusablespellslot-booktype)
   - [`C_Spell.IsSpellUsable(spellID)`](#c_spellisspellusablespellid)
   - [`C_Spell.GetSpellCooldown(spellIdentifier)`](#c_spellgetspellcooldownspellidentifier)
+  - [`C_Spell.GetSpellLossOfControlCooldown(spellIdentifier)`](#c_spellgetspelllossofcontrolcooldownspellidentifier)
   - [`C_Spell.IsCurrentSpell(spellIdentifier)`](#c_spelliscurrentspellspellidentifier)
   - [`C_Spell.IsSelfBuff(spellID)`](#c_spellisselfbuffspellid)
   - [`C_Spell.SpellHasRange(spellIdentifier)` / `SpellHasRange(slot, bookType)`](#c_spellspellhasrangespellidentifier--spellhasrangeslot-booktype)
   - [`C_Spell.IsSpellInRange(spellIdentifier, targetUnit)`](#c_spellisspellinrangespellidentifier-targetunit)
   - [`C_Spell.IsAutoAttackSpell(spellID)`](#c_spellisautoattackspellspellid)
   - [`C_Spell.IsRangedAutoAttackSpell(spellID)`](#c_spellisrangedautoattackspellspellid)
+  - [`C_Spell.IsNextMeleeSpell(spellID)`](#c_spellisnextmeleespellspellid)
+  - [`C_Spell.ResetsMeleeSwing(spellID)`](#c_spellresetsmeleeswingspellid)
   - [`IsHarmfulSpell(spell)` / `IsHelpfulSpell(spell)`](#isharmfulspellspell--ishelpfulspellspell)
   - [`C_Spell.IsSpellHarmful(spellID)` / `C_Spell.IsSpellHelpful(spellID)`](#c_spellisspellharmfulspellid--c_spellisspellhelpfulspellid)
   - [`GetSpellSchool(spellID)`](#getspellschoolspellid)
-  - [`CastSpellNoToggle(name | spellID)`](#castspellnotogglename--spellid)
+  - [`CastSpellNoToggle(name | spellID [, unit [, placeGroundSpell]])`](#castspellnotogglename--spellid--unit--placegroundspell)
   - [`C_Spell.CastAtCursor(spellIDOrName)`](#c_spellcastatcursorspellidorname)
-  - [`C_Spell.CastAtUnit(spellIDOrName, unit)`](#c_spellcastatunitspellidorname-unit)
+  - [`C_Spell.CastAtUnit(spellIDOrName, unit [, placeGroundSpell])`](#c_spellcastatunitspellidorname-unit--placegroundspell)
   - [`C_Spell.CancelSpellByID(spellID)` / `CancelSpellByName(name)`](#c_spellcancelspellbyidspellid--cancelspellbynamename)
   - [`C_Spell.UnitCastingInfo(unit)` / `C_Spell.CastingInfo()`](#c_spellunitcastinginfounit--c_spellcastinginfo)
   - [`C_Spell.UnitChannelInfo(unit)` / `C_Spell.ChannelInfo()`](#c_spellunitchannelinfounit--c_spellchannelinfo)
-  - [`UNIT_SPELLCAST_*` events (player)](#unit_spellcast_-events-player)
   - [`C_Spell.GetSpellLevelInfo(spellID)`](#c_spellgetspelllevelinfospellid)
   - [`GetSpellRequiredTargetLevel(spellID)`](#getspellrequiredtargetlevelspellid)
 
 - [SpellBook](#spellbook)
   - [`FindSpellBookSlotByID(spellID)`](#findspellbookslotbyidspellid)
+  - [`C_SpellBook.GetSpellBookItemInfo(slotIndex, spellBank)`](#c_spellbookgetspellbookiteminfoslotindex-spellbank)
+  - [`C_SpellBook.GetNumSpellBookSkillLines()`](#c_spellbookgetnumspellbookskilllines)
+  - [`C_SpellBook.GetSpellBookSkillLineInfo(skillLineIndex)`](#c_spellbookgetspellbookskilllineinfoskilllineindex)
+  - [`C_SpellBook.GetSpellBookItemSkillLineIndex(slotIndex, spellBank)`](#c_spellbookgetspellbookitemskilllineindexslotindex-spellbank)
+  - [`C_SpellBook.GetSkillLineIndexByID(skillLineID)`](#c_spellbookgetskilllineindexbyidskilllineid)
+  - [`C_SpellBook.GetSpellBookItemCastCount(slotIndex, spellBank)`](#c_spellbookgetspellbookitemcastcountslotindex-spellbank)
+  - [`C_SpellBook.GetSpellBookItemLossOfControlCooldownInfo(slotIndex, spellBank)`](#c_spellbookgetspellbookitemlossofcontrolcooldowninfoslotindex-spellbank)
+  - [`C_SpellBook.GetSpellBookItemLossOfControlCooldownDuration(slotIndex, spellBank)`](#c_spellbookgetspellbookitemlossofcontrolcooldowndurationslotindex-spellbank)
+  - [`C_SpellBook.IsClassTalentSpellBookItem(slotIndex, spellBank)`](#c_spellbookisclasstalentspellbookitemslotindex-spellbank)
+  - [`C_SpellBook.ContainsAnyDisenchantSpell()`](#c_spellbookcontainsanydisenchantspell)
   - [`C_SpellBook.GetSpellLevelLearned(spellID)`](#c_spellbookgetspelllevellearnedspellid)
   - [`C_SpellBook.GetCurrentLevelSpells([level])`](#c_spellbookgetcurrentlevelspellslevel)
+  - [`C_SpellBook.GetPlayerSpellsByAura(auraName)`](#c_spellbookgetplayerspellsbyauraauraname)
   - [`C_SpellBook.GetSkillLineName(skillLineID)`](#c_spellbookgetskilllinenameskilllineid)
   - [`C_SpellBook.GetSkillLineRank(skillLineID)`](#c_spellbookgetskilllinerankskilllineid)
   - [`C_SpellBook.GetSpellSkillLine(spellID)`](#c_spellbookgetspellskilllinespellid)
@@ -475,6 +676,11 @@ build instructions.
   - [`GetMirrorTimerInfo(index)` / `GetMirrorTimerProgress(label)`](#getmirrortimerinfoindex--getmirrortimerprogresslabel)
   - [`GetShapeshiftFormID()`](#getshapeshiftformid)
   - [`CancelShapeshiftForm()`](#cancelshapeshiftform)
+  - [`GetSheathState()`](#getsheathstate)
+
+- [SwingTimer](#swingtimer)
+  - [`C_SwingTimer.EnableRangeCheck(swingType, enable)`](#c_swingtimerenablerangecheckswingtype-enable)
+  - [`C_SwingTimer.IsTargetWithinSwingRange(swingType)`](#c_swingtimeristargetwithinswingrangeswingtype)
 
 - [System](#system)
   - [`GetPhysicalScreenSize()`](#getphysicalscreensize)
@@ -497,12 +703,21 @@ build instructions.
   - [`C_TaxiMap.GetAllTaxiNodes([uiMapID])`](#c_taximapgetalltaxinodesuimapid)
   - [`C_TaxiMap.GetTaxiPaths()`](#c_taximapgettaxipaths)
   - [`C_TaxiMap.GetTaxiPathWaypoints(pathID)`](#c_taximapgettaxipathwaypointspathid)
-  - [`C_TaxiMap.GetTaxiRoute(slotIndex)`](#c_taximapgettaxiroutepslotindex)
+  - [`C_TaxiMap.GetTaxiRoute(slotIndex)`](#c_taximapgettaxirouteslotindex)
+
+- [Texture](#texture)
+  - [`C_Texture.GetAtlasInfo(atlasName)`](#c_texturegetatlasinfoatlasname)
+  - [`C_Texture.GetAtlasExists(atlasName)`](#c_texturegetatlasexistsatlasname)
+  - [`C_Texture.GetAtlasID(atlasName)`](#c_texturegetatlasidatlasname)
+  - [`C_Texture.GetAtlasElementID(atlasName)`](#c_texturegetatlaselementidatlasname)
+  - [`C_Texture.GetAtlasElements()`](#c_texturegetatlaselements)
+  - [`C_Texture.RegisterAtlas(name, file, width, height, left, right, top, bottom [, tilesHorizontally, tilesVertically])`](#c_textureregisteratlasname-file-width-height-left-right-top-bottom--tileshorizontally-tilesvertically)
+  - [Atlas markup](#atlas-markup)
 
 - [Time](#time)
   - [`GetServerTime()`](#getservertime)
   - [`GetTimeCached()`](#gettimecached)
-  - [`C_Timer.After(seconds, callback)`](#c_timeraftersseconds-callback)
+  - [`C_Timer.After(seconds, callback)`](#c_timerafterseconds-callback)
   - [`C_Timer.NewTimer(seconds, callback)`](#c_timernewtimerseconds-callback)
   - [`C_Timer.NewTicker(seconds, callback, [iterations])`](#c_timernewtickerseconds-callback-iterations)
   - [`C_DateAndTime` overview](#c_dateandtime-overview)
@@ -519,6 +734,11 @@ build instructions.
   - [`GetTotemDuration(slot)`](#gettotemdurationslot)
   - [`TargetTotem(slot)`](#targettotemslot)
 
+- [Tracking](#tracking)
+  - [`GetNumTrackingTypes()`](#getnumtrackingtypes)
+  - [`GetTrackingInfo(index)`](#gettrackinginfoindex)
+  - [`SetTracking(index)`](#settrackingindex)
+
 - [TradeSkillUI](#tradeskillui)
   - [`C_TradeSkillUI.GetTradeSkillListLink()`](#c_tradeskilluigettradeskilllistlink)
   - [`C_TradeSkillUI.GetCraftListLink()`](#c_tradeskilluigetcraftlistlink)
@@ -530,9 +750,11 @@ build instructions.
 - [Unit](#unit)
   - [`UnitGUID(unit)`](#unitguidunit)
   - [`UnitTokenFromGUID(guid)`](#unittokenfromguidguid)
+  - [`UnitTokenFromName(name [, exactMatch])`](#unittokenfromnamename--exactmatch)
   - [`UnitSubName(unit)`](#unitsubnameunit)
   - [`UnitCreatureFamilyID(unit)`](#unitcreaturefamilyidunit)
   - [`UnitCreatureTypeID(unit)`](#unitcreaturetypeidunit)
+  - [`UnitCreatureID(unit)`](#unitcreatureidunit)
   - [`GetUnitSpeed(unit)`](#getunitspeedunit)
   - [`UnitClassBase(unit)`](#unitclassbaseunit)
   - [`UnitRaceBase(unit)`](#unitracebaseunit)
@@ -545,6 +767,7 @@ build instructions.
   - [`UnitIsPet(unit)`](#unitispetunit)
   - [`UnitIsOtherPlayersPet(unit)`](#unitisotherplayerspetunit)
   - [`UnitOwnerGUID(unit)`](#unitownerguidunit)
+  - [`UnitCreatedBySpell(unit)`](#unitcreatedbyspellunit)
   - [`UnitStandState(unit)`](#unitstandstateunit)
   - [`UnitInRange(unit)`](#unitinrangeunit)
   - [`UnitDistanceSquared(unit)`](#unitdistancesquaredunit)
@@ -556,15 +779,20 @@ build instructions.
   - [`UnitPowerMissing(unit [, powerType [, unmodified]])`](#unitpowermissingunit--powertype--unmodified)
   - [`UnitPowerType(unit)`](#unitpowertypeunit)
   - [`UnitSpellHaste(unit)`](#unitspellhasteunit)
+  - [`UnitSpellTargetName(unit)`](#unitspelltargetnameunit)
 
 - [UnitAuras](#unitauras)
   - [`C_UnitAuras.GetAuraDataByIndex(unit, index [, filter])`](#c_unitaurasgetauradatabyindexunit-index--filter)
   - [`C_UnitAuras.GetBuffDataByIndex(unit, index)` / `GetDebuffDataByIndex(unit, index)`](#c_unitaurasgetbuffdatabyindexunit-index--getdebuffdatabyindexunit-index)
+  - [`C_UnitAuras.UnitAura(unit, index [, filter])`](#c_unitaurasunitauraunit-index--filter)
+  - [`C_UnitAuras.UnitBuff(unit, index [, filter])` / `UnitDebuff(unit, index [, filter])`](#c_unitaurasunitbuffunit-index--filter--unitdebuffunit-index--filter)
+  - [`C_UnitAuras.GetAuraSlots(unit [, filter [, maxSlots [, continuationToken]]])`](#c_unitaurasgetauraslotsunit--filter--maxslots--continuationtoken)
+  - [`C_UnitAuras.GetAuraDataBySlot(unit, slot)` / `UnitAuraBySlot(unit, slot)`](#c_unitaurasgetauradatabyslotunit-slot--unitaurabyslotunit-slot)
   - [`C_UnitAuras.GetUnitAuraBySpellID(unit, spellID [, filter])`](#c_unitaurasgetunitaurabyspellidunit-spellid--filter)
   - [`C_UnitAuras.GetPlayerAuraBySpellID(spellID)`](#c_unitaurasgetplayeraurabyspellidspellid)
   - [`C_UnitAuras.GetAuraDataBySpellName(unit, spellName [, filter])`](#c_unitaurasgetauradatabyspellnameunit-spellname--filter)
   - [`C_UnitAuras.RegisterComboDuration(spellID, baseSeconds, maxSeconds)`](#c_unitaurasregistercombodurationspellid-baseseconds-maxseconds)
-  - [`C_UnitAuras.RegisterAuraDurationModifier(triggerSpellID, affectedFamily, affectedFamilyFlags, affectedIcon, op [, valueSeconds])`](#c_unitaurasregisterauradurationmodifiertriggerspellid-affectedfamily-affectedfamilyflags-affectedicon-op--valueseconds)
+  - [`C_UnitAuras.RegisterAuraDurationModifierByTrigger(triggerFamily, triggerSchool, affectedFamily, affectedFamilyFlags, affectedIcon, op [, valueSeconds])`](#c_unitaurasregisterauradurationmodifierbytriggertriggerfamily-triggerschool-affectedfamily-affectedfamilyflags-affectedicon-op--valueseconds)
   - [`C_UnitAuras.GetUnitAuras(unit [, filter])`](#c_unitaurasgetunitaurasunit--filter)
   - [`C_UnitAuras.GetAuraDispelTypeColor(dispelName)`](#c_unitaurasgetauradispeltypecolordispelname)
 
@@ -735,11 +963,10 @@ The 120-slot action table at `0x00BC6980` packs each entry as a
 This is the same discrimination [SuperWoWhook][superwowhook] uses in
 its replacement of `GetActionText` (which returns `name, type, id`).
 Without SuperWoWhook the engine's stock `GetActionText` only handles
-items in bags; ClassicAPI's `GetActionInfo` provides the modern-WoW
-shape independently of any other DLL patches.
+items in bags; ClassicAPI's `GetActionInfo` provides the full
+`name, type, id` shape independently of any other DLL patches.
 
-Equivalent to the function of the same name in retail. Subtype is
-always `"spell"` for spell entries (no pet differentiation on this
+Subtype is always `"spell"` for spell entries (no pet differentiation on this
 table) and the bag-item itemID path is currently incomplete — see
 the comment in [src/action/Info.cpp](../src/action/Info.cpp).
 
@@ -747,7 +974,7 @@ the comment in [src/action/Info.cpp](../src/action/Info.cpp).
 
 ## AddOns
 
-Modern `C_AddOns.*` getters that splat the legacy
+`C_AddOns.*` getters that splat the
 `GetAddOnInfo(arg)` 7-tuple `(name, title, notes, enabled,
 loadable, reason, security)` into single-field accessors, plus a
 getter for the addon's optional dependencies. Most bypass
@@ -799,9 +1026,9 @@ Returns `loadable, reason` — a real boolean and a status string
 populating `GetAddOnInfo`'s 6th return: `"DISABLED"`, `"BANNED"`,
 `"CORRUPT"`, `"INSECURE"`, `"NOT_DEMAND_LOADED"`,
 `"INTERFACE_VERSION"`, `"MISSING"`. `nil` when the addon is
-loadable. The full modern signature accepts optional `character`
-and `demandLoaded` arguments — those are ignored here since vanilla
-1.12 has no per-character addon enable state.
+loadable. The full signature accepts optional `character`
+and `demandLoaded` arguments — those are ignored here, since there is
+no per-character addon enable state.
 
 ```lua
 C_AddOns.IsAddOnLoadable("DebugTools")        -- true, nil
@@ -819,23 +1046,52 @@ C_AddOns.IsAddOnLoaded("garbage")       -- false, false
 C_AddOns.IsAddOnLoaded(1)               -- true, true   (first addon by index)
 ```
 
-Modern WoW splits the two returns to distinguish "load-in-progress"
-from "fully loaded" — the difference matters for `LoadOnDemand`
-addons whose load is split across multiple `LoadAddOn` callbacks.
-Vanilla 1.12's addon loader (`FUN_0051F240`) is fully synchronous:
-the `loaded` byte flips inside a single call, so the in-flight
-state is never observable from Lua. Both returns are always the
-same boolean here. We surface the two-return shape so consumer
-code written against modern API doesn't need to special-case
-vanilla.
+### `C_AddOns.LoadAddOn(indexOrName)`
+
+Loads a `LoadOnDemand` addon. Returns `loaded, value`:
+
+- `loaded` — `1` when the addon loaded, or was already loaded. `nil`
+  otherwise.
+- `value` — a locale-independent reason the load failed, such as
+  `"DISABLED"`, or `"UNKNOWN_ERROR"` when no specific reason is
+  available. `nil` on success.
+
+```lua
+local loaded, reason = C_AddOns.LoadAddOn("Blizzard_AuctionUI")
+if not loaded then
+    print("could not load:", reason)
+end
+```
+
+Test `loaded` for truth rather than comparing it to `true` — it is the
+number `1`.
+
+The two returns distinguish "load-in-progress" from "fully loaded", and
+they really do differ while an addon is loading. An addon's own files
+run part-way through its load, so code at file scope sees itself as
+loading but not yet loaded:
+
+```lua
+-- at file scope in MyAddon.lua
+C_AddOns.IsAddOnLoaded("MyAddon")       -- true, false
+-- and once the load has finished
+C_AddOns.IsAddOnLoaded("MyAddon")       -- true, true
+```
+
+The same holds for anything else running inside that window, such as a
+dependency loaded on the way in: it sees the addon that pulled it in as
+`true, false`.
 
 Unknown addons (numeric index past `GetNumAddOns()`, or
 string name not in the registry) return `false, false`.
 
+> An addon asking about **itself** from its own `ADDON_LOADED` handler
+> gets `true, false`, because that event fires just before its load call
+> returns. Asking about any *other* addon there is accurate.
+
 ### `C_AddOns.GetAddOnSecurity(indexOrName)`
 
-Returns an `Enum.AddOnSecurityStatus` integer (not a string — modern
-shape):
+Returns an `Enum.AddOnSecurityStatus` integer (not a string):
 
 | Value | `Enum.AddOnSecurityStatus.*` | When |
 |------:|------------------------------|------|
@@ -873,8 +1129,7 @@ C_AddOns.DoesAddOnExist("garbage")     -- false
 
 Returns the addon's `## OptionalDeps:` names as multiple return
 values, in declared order — the counterpart to the stock
-`GetAddOnDependencies` (required deps), which vanilla exposes but
-never gave an optional-deps equivalent. An addon with no
+`GetAddOnDependencies` (required deps). An addon with no
 `## OptionalDeps:` field returns nothing.
 
 Arg and error handling match stock `GetAddOnDependencies`: a
@@ -888,18 +1143,283 @@ C_AddOns.GetAddOnOptionalDependencies("MyAddon")  -- "Atlas", "pfQuest"
 C_AddOns.GetAddOnOptionalDependencies("Atlas")    -- (nothing — no OptionalDeps)
 ```
 
+### `C_AddOns.GetAddOnLocalTable(name)`
+
+Returns the private table of the addon named `name`. This is the same
+table the addon's own files receive as the second value of `...`:
+
+```lua
+-- inside MyAddon's files
+local addonName, addonTable = ...
+```
+
+Another addon reads that table only when both conditions are true:
+
+1. `MyAddon` is loaded, and
+2. `MyAddon`'s `.toc` file declares `## AllowAddOnTableAccess: 1`.
+
+If either condition is false, the function returns `nil`. An addon
+that does not opt in keeps its table private. The check protects each
+addon's table from access it did not permit.
+
+```lua
+-- MyAddon.toc contains: ## AllowAddOnTableAccess: 1
+local t = C_AddOns.GetAddOnLocalTable("MyAddon")   -- MyAddon's table
+t.sharedValue = 5                                  -- MyAddon sees this too
+
+C_AddOns.GetAddOnLocalTable("DebugTools")   -- nil (no opt-in directive)
+C_AddOns.GetAddOnLocalTable("DoesNotExist") -- nil (not loaded)
+```
+
+Pass the addon name as a string. A numeric index returns `nil` — one
+addon refers to another by name, not by load order.
+
+### Conditional and multi-flavor TOC loading
+
+Some addons support several game versions from one folder. ClassicAPI
+reads the TOC conventions those addons use, so they load here.
+
+**Flavor TOC files.** An addon that supports several clients can name its
+TOC after the client it targets. The plain `<Name>.toc` is then optional.
+ClassicAPI reads two of these names:
+
+- `<Name>_Turtle.toc` — on a Turtle client only.
+- `<Name>_ClassicAPI.toc` — on any client.
+
+ClassicAPI looks for `_Turtle` first, so it wins when both exist. Either
+one also wins over a plain `<Name>.toc`. An addon can therefore keep its
+plain TOC for other clients and put its ClassicAPI build in a suffixed
+file.
+
+ClassicAPI does not read `_Vanilla` or `_Classic`. Those names belong to
+the Classic Era client, which is a separate program with its own engine
+and its own API. An addon's `_Vanilla` files are written for that client.
+Such a file can start the addon and then fail inside it, on a function or
+a template this client does not provide. So an addon that ships only
+`_Vanilla` and `_Mainline` TOCs does not load at all. Add a
+`_ClassicAPI.toc` to support this client.
+
+**Note the word `vanilla`.** The two TOC conventions reuse it for
+different things. As a file suffix, `_Vanilla` names the Classic Era
+client, so ClassicAPI ignores it. As a directive value, `vanilla` names
+this client's game type, so `[AllowLoadGameType vanilla]` loads the line.
+
+**Flavor Bindings files.** The same selection applies to an addon's
+keybinding file:
+
+- `Bindings_Turtle.xml` — on a Turtle client only.
+- `Bindings_ClassicAPI.xml` — on any client.
+
+The order matches the TOC files: `_Turtle` first, and either one wins
+over a plain `Bindings.xml`. An addon that ships no plain `Bindings.xml`
+still loads its bindings from a flavor file. ClassicAPI does not read
+`_Vanilla` or `_Classic` here either.
+
+**Multi-flavor `## Interface:` version.** A TOC can list several
+interface versions on one line:
+
+```
+## Interface: 120100, 50504, 38002, 20506, 11200
+```
+
+The addon loads when the list contains this client's interface version,
+`11200`. The position of that entry in the list does not matter. A list
+without it stays out of date, and the addon does not load.
+
+**Per-line directives.** Inside a TOC, gate individual file lines with a
+condition, or expand a path variable:
+
+```
+# Loads on this client (game type is vanilla):
+Vanilla.lua              [AllowLoadGameType vanilla]
+
+# Dropped on this client:
+Mainline.lua             [AllowLoadGameType mainline]
+
+# Loads only under a matching client locale:
+Localization\deDE.lua    [AllowLoadTextLocale deDE]
+
+# Path variables expand before the file loads:
+[Family]\Init.lua                # -> Classic\Init.lua
+[Game]\Init.lua                  # -> Vanilla\Init.lua
+Localization\[TextLocale].lua    # -> Localization\enUS.lua  (your locale)
+```
+
+How each token resolves on this client:
+
+| Directive | Result |
+|---|---|
+| `[AllowLoadGameType ...]` | Loads the line when the list contains `vanilla`. |
+| `[AllowLoadTextLocale ...]` | Loads the line when the list contains your client locale (the `GetLocale()` code). |
+| `[AllowLoad ...]` | Loads on `game`, drops on `glue`. |
+| `[Family]` | `Classic` |
+| `[Game]` | `Vanilla` |
+| `[TextLocale]` | Your client locale code, for example `enUS`. |
+
+A line loads only when every condition on it passes. An unknown condition
+drops the line. A file gated by a rule this client does not know stays
+unloaded.
+
+**Limits.**
+
+- Conditions on `## metadata` lines are not supported. Only file-reference
+  lines are gated.
+- `[AllowLoad glue]` never loads. Addon files load in-game only.
+
+### SavedVariables loaded first
+
+Normally an addon's files run first, then its SavedVariables load,
+then `ADDON_LOADED` fires. So file-scope code sees its SavedVariables as
+`nil`. An addon avoids this with one TOC line:
+
+```
+## SavedVariables: MyAddonDB
+## LoadSavedVariablesFirst: 1
+```
+
+ClassicAPI honors `## LoadSavedVariablesFirst`. For a flagged addon, its
+SavedVariables load **before** its files run, so file-scope code sees them:
+
+```lua
+-- With the directive, in MyAddon's file:
+local db = MyAddonDB       -- the restored table, not nil
+```
+
+This covers both `## SavedVariables` and `## SavedVariablesPerCharacter`.
+File-scope reads and writes both work. A SavedVariables file exists only
+after the first save, so the first-ever login still sees `nil` — there is
+nothing on disk to load yet.
+
+### `/reload` picks up new addons and new files
+
+A stock client fixes its view of the game folder at launch. A file
+you add while the game runs does not load until you restart the client.
+Only edits to files that already existed at launch take effect on
+`/reload`.
+
+ClassicAPI removes the restart requirement. On every `/reload`:
+
+- **A new folder under `Interface\AddOns\` loads as a normal addon.** It
+  appears in `GetNumAddOns()` / `GetAddOnInfo()`, fires `ADDON_LOADED`,
+  and its dependencies, SavedVariables, keybindings, and flavor TOC all
+  work as usual.
+- **New files added to an existing addon load** (add the file and its
+  TOC line, then `/reload`).
+- **A first-time SavedVariables file survives `/reload`.** On a stock
+  client, the first save of a newly installed addon is written to disk
+  but cannot be read back until a restart, so the settings appear lost.
+  That quirk is fixed.
+- **`##` metadata edits take effect.** Change any `##` line — for
+  example the `## SavedVariables:` or `## Dependencies:` list, the
+  `## Title:`, or the `## Interface:` version — and `/reload` applies
+  it. `GetAddOnMetadata` returns the new values.
+- **Deleting an addon folder removes it from the addon list** on the
+  next `/reload`.
+
+## APIDocumentation
+
+ClassicAPI describes its own surface. Each function it adds carries a
+typed signature: the name and type of every argument and return value,
+which of them can be nil, and one sentence that says what the function
+does. Events, enumerations, and the table shapes functions return are
+described the same way.
+
+You read this in the game with `/classicapi`, or from code through
+`C_APIDocumentation`.
+
+### `/classicapi`
+
+Browse the API from the chat box. `/capi` is the short form.
+
+```
+/classicapi                        usage
+/classicapi stats                  how much is documented
+/classicapi system list            every system
+/classicapi spell                  one system
+/classicapi spell list             every function, event and table in a system
+/classicapi search cooldown        search everything
+/classicapi spell search cooldown  search one system
+```
+
+`search` also answers to `s`. Every search takes a Lua pattern.
+
+Results are clickable. Click a name to print its full signature, with
+each argument and return value on its own line. Right-click copies a
+ready-to-paste call to the clipboard. Shift-click puts a `/dump` of the
+function in the chat box, with the cursor between the parentheses.
+
+Functions are grouped into systems. A system is a namespace such as
+`C_Spell`, a group of plain globals such as `SpellGlobals`, or a widget
+method set such as `SimpleTextureAPI`. Find a system by its name or its
+namespace: `/classicapi spell` and `/classicapi c_spell` both work, and
+case does not matter.
+
+The browser holds what ClassicAPI adds. The functions the client already
+ships are not in it.
+
+### `C_APIDocumentation.GetSystems()`
+
+Returns an array of system names, sorted.
+
+```lua
+local systems = C_APIDocumentation.GetSystems()
+-- { "Item", "ItemGlobals", "Spell", "SpellBook", "SpellGlobals", ... }
+```
+
+### `C_APIDocumentation.GetSystem(system)`
+
+Returns one system's documentation table, or `nil` if no system has that
+name. Match on the name or the namespace; case does not matter. Each
+call builds a new table, so the caller may keep it and change it.
+
+```lua
+local spell = C_APIDocumentation.GetSystem("C_Spell")
+spell.Name        -- "Spell"
+spell.Namespace   -- "C_Spell"
+spell.Functions[1].Name
+spell.Functions[1].Returns[1].Type
+```
+
+| Field | Meaning |
+|-------|---------|
+| `Name` | The system's name. |
+| `Type` | `"System"` for a namespace or a group of globals, `"ScriptObject"` for a widget method set. |
+| `Namespace` | The table the functions live in, such as `C_Spell`. Absent for globals and widget methods. |
+| `Environment` | `"All"`, `"Game"`, or `"Glue"` — where the functions exist. |
+| `Functions` | Array of functions. Each has `Name`, `Type`, and where documented `Documentation`, `Arguments`, and `Returns`. |
+| `Events` | Array of events. Each has `Name`, `LiteralName`, and where documented `Documentation` and `Payload`. |
+| `Tables` | Array of table shapes. A `Structure` has `Fields`; an `Enumeration` also has `NumValues`, `MinValue`, and `MaxValue`. |
+
+An argument, return value, payload value, or field is described by
+`Name`, `Type`, and `Nilable`, plus `Default` and `Documentation` when
+they apply. `Type` is a Lua type such as `number` or `string`, or the
+name of a table shape in some system's `Tables`.
+
+The layout matches the one Blizzard's own documentation uses, so a tool
+written against that data reads this without change.
+
+### `_classicapi_UndocumentedAPI()`
+
+Returns an array of the registered names that carry no description yet,
+and its length. Names are being described one namespace at a time, so
+this list shrinks with each release.
+
+```lua
+local missing, count = _classicapi_UndocumentedAPI()
+```
+
 ## AuctionHouse
 
 ### `C_AuctionHouse.PostItem(itemLocation, duration, quantity, numStacks, bid, buyout)`
 
 Posts `numStacks` auctions of `quantity` each, from a single source stack,
-in one call — a ClassicAPI extension modelled on the retail multi-sell flow.
-Vanilla's `StartAuction` only ever posts one whole item object, so this
+in one call — a ClassicAPI extension modelled on the multi-sell flow.
+The engine's `StartAuction` only ever posts one whole item object, so this
 handles the splitting and the sequence of posts for you.
 
 - `itemLocation` — a `{ bagID = B, slotIndex = S }` table identifying the
   source stack (0 = backpack, 1–4 = equipped bags; `slotIndex` 1-based).
-- `duration` — `1`/`2`/`3` for 2h/8h/24h (vanilla's three durations); the raw
+- `duration` — `1`/`2`/`3` for 2h/8h/24h (the three durations); the raw
   minute values `120`/`480`/`1440` are also accepted.
 - `quantity` — items per auction (1–255).
 - `numStacks` — number of auctions to post.
@@ -911,9 +1431,9 @@ Returns `true` when the job is accepted and posting has started, or
 items for `numStacks × quantity`, no free general bag slot to split into, a
 job already in progress, or bad arguments).
 
-**It's asynchronous.** Vanilla's `CMSG_AUCTION_SELL_ITEM` has no count field
-(unlike WotLK, where the server splits) — the server posts the *entire* item
-object a GUID points at. So to post a partial `quantity` the DLL first splits
+**It's asynchronous.** `CMSG_AUCTION_SELL_ITEM` has no count field — the
+server posts the *entire* item object a GUID points at. So to post a partial
+`quantity` the DLL first splits
 that amount into a bag slot (a server round-trip), then posts the resulting
 stack (another round-trip), repeating for each stack. Progress is reported
 through events rather than the return value:
@@ -947,6 +1467,64 @@ aren't aggregated across bags — `quantity × numStacks` must fit in that one
 stack); temp splits use general-purpose bags only, so family-restricted items
 (arrows/shards that live in specialty bags) aren't supported; one job runs at
 a time.
+
+## AuraUtil
+
+Helper library over [`C_UnitAuras`](#unitauras), backported from FrameXML. Its
+purpose on 1.12 is the allocation-free aura scan: the non-packed path builds no
+table per aura, which matters under Lua's garbage collector when you scan many
+units each frame.
+
+### AuraUtil.ForEachAura
+
+`AuraUtil.ForEachAura(unit, filter, batchSize, func [, usePackedAura])` calls
+`func` for each aura on `unit` matching `filter`, in order, until `func` returns a
+truthy value or the auras run out.
+
+- Non-packed (default): `func` receives the 15 positional values of
+  [`C_UnitAuras.UnitAuraBySlot`](#c_unitaurasgetauradatabyslotunit-slot--unitaurabyslotunit-slot).
+  No table is built per aura.
+- `usePackedAura` true: `func` receives the `AuraData` table from
+  `GetAuraDataBySlot`.
+
+The scan fetches slot ids in batches through
+[`C_UnitAuras.GetAuraSlots`](#c_unitaurasgetauraslotsunit--filter--maxslots--continuationtoken),
+then reads each aura by slot id. So the cost grows with the aura count, not
+with its square. `batchSize` sets how many slot ids one batch fetches. With
+`nil`, one batch fetches all of them. The value never caps how many auras
+`func` visits. A `batchSize` of `0` or less does nothing.
+
+```lua
+AuraUtil.ForEachAura("target", "HARMFUL", nil, function(name, icon, count)
+    print(name, count)
+end)
+```
+
+### AuraUtil.FindAura
+
+`AuraUtil.FindAura(predicate, unit, filter [, arg1, arg2, arg3])` returns the
+positional values of the first aura for which `predicate` returns truthy, or
+`nil`. `predicate` receives the (up to three) caller arguments, then the aura's
+positional values:
+
+```lua
+local function castByMe(_, _, _, name, icon, count, dispelType, duration, exp, source)
+    return source == "player"
+end
+local name = AuraUtil.FindAura(castByMe, "target", "HARMFUL")
+```
+
+### AuraUtil.FindAuraByName
+
+`AuraUtil.FindAuraByName(auraName, unit, filter)` returns the positional values of
+the first aura whose name matches `auraName`, or `nil`. Names are localized and
+not unique, so this returns the first match.
+
+### AuraUtil.UnpackAuraData
+
+`AuraUtil.UnpackAuraData(auraData)` returns an `AuraData` table's fields as 15
+positional values in the classic `UnitAura` order, or `nil` when `auraData` is
+`nil`. (Position 13 is the table's `isFromPlayerOrPlayerPet`.)
 
 ## CharacterList
 
@@ -1039,9 +1617,9 @@ f:SetScript("OnEvent", function()
 end)
 ```
 
-Vanilla 1.12's `CHAT_MSG_*` events don't include the sender GUID
-in their payload — that was added in 3.0+ as `arg12`. Addons that
-need to identify chatters reliably (rather than by sender name,
+The `CHAT_MSG_*` events don't include the sender GUID in their
+payload. Addons that need to identify chatters reliably (rather than by
+sender name,
 which is locale-fragile and ambiguous across realms) currently
 strcmp against an addon-maintained name cache. This function lets
 them skip that work.
@@ -1081,24 +1659,84 @@ local classes = FillLocalizedClassList({})
 -- ...
 ```
 
-Modern API supports an optional `isFemale` boolean to fetch female-
-form names. Vanilla 1.12 has no separate female-name array in
-`ChrClasses.dbc` — `Name[9]` (one localized string per locale)
-sits exactly between offsets `+0x14` and `+0x38`, with the class
-token immediately after, leaving no room. The arg is accepted for
-signature parity but ignored; the same names are returned either way.
-Most locales (English included) wouldn't differentiate the two
-anyway, so callers won't typically notice.
+An optional `isFemale` boolean can fetch female-form names.
+`ChrClasses.dbc` has no separate female-name array — `Name[9]` (one
+localized string per locale) sits exactly between offsets `+0x14` and
+`+0x38`, with the class token immediately after, leaving no room. The
+arg is accepted for signature parity but ignored; the same names are
+returned either way. Most locales (English included) wouldn't
+differentiate the two anyway, so callers won't typically notice.
 
-Sparse class IDs (vanilla skips classID 6 — Death Knight didn't
-exist yet — and a few others) have NULL records and are silently
-skipped.
+Sparse class IDs (classID 6 and a few others are skipped) have NULL
+records and are silently skipped.
+
+## ClassColor
+
+### `C_ClassColor.GetClassColor(className)`
+
+Returns the color of a class as a `ColorMixin`. Returns `nil` if
+`className` is not a class.
+
+`className` is the class file name, not the localized name. It is the
+uppercase token that `UnitClass` returns as its second value.
+
+```lua
+local _, classFile = UnitClass("target")     -- "WARRIOR"
+local color = C_ClassColor.GetClassColor(classFile)
+if color then
+    print(color:WrapTextInColorCode(UnitName("target")))
+end
+```
+
+The color is the one the whole interface uses for that class, and every
+caller gets the same object. Do not write to its fields — the change
+applies everywhere. Use `CreateColor(color:GetRGBA())` for a copy you
+can edit.
+
+An addon that recolors a class changes what this function returns.
+
+## ClassicAPI namespace
+
+Every function on this page is bound twice: under the name it documents,
+and under the same name inside the `ClassicAPI` table. Namespaced calls
+keep their namespace as a subtable.
+
+```lua
+ClassicAPI.GetServerTime()                       -- == GetServerTime
+ClassicAPI.C_Item.IsBound(itemLocation)          -- == C_Item.IsBound
+ClassicAPI.coroutine.create(fn)                  -- == coroutine.create
+```
+
+Both names hold the same function, so `ClassicAPI.X == X` is true. That
+equality is the point of the table. A Lua global belongs to whoever
+writes it last, and FrameXML and every addon load after ClassicAPI
+registers, so any of these names can be taken later with no error and no
+warning. The mirrored name cannot be taken, which gives you two things:
+
+```lua
+-- Reach a function whose global was replaced
+local now = ClassicAPI.GetServerTime()
+
+-- Detect that it was replaced
+if GetServerTime ~= ClassicAPI.GetServerTime then
+    -- something else owns this global now
+end
+```
+
+**Prefer the documented name.** Code written against `GetServerTime()`
+runs on other clients; code written against `ClassicAPI.GetServerTime()`
+runs only here. Reach for the table when a name is known to be taken, or
+to test whether it is — not as a default calling style.
+
+Two kinds of addition are absent from the table. Frame methods
+(`tooltip:SetSpellByID(...)`) are not globals, so nothing mirrors them.
+Enum tables and value globals such as `CLASSIC_API_VERSION` are values
+rather than functions, and a mirrored value would be a stale copy.
 
 ## ColorUtil
 
-The modern `C_ColorUtil` color-space and text-color-code helpers. All are
-pure functions (no engine state); conventions match a retail-family client
-that ships them natively, verified in-game.
+The `C_ColorUtil` color-space and text-color-code helpers. All are
+pure functions (no engine state); conventions verified in-game.
 
 **Ranges:** hue is in **degrees**, `[0, 360)`; saturation / value / lightness
 are `[0, 1]`. RGB channels are `[0, 1]` (not 0–255). Achromatic (gray) inputs
@@ -1173,13 +1811,12 @@ C_ColorUtil.WrapTextInColorCode("Hi", code)   -- "|cffff0000Hi|r"
 ### `InCombatLockdown()`
 
 Always returns `false`. Combat lockdown gates secure-frame UI
-manipulation in modern WoW, and the secure-frame system didn't exist
-in 1.12 — there's nothing in vanilla to lock down. This function is
-provided as a no-op stub purely so addons backported from later
-expansions can call it without erroring on a missing global.
+manipulation, and there is no secure-frame system here — there's nothing
+to lock down. This function is a no-op stub, so addons that call it don't
+error on a missing global.
 
-For "is the player actually in combat?", use vanilla's own
-`UnitAffectingCombat("player")`, which the stock 1.12 engine ships.
+For "is the player actually in combat?", use `UnitAffectingCombat("player")`,
+which the engine ships.
 
 ```lua
 if not InCombatLockdown() then
@@ -1191,15 +1828,178 @@ if UnitAffectingCombat("player") then
 end
 ```
 
+### `StartAttack([target])`
+
+Starts your melee auto-attack. The `AttackTarget()` global turns the attack on
+or off with each call. `StartAttack` only starts it — a call while you attack
+your current target does not toggle the attack off. So a `/startattack` macro
+can use it safely.
+
+With no argument, it attacks your current target. With a unit token (`"target"`,
+`"focus"`, `"party1"`), it attacks that unit. A name or an unknown token uses the
+current target instead. If there is no valid target, nothing happens.
+
+```lua
+StartAttack()            -- attack the current target; never cancels an attack
+StartAttack("focus")     -- attack your focus unit
+```
+
+### `StopAttack()`
+
+Stops your melee auto-attack. If you are not attacking, the call does nothing.
+
+Both functions also exist as slash commands: `/startattack [target]` and
+`/stopattack`. The commands accept the same `[conditions]` that `/focus`
+accepts, and each client language has its own command names next to the
+English ones (for example `/angriffstart` and `/angriffstop` on a German
+client).
+
+```
+/startattack
+/startattack focus
+/startattack [harm] target
+/stopattack
+```
+
 ## Console
+
+The developer console is the overlay you open with `~` when the client is
+started with `-console`. These functions run commands in it, write to it, and
+read its state.
+
+### `ConsoleExec(command)`
+
+Runs a console command line, the same way typing it into the console does.
+
+```lua
+ConsoleExec("ExportDBCFiles")
+ConsoleExec("gxRestart")
+```
+
+Every command [`ConsoleGetAllCommands`](#consolegetallcommands) lists can be run
+this way, so anything the console can do is now reachable from Lua. The command
+is added to the console's history, and an unknown command writes
+`Unknown command` to the console rather than raising.
+
+The console's own `set` command is **not** the same as `SetCVar`. It writes any
+cvar, including one `SetCVar` refuses as read-only and one no Lua function can
+read. `ConsoleExec("set …")` is therefore a way around the limits every other
+cvar function keeps, and it changes settings that persist. Prefer `SetCVar`
+unless you specifically want the console's behaviour.
+
+Works whether or not the console is open, and whether or not `-console` was
+used.
+
+### `ConsoleEcho(message [, colorType])`
+
+Writes one line to the console. `colorType` is 0 to 8 and picks the colour, as
+[`ConsoleGetColorFromType`](#consolegetcolorfromtypecolortype) describes;
+it defaults to 0, white.
+
+```lua
+ConsoleEcho("something happened")
+ConsoleEcho("something went wrong", 3)   -- red
+```
+
+The line is kept whether or not the console is open, so it is there when you
+next open it.
+
+### `ConsolePrintAllMatchingCommands(prefix)`
+
+Writes every command whose name begins with `prefix` to the console, the way its
+own completion lists candidates. The match ignores case. An empty prefix prints
+nothing; use [`ConsoleGetAllCommands`](#consolegetallcommands) to get everything.
+
+### `ConsoleIsActive()`
+
+Returns whether the console is open right now. Always `false` when the client
+was started without `-console`, because the key that opens it does nothing then.
+
+### `ConsoleGetColorFromType(colorType)`
+
+Returns `r, g, b, a` for one of the console's nine line colours, each 0 to 1, or
+`nil` outside that range.
+
+| Type | Colour | | Type | Colour |
+|---|---|---|---|---|
+| 0 | white | | 5 | white |
+| 1 | white | | 6 | white |
+| 2 | grey | | 7 | white, half alpha |
+| 3 | red | | 8 | black |
+| 4 | yellow | | | |
+
+### `ConsoleGetFontHeight()`
+
+Returns the console's text height as a fraction of the screen height. The
+default is `0.02`.
+
+There is no matching setter. The font is built once while the client starts, and
+rebuilding it afterwards leaves every line already in the console pointing at a
+font that no longer exists.
+
+### `SetConsoleKey(keyCode)`
+
+Sets the key that opens and closes the console.
+
+`keyCode` is the client's own numeric key code, not a key name — the console
+compares raw key codes and nothing in it reads names. The key still only works
+when the client was started with `-console`.
+
+### `CalculateStringEditDistance(a, b)`
+
+Returns how many single-character insertions, deletions or substitutions turn
+one string into the other. The console uses it to suggest a command when one is
+mistyped.
+
+```lua
+CalculateStringEditDistance("kitten", "sitting")   -- 3
+CalculateStringEditDistance("help", "hepl")        -- 2
+```
+
+Returns `nil` if the shorter string is 256 characters or longer.
+
+### `ConsoleGetAllCommands()`
+
+Returns a list of every console command and console variable the client has,
+each as a table:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `command` | string | the name you type in the console |
+| `help` | string | the description, or `""` when it has none |
+| `category` | number | an `Enum.ConsoleCategory` value |
+| `commandType` | number | an `Enum.ConsoleCommandType` value |
+| `scriptContents` | string | always `""` |
+| `scriptParameters` | string | always `""` |
+
+```lua
+for _, info in ipairs(ConsoleGetAllCommands()) do
+    if info.commandType == Enum.ConsoleCommandType.Cvar then
+        print(info.command, GetCVar(info.command))
+    end
+end
+```
+
+Console variables are included, and most of them carry no description, so
+`help` is often `""` for them. Console macros and scripts do not exist on this
+client, so `commandType` is only ever `Cvar` or `Command`, and the two script
+fields are always empty.
+
+`Enum.ConsoleCategory` holds `Debug` 0, `Graphics` 1, `Console` 2, `Combat` 3,
+`Game` 4, `Default` 5, `Net` 6, `Sound` 7, `Gm` 8, `Reveal` 9 and `None` 10.
+Every command reports one of `Debug` through `Gm`.
+`Enum.ConsoleCommandType` holds `Cvar` 0, `Command` 1, `Macro` 2 and
+`Script` 3.
+
+The list is live: a command added while the game runs, such as one of the export
+commands below, appears in the next call.
 
 ### `ExportInterfaceFiles art|code` (console command)
 
 A **developer-console command** (not a Lua function) — type it into the
 `~` console, which is available when the client is launched with
 `-console`. It extracts Blizzard's stock UI files out of the game's MPQ
-archives onto disk, mirroring the same-named command from later clients
-(4.3.4). Useful for reading the FrameXML / GlueXML source you're
+archives onto disk. Useful for reading the FrameXML / GlueXML source you're
 backporting addons against, or pulling out the default art.
 
 - `ExportInterfaceFiles code` — writes `.lua` / `.xml` / `.toc` /
@@ -1261,12 +2061,50 @@ inspect schemas/values directly — e.g. verifying a record's column
 layout against a known row, the way `C_Item.GetEnchantInfo`'s effect
 columns were confirmed — without a standalone MPQ extraction tool.
 
+### `ExportSoundFiles [subpath]` (console command)
+
+A ClassicAPI-original companion that dumps the client's sound files out
+of the MPQ archives to `BlizzardSound\` under the working directory
+(next to `WoW.exe`). Every sound the client can play lives under one
+`Sound\` root, and the export preserves that subtree — e.g.
+`Sound\Creature\Ragnaros\RagnarosAggro01.wav` becomes
+`BlizzardSound\Creature\Ragnaros\RagnarosAggro01.wav`.
+
+```
+> ExportSoundFiles Creature\Ragnaros
+ExportSoundFiles: wrote 27 file(s) under Sound\Creature\Ragnaros to BlizzardSound\
+```
+
+The optional `subpath` narrows the export to a path prefix under
+`Sound\`. It is plain prefix matching, so `Creature\Rag` also catches
+`Creature\Ragnaros`. Use it: the whole tree is roughly a gigabyte, and
+the command runs synchronously, freezing the client until it finishes.
+Bare `ExportSoundFiles` exports everything.
+
+Notes:
+
+- Every file under `Sound\` is exported, whatever its extension. The
+  tree is entirely audio (`.wav`, `.mp3`, `.ogg`), and a few files are
+  named inconsistently, so filtering by extension would only hide them.
+- The export covers every sound the client can play, not only the ones
+  its archives index: several hundred files it ships are named by no
+  index at all, and the client's own sound table supplies them instead.
+  That table also names files this build does not ship (sounds
+  belonging to later content); those are skipped, so the written count
+  lands under the number of names.
+- A narrowed export writes into the same layout a full one would, so
+  running it repeatedly with different subpaths builds up one tree.
+- The destination is `BlizzardSound\`, deliberately not `Sound\`. The
+  client prefers a loose file over the archived copy of the same path,
+  so exporting into `Sound\` would shadow the archives with a gigabyte
+  of duplicates that get re-indexed at every launch.
+
 ## Container
 
 ### `C_Container.GetContainerItemID(bagIndex, slotIndex)`
 
 Returns the itemID at the given bag/slot, or `nil` if the slot is empty
-or the indices are out of range. Modern positional-arg form of the same
+or the indices are out of range. Positional-arg form of the same
 lookup `C_Item.GetItemID({bagID=B, slotIndex=S})` performs.
 
 - `bagIndex = 0` — the player's main backpack.
@@ -1288,10 +2126,9 @@ end
 ### `C_Container.GetContainerItemInfo(containerIndex, slotIndex)`
 
 Returns a `ContainerItemInfo` table for the item in the given bag slot, or
-`nil` if the slot is empty / the indices are out of range. The modern
-structured-table form (namespaced + table-returning since Patch 10.0.2) of
-vanilla's flat global `GetContainerItemInfo`, which only returned
-`texture, itemCount, locked, quality, readable`.
+`nil` if the slot is empty / the indices are out of range. The
+structured-table form of the flat global `GetContainerItemInfo`, which
+only returned `texture, itemCount, locked, quality, readable`.
 
 - `containerIndex = 0` — main backpack; `1..4` — equipped bag slots.
 - `slotIndex` — 1-based.
@@ -1300,14 +2137,14 @@ Table fields:
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `iconFileID` | string | Icon **path** (1.12 has no fileID system, same as `GetItemIcon`). Absent if the item's static data isn't cached yet. |
+| `iconFileID` | string | Icon **path** (no fileID system here, same as `GetItemIcon`). Absent if the item's static data isn't cached yet. |
 | `stackCount` | number | Current stack size. |
 | `isLocked` | boolean | Item is in a pending transaction (pickup/trade/mail in flight). |
 | `quality` | number\|nil | `Enum.ItemQuality` (0=Poor … 5=Legendary); `nil` until the item is cached. |
 | `isReadable` | boolean | Has readable page text (books/letters). |
-| `hasLoot` | boolean | Static LOOTABLE flag (best-effort — vanilla can't track post-loot emptiness client-side). |
+| `hasLoot` | boolean | Static LOOTABLE flag (best-effort — post-loot emptiness can't be tracked client-side). |
 | `hyperlink` | string | Fully-decorated per-instance item link (enchant + random suffix), same as `GetContainerItemLink`. |
-| `isFiltered` | boolean | Always `false` — vanilla has no bag search-filter system. |
+| `isFiltered` | boolean | Always `false` — there is no bag search-filter system. |
 | `hasNoValue` | boolean | `true` when the item's vendor sell price is 0. |
 | `itemID` | number | Item ID. |
 | `isBound` | boolean | Soulbound. |
@@ -1349,7 +2186,7 @@ end
 
 Returns `(startTime, duration, enable)` for the cooldown of the
 spell triggered by the item's ON_USE effect. Direct-by-ID variant of
-vanilla's `GetContainerItemCooldown(bag, slot)` — no slot reference
+the stock `GetContainerItemCooldown(bag, slot)` — no slot reference
 required.
 
 ```lua
@@ -1372,8 +2209,8 @@ required.
 - `GetItemCooldown(itemInfo)` — accepts itemID, `item:N` / chat-link
   hyperlink, numeric string, or item name (resolved via the shared
   `Item::Arg` helper, same chain `C_Item.GetItemCount` etc. use).
-- `C_Container.GetItemCooldown(itemID)` — modern signature accepts
-  number / hyperlink but **not** spell name (per Blizzard's spec
+- `C_Container.GetItemCooldown(itemID)` — the namespaced signature accepts
+  number / hyperlink but **not** spell name (per the spec
   "will not accept an itemlink or name", but link parsing falls out
   of the shared `Item::Arg::Resolve` for free, so we accept it).
 
@@ -1437,13 +2274,12 @@ end
 ```
 
 Useful for "repair only items above N copper" smart-repair logic
-without scanning tooltips. ClassicAPI addition; modern WoW has no
-direct equivalent.
+without scanning tooltips. A ClassicAPI extension.
 
 ### `C_Container.GetContainerItemCharges(containerIndex, slotIndex)`
 
 Per-slot equivalent of
-[`C_Item.GetItemCount`](#c_itemgetitemcountitem-includebank-includecharges)'s
+[`C_Item.GetItemCount`](#c_itemgetitemcountiteminfo-includebank-includeuses)'s
 `includeCharges=true` mode — returns the total uses available in
 *this single slot*, where `GetItemCount` totals the same value
 across every matching slot.
@@ -1490,11 +2326,10 @@ for bag = 0, 4 do
 end
 ```
 
-ClassicAPI addition; modern WoW has no direct equivalent (modern
-addons read charges off tooltip text). Useful when you need a
-per-slot number rather than `GetItemCount`'s rollup — e.g. to
-display "X charges" on the slot UI for a wand without re-walking
-every other matching item.
+A ClassicAPI extension (addons otherwise read charges off tooltip
+text). Useful when you need a per-slot number rather than
+`GetItemCount`'s rollup — e.g. to display "X charges" on the slot UI
+for a wand without re-walking every other matching item.
 
 ### `C_Container.GetContainerNumFreeSlots(bagID)`
 
@@ -1534,11 +2369,11 @@ end
 > `CalculateTotalNumberOfFreeBagSlots` now correctly excludes specialty
 > bags from the general-purpose free-slot total (it previously counted
 > them, since the raw field was 0). Note the Turtle custom families
-> (Meat/Fish/Leather/Mining, `0x200`–`0x1000`) collide with retail's
+> (Meat/Fish/Leather/Mining, `0x200`–`0x1000`) collide with the standard
 > bit meanings — see the `GetItemFamily` family table for the caveat.
 
-> **The bitmask encoding matches modern.** `bagType` is the bit
-> position (`1 << (familyID - 1)`), not the raw 1.12-stored familyID,
+> **The bitmask encoding.** `bagType` is the bit
+> position (`1 << (familyID - 1)`), not the raw stored familyID,
 > so callers can bitwise-AND with itemFamily values from
 > [`C_Item.GetItemFamily`](#c_itemgetitemfamilyitem) directly. We
 > convert internally — see that function's notes for the
@@ -1549,6 +2384,105 @@ Implementation walks the bag using
 internally and counts slots that resolve to a null `CGItem *` (i.e.,
 empty). Cross-checked in-game against a manual
 `C_Container.GetContainerItemID` walk; counts match.
+
+### `C_Container.GetContainerFreeSlots(bagID)`
+
+Returns which slots in a bag are empty, as a table of slot numbers in
+ascending order.
+
+```
+freeSlots = C_Container.GetContainerFreeSlots(bagID)
+```
+
+- `bagID = 0` — the player's main backpack.
+- `bagID = 1..4` — the player's equipped bag slots. If no bag is
+  equipped there, the call returns nothing.
+- Other `bagID` values (bank, keyring, out of range) return nothing.
+
+A full bag returns an empty table. A bag that is not there returns
+nothing at all, so an empty table and a missing bag stay easy to tell
+apart:
+
+```lua
+local freeSlots = C_Container.GetContainerFreeSlots(bagID)
+if freeSlots then
+    for _, slot in ipairs(freeSlots) do
+        -- slot is empty
+    end
+end
+```
+
+Use [`C_Container.GetContainerNumFreeSlots`](#c_containergetcontainernumfreeslotsbagid)
+when you only need how many there are.
+
+### `C_Container.GetContainerItemQuestInfo(containerIndex, slotIndex)`
+
+Returns the quest state of one bag slot, as a single table.
+
+```
+questInfo = C_Container.GetContainerItemQuestInfo(containerIndex, slotIndex)
+```
+
+The table holds three fields:
+
+- `isQuestItem` — `true` when the item is a quest item.
+- `questID` — the quest the item begins, or `nil` when it begins no
+  quest.
+- `isActive` — `true` when the quest in `questID` is already in the
+  player's quest log.
+
+`questID` is the quest the item *starts*, not a quest the item counts
+towards. Together the three fields say which marker a bag button should
+show: a `questID` the player has not accepted yet takes the exclamation
+mark, and either an accepted `questID` or a plain quest item takes the
+question-mark border.
+
+```lua
+local questInfo = C_Container.GetContainerItemQuestInfo(bag, slot)
+if questInfo.questID and not questInfo.isActive then
+    -- this item starts a quest the player has not picked up
+elseif questInfo.questID or questInfo.isQuestItem then
+    -- quest-related item
+end
+```
+
+The table always comes back, so the fields are safe to read directly. An
+empty slot reports `isQuestItem = false`, no `questID`, and
+`isActive = false`.
+
+> **The first read of an item can be blank.** An item whose data has not
+> arrived from the server yet reports the empty answer above, and asks
+> for that data. Read it again after `GET_ITEM_INFO_RECEIVED` or the next
+> `BAG_UPDATE` and it will be right.
+
+### `C_Container.GetContainerItemEquipmentSetInfo(containerIndex, slotIndex)`
+
+Returns whether the item in a bag slot belongs to an equipment set, and
+the names of the sets it belongs to.
+
+```
+inSet, setList = C_Container.GetContainerItemEquipmentSetInfo(containerIndex, slotIndex)
+```
+
+- `inSet` — `true` when the item is part of at least one equipment set.
+- `setList` — the set names joined with `", "`, in the order the sets
+  are stored. `nil` when the item is in no set.
+
+```lua
+local inSet, setList = C_Container.GetContainerItemEquipmentSetInfo(bag, slot)
+if inSet then
+    GameTooltip:AddLine("Equipment Sets: " .. setList)
+end
+```
+
+The match is on the exact item, not on the kind of item. An equipment
+set remembers the individual item that was saved into it, so a second
+copy of the same item in another slot reports `false` while the saved
+one reports `true`. Reorganising your bags does not change the answer:
+the item keeps its identity wherever it is stored.
+
+An empty slot, and a slot in a bag you do not have, both report
+`false`.
 
 ### `C_Container.CalculateTotalNumberOfFreeBagSlots()`
 
@@ -1570,14 +2504,14 @@ Takes no arguments.
 
 > **Same sparse-`BagFamily` caveat** as
 > [`GetContainerNumFreeSlots`](#c_containergetcontainernumfreeslotsbagid):
-> because vanilla server data leaves most bags' family field at 0,
-> specialty bags that retail would exclude are counted here. The result
+> because the server data leaves most bags' family field at 0,
+> specialty bags that would normally be excluded are counted here. The result
 > stays consistent with the per-bag `GetContainerNumFreeSlots` values it
 > sums.
 
 ### `C_Container.IsContainerItemOpenable(containerIndex, slotIndex)`
 
-Positional-arg wrapper for [`C_Item.IsItemOpenable`](#c_itemisitemopenableitemlocation--c_itemisitemopenablebyiditem)
+Positional-arg wrapper for [`C_Item.IsItemOpenable`](#c_itemisitemopenableitemlocation)
 against a bag/slot pair. Same `(isOpenable, canOpen)` tuple — see
 the linked section for full semantics. Both returns are `nil` for
 empty slots or items whose data hasn't been cached yet.
@@ -1612,7 +2546,7 @@ end
 ```
 
 **Match logic.** An item counts as a hearthstone if **either**:
-1. Its itemID is `6948` (the vanilla Hearthstone — fast path, no
+1. Its itemID is `6948` (the standard Hearthstone — fast path, no
    cache lookup needed), **or**
 2. Its on-use spell is spell `8690` (the "Hearthstone" cast itself).
 
@@ -1628,7 +2562,7 @@ name, etc.) gets the right value for any variant.
 > the item's `ItemStats_C` record to be in the local cache. Items
 > currently in the player's bags are always cached (the engine
 > pre-fills the cache during bag sync), so the check is reliable
-> for this code path. The fallback to rule 1 (vanilla itemID
+> for this code path. The fallback to rule 1 (itemID
 > equality) covers the moment-of-login window before the cache is
 > fully populated.
 
@@ -1706,8 +2640,8 @@ atomic swap.
 > path returns false until then. Same constraint as
 > `C_Container.GetContainerItemInfo` on bank IDs.
 
-> **ClassicAPI-only.** Modern Classic Era has no direct swap-two-slots
-> call — addons there drive the cursor with two `PickupContainerItem`
+> **ClassicAPI-only.** There is no other direct swap-two-slots
+> call — addons otherwise drive the cursor with two `PickupContainerItem`
 > calls in sequence. This single-call form bypasses the cursor
 > entirely (same path
 > [`C_EquipmentSet.UseEquipmentSet`](#c_equipmentsetuseequipmentsetsetid)
@@ -1732,7 +2666,7 @@ C_Container.MoveItem(0, 1, 0, 2, 5)
 C_Container.MoveItem(1, 4, 0, 7, 3)
 ```
 
-Server semantics are all-or-nothing — vanilla has no partial-move
+Server semantics are all-or-nothing — there is no partial-move
 form:
 
 - `dst` empty → places `count` there (clean split).
@@ -1750,22 +2684,206 @@ partial stack.
 Bank IDs (`-1`, `5..10`) work here too with the same bank-window
 constraint as `SwapItems`.
 
-> **vs. the modern equivalent.** Modern Classic Era has no direct
-> one-call move — addons there string `SplitContainerItem(bag, slot,
-> count)` + `PickupContainerItem(dstBag, dstSlot)` together to drive
-> the cursor. This bundles the same two-step into one packet
-> (`CMSG_SPLIT_ITEM`, opcode 0x10E), so the cursor is never touched.
+> **vs. the cursor approach.** There is no other direct one-call move —
+> addons otherwise string `SplitContainerItem(bag, slot, count)` +
+> `PickupContainerItem(dstBag, dstSlot)` together to drive the cursor.
+> This bundles the same two-step into one packet (`CMSG_SPLIT_ITEM`,
+> opcode 0x10E), so the cursor is never touched.
 
 Send is fire-and-forget (same as `SwapItems`).
+
+### `C_Container.AutoStoreItem(srcBag, srcSlot [, dstBag])`
+
+Moves an item and lets the server pick the destination slot. Returns
+`true` on send, `false` for bad args (missing bag, out-of-range slot,
+empty source, or a source and destination the call cannot serve).
+
+The server does not just look for an empty slot. It first merges the
+item into existing stacks of the same item, and splits it across
+several of them when that is what fits. It places a remainder in a
+free slot only if some is left over. So one call consolidates a
+partial stack:
+
+```lua
+-- Two partial stacks of item 12662: slot 1 holds 5, slot 2 holds 3.
+C_Container.AutoStoreItem(0, 2)
+-- Slot 1 now holds 8, and slot 2 is empty.
+
+-- Confine the item to bag 2
+C_Container.AutoStoreItem(0, 5, 2)
+```
+
+`dstBag` says where you want the item, and defaults to `0`:
+
+- `0` — anywhere in the main inventory that it fits. This means the
+  whole inventory, not the backpack. The backpack cannot be named
+  separately as a destination.
+- `1..4` — that equipped bag only.
+- `-1` — anywhere in the bank that it fits.
+
+Deposits and withdrawals both work, and both merge on arrival:
+
+```lua
+-- Deposit, merging into stacks already in the bank
+C_Container.AutoStoreItem(0, 3, -1)
+
+-- Withdraw bank slot 5 back into the bags
+C_Container.AutoStoreItem(-1, 5, 0)
+```
+
+A bank item always travels back to your bags, so you cannot ask for a
+new slot inside the bank. These three combinations are accepted, and
+every other pair returns `false`:
+
+| Source | `dstBag` | Result |
+|---|---|---|
+| inventory | `0..4` | stays in the inventory |
+| inventory | `-1` | goes to the bank |
+| bank | `0` | comes back to the inventory |
+
+To consolidate stacks inside the bank, use `C_Container.MoveItem` for
+each pair. Individual bank bags (`5..10`) are not valid destinations.
+
+Bank slots need the bank window open, the same as `SwapItems` and
+`MoveItem`.
+
+> **Prefer this over merging stacks yourself.** This call needs no
+> stack-size lookup, because the server decides what fits. A merge you
+> compute in Lua has to size each stack first with
+> `C_Item.GetItemMaxStackSizeByID`, which returns `nil` until that
+> item's data has arrived. A merge written that way silently skips any
+> stack it cannot size.
+
+There is no way to name the destination slot, which is the point of the
+call. Use `C_Container.SwapItems` or `C_Container.MoveItem` when you
+need to choose it.
+
+Send is fire-and-forget (same as `SwapItems` and `MoveItem`).
+
+### `C_Container.SortBags()`
+
+Arranges the items in your bags. Takes no arguments and returns nothing.
+
+The work spans several frames, because every item move is a request to
+the server. A call made while a sort is still running is ignored, so a
+held keybind cannot stack them up.
+
+Partial stacks are combined first. Then items are placed in this order,
+starting from the first slot:
+
+1. Hearthstone
+2. Weapons and armor
+3. Consumables
+4. Reagents
+5. Trade goods
+6. Quest items
+7. Everything else, best quality first
+8. Junk (gray items)
+
+Junk fills from the last slot backward, so it collects away from
+everything else. Within each group, items sort by type, then subtype,
+then name, and fuller stacks come first.
+
+Weapons and armor also sort by the slot that they go into. Weapons come
+first: one-hand and two-hand, then ranged. Armor follows. Shields and
+off-hand items come first, then head to feet, then neck, rings and
+trinkets. For example, all helms sit together, and then all
+shoulders. In one slot, items sort by subtype (cloth, leather, mail,
+plate), then best quality first, then name.
+
+A specialty bag keeps only what it accepts, so a quiver holds ammunition
+and nothing else. Items that do not fit a specialty bag go to your
+general bags.
+
+```lua
+C_Container.SortBags()
+```
+
+> **An item that is still loading stays put.** Until an item's data
+> arrives from the server, it has no type, quality or name to group it
+> by. The sort leaves such an item alone, and keeps other items out of
+> its slot. Call `C_Container.SortBags()` again once the data arrives.
+> This is most likely just after you log in.
+
+This order is ClassicAPI's own. To sort a different way, build it from
+`C_Container.SwapItems`, `C_Container.MoveItem` and
+`C_Container.AutoStoreItem`.
+
+### `C_Container.SortBankBags()`
+
+Arranges the items in your bank. Uses the same order as
+`C_Container.SortBags()`. Takes no arguments and returns nothing.
+
+Open the bank first. The server refuses bank moves while the bank is
+closed, so a call made with the bank closed does nothing at all.
+
+Only one sort runs at a time. A call made while a bag sort or another
+bank sort is still running is ignored.
+
+```lua
+C_Container.SortBankBags()
+```
+
+> **Stacks combine less reliably here than in your bags.** To combine
+> stacks inside the bank, the client has to work out what fits, and that
+> needs each item's max stack size. Until an item's data arrives from
+> the server that number is unknown, so a stack the client cannot
+> measure is left alone. Sorting your bags does not have this limit.
+
+### `C_Container.GetSortBagsRightToLeft()` / `C_Container.SetSortBagsRightToLeft(enable)`
+
+Sets which end of your bags a sort fills from. `Get` returns
+`isEnabled`. `Set` returns nothing, and applies to the next sort rather
+than re-sorting straight away.
+
+When it is on, the sorted items start at the last slot of the last bag,
+and junk collects at the first slot of the first bag. Both ends move
+together, so junk stays at the opposite end from everything else.
+
+```lua
+C_Container.SetSortBagsRightToLeft(true)
+C_Container.SortBags()
+```
+
+The setting is saved, so it survives logging out. It is stored as the
+`sortBagsRightToLeft` console variable, which `GetCVar` also reads.
+
+### `C_Container.GetBackpackAutosortDisabled()` / `C_Container.SetBackpackAutosortDisabled(disable)`
+
+Keeps the backpack out of `C_Container.SortBags()`. `Get` returns
+whether it is disabled. `Set` returns nothing, and applies to the next
+sort rather than re-sorting straight away.
+
+While it is on, a sort leaves every item in the backpack where it is and
+arranges only the equipped bags.
+
+```lua
+C_Container.SetBackpackAutosortDisabled(true)
+C_Container.SortBags() -- bags 1..4 only
+```
+
+The setting is saved, so it survives logging out. It is stored as the
+`backpackAutosortDisabled` console variable, which `GetCVar` also reads.
+
+### `C_Container.GetBankAutosortDisabled()` / `C_Container.SetBankAutosortDisabled(disable)`
+
+The same setting for the bank: it keeps the main bank container out of
+`C_Container.SortBankBags()`, leaving only the bank bags to be arranged.
+
+```lua
+C_Container.SetBankAutosortDisabled(true)
+C_Container.SortBankBags() -- bank bags only
+```
+
+Stored as the `bankAutosortDisabled` console variable.
 
 ## Creature
 
 ### `C_CreatureInfo.GetCreatureID(guid)`
 
-Extracts the creature template / NPC ID from a unit GUID. Vanilla
-1.12 packs the entry ID directly into bits 24-47 of the 64-bit
-GUID for the types that carry one; this function does the shift
-and mask so addons don't have to.
+Returns the creature template / NPC id for a unit GUID, or `nil`. The id is
+the same one the game uses to look up the creature's name, and the same one
+Wowhead and Turtle's database show in their NPC pages.
 
 ```lua
 C_CreatureInfo.GetCreatureID(UnitGUID("target"))   -- 1842 for Hogger
@@ -1773,14 +2891,21 @@ C_CreatureInfo.GetCreatureID(UnitGUID("pet"))      -- pet's creature template ID
 C_CreatureInfo.GetCreatureID(UnitGUID("player"))   -- nil (no entry on players)
 ```
 
+While the unit is in view, the id is read live from the unit, so it always
+matches the name you see. Some spawn points pick one of several templates,
+and a respawn can pick a different one. When such a unit is out of view, the
+id comes from the GUID instead, and that id is the spawn point's first
+template, which can differ from the unit's current name.
+
 Accepts creature GUIDs (`0xF130xxxx…`) and pet GUIDs
 (`0xF140xxxx…`). Returns `nil` for:
 - non-string input or malformed GUIDs
-- player GUIDs — the low 32 bits hold a player ID, not a template
-- game-object / dynamic-object / corpse / item GUIDs — modern's
-  `C_CreatureInfo` doesn't surface entry IDs for these even though
-  the bits are in the same range; addons that need them can shift
-  the raw GUID themselves (`(guid >> 24) & 0xFFFFFF`)
+- player GUIDs — a player carries no template
+- a pet that is out of view — a pet GUID does not carry its template
+- game-object / dynamic-object / corpse / item GUIDs — `C_CreatureInfo`
+  doesn't surface entry IDs for these even though the bits are in the
+  same range; addons that need them can shift the raw GUID themselves
+  (`(guid >> 24) & 0xFFFFFF`)
 - entry IDs of 0 — the engine never assigns 0; treated as "no info"
 
 The standard 16-digit (`"0xHHHHHHHHLLLLLLLL"`) and 8-digit
@@ -1917,7 +3042,7 @@ local info = C_CreatureInfo.GetCreatureFamilyInfo(27)
 |-------|------|-------|
 | `id` | number | Echo of the input id. |
 | `name` | string | Localized family name (client's active locale). |
-| `iconFile` | string | Icon **texture path**. Retail returns a numeric fileID here; vanilla's DBC stores the path, so this is a string usable directly with `texture:SetTexture(...)`. `""` for families with no icon (warlock pets: Imp, Voidwalker, Succubus, Felhunter, …). |
+| `iconFile` | string | Icon **texture path**. The DBC stores the path, so this is a string usable directly with `texture:SetTexture(...)`. `""` for families with no icon (warlock pets: Imp, Voidwalker, Succubus, Felhunter, …). |
 
 ### `C_CreatureInfo.GetCreatureFamilyIDs()`
 
@@ -1953,7 +3078,7 @@ C_CreatureInfo.GetFactionInfo(2)   -- Orc  → { name = "Horde", groupTag = "Hor
 | `name` | string | Localized faction-group name (`"Alliance"`, `"Horde"`, or the locale's translation). |
 | `groupTag` | string | Locale-independent tag: `"Alliance"` or `"Horde"`. |
 
-This is the by-`raceID` form of vanilla's existing `UnitFactionGroup(unit)`
+This is the by-`raceID` form of the stock `UnitFactionGroup(unit)`
 (which returns `groupTag, name` for a live unit) — same resolution, no unit
 required. It mirrors that engine function's chain exactly: race →
 `FactionTemplate` group mask → `FactionGroup.dbc`, selecting the row whose
@@ -1985,7 +3110,7 @@ specified, `11` Totem. Pairs with
 
 ### `C_CreatureInfo.GetCreatureTypeIDs()`
 
-Array of every `CreatureType.dbc` id (contiguous `1`..`11` in vanilla),
+Array of every `CreatureType.dbc` id (contiguous `1`..`11`),
 each round-tripping with
 [`GetCreatureTypeInfo`](#c_creatureinfogetcreaturetypeinfocreaturetypeid).
 
@@ -1994,13 +3119,177 @@ local ids = C_CreatureInfo.GetCreatureTypeIDs()
 -- { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }
 ```
 
+## Currency
+
+### `GetCoinTextureString(amount [, fontHeight])` / `C_CurrencyInfo.GetCoinTextureString(amount [, fontHeight])`
+
+Returns the amount of copper as a money string with real coin icons —
+for example `"12<gold> 34<silver> 56<copper>"`. The icons are inline
+`|T…|t` markup over the `UI-MoneyIcons` sprite sheet, rendered by
+ClassicAPI's inline-texture backport. Both names call the same C
+function.
+
+Only the non-zero denominations appear, in gold → silver → copper
+order. An `amount` of `0` returns `"0<copper>"`. A negative or
+fractional `amount` is clamped to `0` / rounded.
+
+`fontHeight` sets the icon height in UI pixels. When omitted (or `0`),
+each coin sizes itself to the font of the fontstring that shows the
+string — the default.
+
+```lua
+GetCoinTextureString(123456)   -- "12g 34s 56c" with coin icons
+GetCoinTextureString(5)        -- "5c" with a copper icon
+GetCoinTextureString(5, 24)    -- same, with a 24px coin
+```
+
+The per-denomination formats are the GlobalStrings
+`GOLD_AMOUNT_TEXTURE` / `SILVER_AMOUNT_TEXTURE` /
+`COPPER_AMOUNT_TEXTURE`, backported in the embedded `!!!ClassicAPI`
+addon's locale layer — a locale can override them.
+
 ## CVar
+
+### `C_CVar.GetCVarInfo(name)`
+
+Returns a cvar's value, its default, and what may be done to it. Seven values:
+
+```
+value, defaultValue, isStoredServerAccount, isStoredServerCharacter,
+isLockedFromUser, isSecure, isReadOnly = C_CVar.GetCVarInfo(name)
+```
+
+| Return | Type | Meaning |
+|--------|------|---------|
+| `value` | string | the current value |
+| `defaultValue` | string | the value it was registered with |
+| `isStoredServerAccount` | boolean | always `false` |
+| `isStoredServerCharacter` | boolean | always `false` |
+| `isLockedFromUser` | boolean | always `false` |
+| `isSecure` | boolean | always `false` |
+| `isReadOnly` | boolean | `true` when `SetCVar` will refuse to change it |
+
+```lua
+local value, default = C_CVar.GetCVarInfo("gxResolution")
+-- "2560x1080", "640x480"
+
+local _, _, _, _, _, _, readOnly = C_CVar.GetCVarInfo("realmList")
+-- readOnly is true
+```
+
+`isReadOnly` is the useful one: it tells you in advance whether `SetCVar`
+will work, and `realmList`, `realmName` and `scriptMemory` are read-only.
+Cvars are stored on your own machine, so the two `isStoredServer` returns
+are always `false`, and no cvar is locked or secure.
+
+Returns `nil` for a name that is not a cvar, so you can tell "no such cvar"
+from "set to an empty string". Console commands are not cvars, so a command
+name returns `nil` too — `C_CVar.GetCVarInfo("help")` is `nil`, while
+[`ConsoleGetAllCommands`](#consolegetallcommands) lists both.
+
+Any line left in `Config.wtf` becomes a cvar the next time the client
+starts, whether or not a setting by that name exists. The client keeps it,
+saves it again on exit, and lets you change it from the console, but Lua
+cannot read it. `GetCVar`, `SetCVar` and this function all return `nil` for
+one of these, so the Lua cvar functions agree with each other.
+[`ConsoleGetAllCommands`](#consolegetallcommands) does list them, because
+the console can reach them.
+
+Available on the login screen as well as in-game.
+
+### `C_CVar.DoesCVarExist(name)`
+
+Returns whether a cvar by that name can be read and written from Lua. A
+ClassicAPI extension.
+
+```lua
+C_CVar.DoesCVarExist("gxResolution")   -- true
+C_CVar.DoesCVarExist("doesNotExist")   -- false
+C_CVar.DoesCVarExist("help")           -- false: a console command, not a cvar
+```
+
+It answers the question worth asking before you call `GetCVar` or `SetCVar`,
+so it is true exactly when those work:
+
+```lua
+C_CVar.DoesCVarExist(name) == (C_CVar.GetCVarInfo(name) ~= nil)
+```
+
+That includes the `Config.wtf` case described above: a name the client keeps
+but does not implement is reported as `false`, because no Lua function can
+read it. Returns `false` for anything that is not a string.
+
+### `C_CVar.AreCVarsLoaded()`
+
+Returns whether the client has finished loading its settings.
+
+This is always `true` by the time any addon runs. Settings are read while the
+client starts, before there is any Lua to ask, and none of them are fetched
+over the network, so there is nothing to wait for. It is here so that ported
+code which checks it keeps working.
+
+### `C_CVar.GetCVarBitfield(name, index)` / `C_CVar.SetCVarBitfield(name, index, value)`
+
+Read or write one bit of a cvar, so a single cvar can hold many separate
+true/false settings. The index counts from 1.
+
+```lua
+RegisterCVar("myAddonFlags", "0")
+
+C_CVar.SetCVarBitfield("myAddonFlags", 1, true)
+C_CVar.SetCVarBitfield("myAddonFlags", 5, true)
+GetCVar("myAddonFlags")                          -- "17", bits 1 and 5
+C_CVar.GetCVarBitfield("myAddonFlags", 5)        -- true
+C_CVar.GetCVarBitfield("myAddonFlags", 2)        -- false
+```
+
+The index may be 1 to 64. `GetCVarBitfield` returns `nil` outside that range,
+or for a name that is not a cvar, so "no such bit" stays apart from "the bit
+is false".
+
+`SetCVarBitfield` returns whether it worked. It returns `false` for an index
+outside the range, for a name that is not a cvar, and for a read-only cvar —
+the same cvars [`GetCVarInfo`](#c_cvargetcvarinfoname) reports `isReadOnly`
+for. A successful write saves the cvar the same way `SetCVar` does.
+
+Any cvar works, and a cvar you register yourself is the usual way to use
+these. Every bit is independent, so setting one leaves the rest alone.
+
+### `C_CVar.SetTempCVar(name, value)` / `C_CVar.RemoveTempCVar(name)`
+
+`SetTempCVar` changes a cvar for this session only. The game uses the new
+value at once, but it does not save the value to Config.wtf.
+`RemoveTempCVar` puts back the value that the cvar had before the first
+`SetTempCVar`. Neither function returns a value.
+
+```lua
+-- Saved value of cameraDistanceMax is "15".
+C_CVar.SetTempCVar("cameraDistanceMax", "40")
+GetCVar("cameraDistanceMax")      -- "40"
+-- After /reload or logout, Config.wtf still holds "15".
+C_CVar.RemoveTempCVar("cameraDistanceMax")
+GetCVar("cameraDistanceMax")      -- "15"
+```
+
+Use this pair for a mode that changes many cvars and later turns off, for
+example a gamepad mode. The saved settings of the user do not change.
+
+- If you call `SetTempCVar` two times on one cvar, `RemoveTempCVar` puts
+  back the value from before the first call.
+- If `SetCVar` changes a cvar that has a temp value, the `SetCVar` value
+  replaces the temp value. The game saves it, and `RemoveTempCVar` then does
+  not change the cvar.
+- If `value` is `nil`, the cvar gets an empty string, as with `SetCVar`.
+- `RemoveTempCVar` does nothing for a cvar that has no temp value.
+
+Both functions give the same errors as `SetCVar`: for a name that is not a
+cvar, and for a read-only cvar. Both are also available on the login and
+character-select screens.
 
 ### `C_CVar.GetCVarBool(cvar)`
 
 Returns the cvar's value coerced to a boolean, or `nil` if no cvar
-by that name is registered. The `C_CVar` namespace was added in
-10.x; vanilla 1.12 only has `GetCVar` which returns a string.
+by that name is registered. The stock `GetCVar` returns a string.
 
 ```lua
 C_CVar.GetCVarBool("gxMaximize")    -- true if the window is set fullscreen
@@ -2027,13 +3316,39 @@ path for unknown cvars. The `nil` return lets callers distinguish
 
 `C_CVar.GetCVarBool` is also registered on the glue Lua state, and
 the engine's stock `GetCVar` / `SetCVar` / `RegisterCVar` /
-`GetCVarDefault` — which vanilla 1.12 only exposes in-game — are
+`GetCVarDefault` — which are otherwise exposed only in-game — are
 mirrored onto glue too. GlueXML patches at the login / realm /
 char-select screens can now read and write CVars directly. CVar
 storage is process-global, so writes on either state are
 immediately visible on the other (a `SetCVar("foo", "1")` from a
 GlueXML script will read back as `"1"` on the in-world side, and
 vice versa).
+
+### The interface memory limit
+
+The `scriptMemory` cvar caps how much memory the interface may use, counted
+in kilobytes. Its own value is 49152, which is 48 MB.
+
+| Stage | What happens |
+|---|---|
+| Interface memory goes over the limit | The client frees what it can. |
+| It is still over | A popup asks you to disable add-ons and restart. |
+| 15 seconds later | The client closes. |
+
+A value of 0 turns the check off. ClassicAPI sets 0 for you, so a large
+add-on set does not meet the popup, and it does that only while the cvar
+still holds its own value. If you picked a value yourself, your value
+stands.
+
+`SetCVar` cannot change this cvar while you are in the world, because the
+client makes it read-only there. To pick your own limit, close the game and
+add the line yourself in `WTF\Config.wtf`:
+
+```
+SET scriptMemory "65536"
+```
+
+That asks for a 64 MB limit, and any value above 0 turns the check back on.
 
 ## Cursor
 
@@ -2104,25 +3419,24 @@ end
 
 #### Types we don't surface
 
-The engine has cursor types beyond what `GetCursorInfo` advertises in
-modern WoW — pet action drag, trade-slot drag, mail-attach drag,
-ability-bar drag from `PickupAction`, etc. These don't map cleanly to
-any modern `GetCursorInfo` string, so we return `nil` for them.
-Consumers needing to detect those can use the engine-native
-`CursorHasItem` / `CursorHasSpell` / `CursorHasMoney` (which already
-exist in vanilla) and the source-side `PickupX` calls.
+The engine has cursor types beyond what `GetCursorInfo` advertises —
+pet action drag, trade-slot drag, mail-attach drag, ability-bar drag
+from `PickupAction`, etc. These don't map cleanly to any `GetCursorInfo`
+string, so we return `nil` for them. Consumers needing to detect those
+can use the engine-native `CursorHasItem` / `CursorHasSpell` /
+`CursorHasMoney` and the source-side `PickupX` calls.
+
+Changes to what the cursor holds are reported by the
+[`CURSOR_CHANGED` event](#cursor_changed-event).
 
 ## EquipmentSet
 
-Backports the modern `C_EquipmentSet.*` namespace on top of a
-client-side persistent store. Vanilla 1.12 had no equipment-set
-functionality at all (Blizzard introduced it in 3.1.2 as
-`SaveEquipmentSet` etc., then namespaced it into `C_EquipmentSet` in
-Legion) — and even when it shipped natively, the data lived
-server-side, synced via `SMSG_EQUIPMENT_SET_LIST`. Vanilla servers
-don't speak that opcode and won't ever, so each character's sets are
-kept in a per-character file under `WTF\Account\...`. The format
-matches what `VanillaMinimapTracking` does for its tracking config.
+`C_EquipmentSet.*` — named sets of gear you can save and equip again
+with one call.
+
+Sets belong to one character. Each character keeps its own sets in a file
+on disk, so a set does not follow you to another character, and a copy of
+your `WTF` folder carries its sets with it.
 
 ### Overview & file format
 
@@ -2156,30 +3470,27 @@ underlying data.
 
 One limitation worth knowing about:
 
-- **Equipping from the bank** is not supported by vanilla's protocol
+- **Equipping from the bank** is not supported by the protocol
   — `UseEquipmentSet` skips bank items rather than try and fail.
   Retrieve the items first, then re-run.
 
-Modern's signatures take a numeric `iconFileID`; we accept icon path
-strings (e.g. `"INV_Shield_06"`) since vanilla has no fileDataID
-system. Same string-or-default fallback semantic as 4.3.4 native.
+We accept icon path strings (e.g. `"INV_Shield_06"`), since there is no
+fileDataID system here. Missing or unknown icons fall back to a default.
 
 No cap on the number of sets per character. The full list re-
 serializes on every mutation; a corrupted file is harmless (parse
 errors leave the in-memory list empty and the next save rewrites the
 file from scratch).
 
-> Note: this is a **fresh client-side namespace**, not a polyfill of
-> some specific Blizzard build's behavior. The shape mirrors Classic
-> Era 1.15.x's `C_EquipmentSet.*` where it can, but anything that
-> requires server-side state (cross-character sharing, the
-> "Equipment Manager" specialization tab) isn't supported.
+> Note: this is a **fresh client-side namespace**. It mirrors the
+> `C_EquipmentSet.*` shape where it can, but anything that requires
+> server-side state (cross-character sharing, the "Equipment Manager"
+> specialization tab) isn't supported.
 
 ### `C_EquipmentSet.CanUseEquipmentSets()`
 
-Returns `true` unconditionally. Vanilla has no banker/feature gate
-on equipment-set storage; we ship the feature for every character.
-Equivalent to Classic Era's behavior.
+Returns `true` unconditionally. There is no banker/feature gate on
+equipment-set storage; the feature ships for every character.
 
 ### `C_EquipmentSet.GetNumEquipmentSets()`
 
@@ -2200,7 +3511,7 @@ trimming).
 
 ### `C_EquipmentSet.GetEquipmentSetInfo(setID)`
 
-Returns the nine values modern ships:
+Returns nine values:
 
 ```
 name, icon, setID, isEquipped,
@@ -2224,7 +3535,7 @@ slots are recorded **per-set at save time**, by reading the global
 
 Returns a hash table `{ [slot] = itemID }` for every set slot whose
 item is currently resolvable. Missing items (GUID stored but client
-can't find a CGItem) are omitted because vanilla doesn't keep an
+can't find a CGItem) are omitted because the engine doesn't keep an
 itemID separate from the live CGItem record.
 
 ### `C_EquipmentSet.GetItemLocations(setID)`
@@ -2311,12 +3622,12 @@ by the engine — a pending pickup or use is in flight that
 
 Walks the set and dispatches one **atomic server-side swap** per item
 that isn't already in its target slot. Items in the bank are skipped
-silently (vanilla can't equip from bank). Missing items are skipped
+silently (the protocol can't equip from bank). Missing items are skipped
 silently. Returns `true` if the call ran (the set existed), `false`
 otherwise.
 
 Implementation uses the same `FUN_INVENTORY_SWAP` primitive
-[`C_Item.EquipItemByName`](#c_itemequipitembynameiteminfo--dstslot)
+[`C_Item.EquipItemByName`](#c_itemequipitembynameitem--dstslot)
 uses for its explicit-slot path. Each swap is a single
 CMSG_SWAP_INV_ITEM (or CMSG_AUTOEQUIP_ITEM) packet that the server
 applies atomically — the two-cycle "ring A in slot 11, ring B in
@@ -2342,19 +3653,49 @@ trinkets 13/14, weapons 16/17), all 2-cycles.
 > old cursor-based path actually fired more (one per pickup, one
 > per equip, one per cursor-clear).
 
+### `C_EquipmentSet.PickupEquipmentSet(setID)`
+
+Puts the set on the cursor. Drop it on an action button to make an
+equipment-set button. An unknown `setID` does nothing.
+
+An equipment-set button shows the icon and the name of the set. When
+the player uses the button, `WEAR_EQUIPMENT_SET` fires, and the
+built-in handler equips the set. The button is grayed out while an item
+of the set is locked. Its tooltip is the `GameTooltip:SetEquipmentSet`
+tooltip.
+
+The button works like other action buttons. Drag it off to put the set
+on the cursor again. Drop another action on it, and the set goes to the
+cursor.
+
+The game saves the button for each character. It comes back after the
+next login. If another client changes that action slot, the change of
+the other client is kept.
+
+Changes to the set go to its buttons:
+
+- `ModifyEquipmentSet` and `SaveEquipmentSet` update the name and the
+  icon.
+- `DeleteEquipmentSet` removes all buttons of the set.
+
+For an equipment-set button, `GetActionInfo(slot)` returns
+`"equipmentset", setName`, and `GetActionText(slot)` returns the set
+name. While the set is on the cursor, `GetCursorInfo()` returns
+`"equipmentset", setName`, and `CURSOR_CHANGED` reports
+`Enum.UICursorType.EquipmentSet`.
+
 ## Events
 
 ### `C_EventUtils.IsEventValid(eventName)`
 
 Returns `true` if the named event exists in the engine's event-name table
-and can be registered for, `false` otherwise. Equivalent to the modern
-function of the same name; useful for addons that gate code behind feature
-detection (e.g. registering for events that exist in some client builds
-but not others).
+and can be registered for, `false` otherwise. Useful for addons that gate
+code behind feature detection (e.g. registering for events that exist in
+some client builds but not others).
 
 ```lua
 if C_EventUtils.IsEventValid("PLAYER_LOGIN") then ... end       -- true
-if C_EventUtils.IsEventValid("COMBAT_LOG_EVENT") then ... end   -- false (added in 3.x)
+if C_EventUtils.IsEventValid("COMBAT_LOG_EVENT") then ... end   -- false (not a registered event)
 ```
 
 The check walks the engine's static event-name table at runtime, so it
@@ -2368,8 +3709,8 @@ needs to know.
 ### `GetFramesRegisteredForEvent(event)`
 
 Returns the frames currently registered for `event`, as multiple return
-values (matching the modern signature — not a table). Returns nothing when
-no frame is registered or the event name is unknown.
+values (not a table). Returns nothing when no frame is registered or the
+event name is unknown.
 
 ```lua
 local f1, f2 = GetFramesRegisteredForEvent("PLAYER_LOGIN")
@@ -2384,12 +3725,11 @@ Reads the engine's own subscriber chain — the exact list
 registrations, including our `AutoReserve`-backed custom events. Frames
 created purely in C++ (nameplates, etc.) come back as their canonical
 wrapper, so `:GetName()` and other methods work; an anonymous frame's
-`:GetName()` is `nil`, same as on retail.
+`:GetName()` is `nil`.
 
 ### `PLAYER_ENTERING_WORLD` payload (`isInitialLogin`, `isReloadingUi`)
 
-Backports the 8.0.1 payload onto vanilla's (natively arg-less)
-`PLAYER_ENTERING_WORLD`:
+Adds a payload to the otherwise arg-less `PLAYER_ENTERING_WORLD`:
 
 ```lua
 local f = CreateFrame("Frame")
@@ -2407,9 +3747,9 @@ end)
   char-select and back in), `nil` otherwise.
 - `isReloadingUi` — `true` when the fire is caused by a `/reload`, `nil`
   otherwise.
-- Both `nil` on an instance/zone transition — matching retail.
+- Both `nil` on an instance/zone transition.
 
-Delivered as real event args (`arg1`/`arg2`), so retail-style handlers work
+Delivered as real event args (`arg1`/`arg2`), so positional handlers work
 unchanged. Values are `true`→`1` / false→`nil` (the engine dispatcher has no
 boolean), so `if isInitialLogin then …` reads naturally. Existing handlers
 that ignore the args are unaffected.
@@ -2423,8 +3763,7 @@ glue/login screen — no `PLAYER_ENTERING_WORLD`-specific engine hook.
 
 ### `PLAYER_TOTEM_UPDATE` event
 
-Backports the TBC event (absent from vanilla's table, so reserved as a
-custom event). Fires with `arg1 = totemSlot` (1 Fire, 2 Earth, 3 Water,
+Fires with `arg1 = totemSlot` (1 Fire, 2 Earth, 3 Water,
 4 Air) whenever a totem is dropped, expires, or is destroyed early
 (killed / Totemic Recall) — the companion event to
 [`GetTotemInfo`](#gettoteminfoslot).
@@ -2448,9 +3787,8 @@ scan interval (~250 ms) of latency; drops fire on the next frame.
 ### `BAG_UPDATE_DELAYED` event
 
 Fires (with no payload) once per frame in which any `BAG_UPDATE`
-fired. Matches modern WoW's coalescing semantic exactly — register
-for `BAG_UPDATE_DELAYED` instead of `BAG_UPDATE` and rescan once
-per frame regardless of how many updates fired.
+fired. Register for `BAG_UPDATE_DELAYED` instead of `BAG_UPDATE` and
+rescan once per frame regardless of how many updates fired.
 
 ```lua
 local f = CreateFrame("Frame")
@@ -2460,7 +3798,7 @@ f:SetScript("OnEvent", function() RescanMyInventory() end)
 
 A trade with 6 stacks (12 `BAG_UPDATE`s, all processed in one
 frame) produces exactly 1 `BAG_UPDATE_DELAYED` at the end of the
-frame — matches Classic Era 1.15.x's observed behavior.
+frame.
 
 Implemented by three hooks, none in regions other DLLs touch:
 - `FUN_004F91A0` / `FUN_004F9370` (bag subsystem at `0x004F9xxx`)
@@ -2483,8 +3821,7 @@ event handlers.
 
 ### `PLAYER_EQUIPMENT_CHANGED` event
 
-Backport of the WotLK-era event that fires once per paperdoll slot
-change — equip, unequip, or swap:
+Fires once per paperdoll slot change — equip, unequip, or swap:
 
 ```
 PLAYER_EQUIPMENT_CHANGED: equipmentSlot, hasCurrent
@@ -2494,13 +3831,12 @@ PLAYER_EQUIPMENT_CHANGED: equipmentSlot, hasCurrent
   changed (`1` = head … `19` = tabard; same numbering as
   `GetInventoryItemLink("player", slot)`).
 - **`hasCurrent`** — `1` when the slot now holds an item, `nil` when
-  it's now empty (write `if hasCurrent then` as in modern code —
-  vanilla's event dispatcher can't push real booleans).
+  it's now empty (write `if hasCurrent then` — the event dispatcher
+  can't push real booleans).
 
-Vanilla only fires `UNIT_INVENTORY_CHANGED("player")`, which doesn't
-say *which* slot changed; this event lets gear trackers, stat sheets,
-and tooltip decorators refresh exactly one slot instead of rescanning
-all 19.
+The stock `UNIT_INVENTORY_CHANGED("player")` doesn't say *which* slot
+changed; this event lets gear trackers, stat sheets, and tooltip
+decorators refresh exactly one slot instead of rescanning all 19.
 
 ```lua
 local f = CreateFrame("Frame")
@@ -2520,10 +3856,10 @@ affected equipment slot.
 
 ### `UPDATE_INVENTORY_DURABILITY` event
 
-Backport of the modern event that fires — with no payload — when an
-equipped item's durability changes: combat damage, resurrection
-penalty, repairs. The standard consumer pattern works unchanged:
-rescan the 19 slots with `GetInventoryItemDurability` on each fire.
+Fires — with no payload — when an equipped item's durability changes:
+combat damage, resurrection penalty, repairs. The standard consumer
+pattern works unchanged: rescan the 19 slots with
+`GetInventoryItemDurability` on each fire.
 
 ```lua
 local f = CreateFrame("Frame")
@@ -2532,7 +3868,7 @@ f:SetScript("OnEvent", RefreshMyDurabilityHUD)
 ```
 
 Event-driven, no polling: piggybacks on the engine's own
-inventory-alerts recompute — the routine behind vanilla's
+inventory-alerts recompute — the routine behind
 `UPDATE_INVENTORY_ALERTS` (the red/yellow "broken armor man"), which
 the engine runs whenever an owned item's fields change, on equip
 changes, and at enter-world. On each recompute the DLL diffs a
@@ -2541,15 +3877,14 @@ actually changed — a death dinging all your armor produces one event,
 not nineteen. Also fires when the *set* of equipped items changes
 (swapping to a differently-damaged item updates durability UI, so
 consumers want the refresh anyway). Bag-carried items don't trigger
-it: vanilla renders durability UI for equipped gear only.
+it: durability UI is for equipped gear only.
 
 ### `HEARTHSTONE_BOUND` event
 
 Fires (with no payload) every time the player binds their
 hearthstone at an innkeeper — including a rebind at the same inn.
-Polyfills modern WoW's event of the same name — addons listen to
-`HEARTHSTONE_BOUND` and re-read `GetBindLocation()` to refresh
-whatever bind-location UI they show.
+Addons listen to `HEARTHSTONE_BOUND` and re-read `GetBindLocation()`
+to refresh whatever bind-location UI they show.
 
 > Note: the server re-sends the bind packet on map/zone transitions
 > (behind the loading screen). Those resyncs are suppressed by gating
@@ -2568,7 +3903,7 @@ end)
 Fires **every time** the player confirms a bind, including when the
 new bind is at the same inn as before. The event is driven by the
 bind ACTION (server's SMSG_BINDPOINTUPDATE), not by the area name
-changing — matches modern semantics.
+changing.
 
 Implemented by hooking the BINDPOINTUPDATE packet handler at
 `FUN_005ED3C0`. The handler runs in two distinct cases:
@@ -2610,15 +3945,15 @@ f:SetScript("OnEvent", function(_, event) print(event) end)
 
 **Key-state semantics for MOVING**: `STOPPED_MOVING` fires the
 instant the movement keys release, even if the character is still
-airborne from a jump. Matches retail (verified empirically). For
-an "is the character actually displacing this frame" signal, use
-`GetUnitSpeed("player")` and watch the first return.
+airborne from a jump (verified empirically). For an "is the character
+actually displacing this frame" signal, use `GetUnitSpeed("player")`
+and watch the first return.
 
 **Latched semantics for TURNING and LOOKING**: each pair fires
 exactly once per RMB / LMB hold. STARTED waits until both the
 mouse-button bit is held AND the relevant yaw has actually
-changed (matches retail's "camera has moved" semantics — clicking
-without dragging doesn't fire). STOPPED fires when the button bit
+changed ("camera has moved" semantics — clicking without dragging
+doesn't fire). STOPPED fires when the button bit
 clears (RMB / LMB release). The latch stays on through any drag-
 stop-drag motion within a single hold; no spurious flapping.
 
@@ -2637,8 +3972,7 @@ spurious STOPPED transitions.
 ### `GLOBAL_MOUSE_DOWN` / `GLOBAL_MOUSE_UP` events
 
 Fires on every raw mouse-button press or release while WoW has
-focus. Payload is the button identifier string — matches modern
-WoW's signature exactly.
+focus. Payload is the button identifier string.
 
 ```lua
 local f = CreateFrame("Frame")
@@ -2670,6 +4004,52 @@ app while alt-tabbed doesn't fire. UP transitions always fire,
 even if the user alt-tabbed mid-click, so an addon never gets
 left in a "button is held" state.
 
+### `CURSOR_CHANGED` event
+
+Fires when what the cursor holds changes, and says what it held before:
+
+```
+CURSOR_CHANGED: isDefault, newCursorType, oldCursorType, oldCursorVirtualID
+```
+
+- **`isDefault`** — `1` when the cursor is now empty, `nil` when it is
+  holding something (write `if isDefault then` — the event dispatcher
+  cannot push real booleans).
+- **`newCursorType`** (number) — what the cursor holds now, as an
+  [`Enum.UICursorType`](#enumuicursortype) value.
+- **`oldCursorType`** (number) — what it held before, same enum.
+- **`oldCursorVirtualID`** (number) — the previous content's
+  identifying number: itemID, spellID, macro slot, merchant slot, or a
+  money amount in copper. `0` when the cursor was empty.
+
+```lua
+local f = CreateFrame("Frame")
+f:RegisterEvent("CURSOR_CHANGED")
+f:SetScript("OnEvent", function()
+    if arg2 == Enum.UICursorType.Item then
+        -- an item was just picked up; GetCursorInfo() has the details
+    end
+end)
+```
+
+`CURSOR_UPDATE` is untouched and still fires as it always has, so
+nothing that listens to it needs changing. Prefer `CURSOR_CHANGED` for
+new code, because it reports every kind of cursor. `CURSOR_UPDATE`
+announces a pickup only for items: picking up money, a spell, a macro,
+a pet action or a stabled pet gives you one `CURSOR_UPDATE` that
+describes an *empty* cursor, and nothing at all once the new content is
+in place. `CURSOR_UPDATE` also fires in cases where the cursor did not
+change, such as one per item while a stack is moved.
+
+`CURSOR_CHANGED` compares the cursor against the last state it reported,
+so it fires once per real change and stays quiet otherwise. It is
+checked once a frame, which means it arrives on the frame after the
+change rather than during it.
+
+Two holdings that look alike still count as a change: picking up one of
+two identical stacks, dropping it, and picking up the other reports each
+pickup separately.
+
 ### `EQUIPMENT_SETS_CHANGED` event
 
 Fires (with no payload) after any mutation: `Create`, `Save`,
@@ -2680,7 +4060,7 @@ should re-read its set list / button state when this fires.
 
 Fires with a single payload arg — `setID` — at the **start** of
 `UseEquipmentSet`, right after the set-exists check passes and
-before any pickup/equip work begins. Modern addons use this to
+before any pickup/equip work begins. Addons use this to
 gate "swap in progress" UI state (grey out the set button, show
 a spinner, etc.) until `EQUIPMENT_SWAP_FINISHED` arrives.
 
@@ -2698,6 +4078,16 @@ Items that were in the bank or that couldn't complete a swap cycle
 in one pass still report success=1. Listen for this if you want to
 re-paint the character pane / refresh tooltips after a swap.
 
+### `WEAR_EQUIPMENT_SET` event
+
+Fires with one payload argument, `setID`, when the player uses an
+equipment-set action button. The event does not equip the set.
+
+The built-in handler equips the set with `UseEquipmentSet`. If an item
+of the set is locked, or the player is casting, the handler does not
+equip the set. Instead, it shows `ERR_CLIENT_LOCKED_OUT` ("You can't do
+that right now.") in the error frame.
+
 ### `FACTION_STANDING_CHANGED` event
 
 Fires once per reputation change with `(factionID, newStanding, repGained)`:
@@ -2706,15 +4096,14 @@ Fires once per reputation change with `(factionID, newStanding, repGained)`:
 | arg2 (`newStanding`)  | New total standing value (post-change `barValue`)        |
 | arg3 (`repGained`)    | Signed delta — positive on gain, negative on loss        |
 
-Polyfills the modern event of the same name. Vanilla 1.12 exposes only
-`CHAT_MSG_COMBAT_FACTION_CHANGE`, whose `arg1` is the localized chat
-string (`"Your Stormwind reputation has increased by 100."`) — addons
-have to parse the text and reverse-resolve the faction name back to
-an ID. This event lets addons skip that work.
+The engine exposes only `CHAT_MSG_COMBAT_FACTION_CHANGE`, whose `arg1`
+is the localized chat string (`"Your Stormwind reputation has increased
+by 100."`) — addons have to parse the text and reverse-resolve the
+faction name back to an ID. This event lets addons skip that work.
 
-Does **not** fire for the initial faction sync at login or `/reload`
-— matches modern semantics. Only fires when a real reputation gain or
-loss arrives from the server (`SMSG_SET_FACTION_STANDING`).
+Does **not** fire for the initial faction sync at login or `/reload`.
+Only fires when a real reputation gain or loss arrives from the server
+(`SMSG_SET_FACTION_STANDING`).
 
 ```lua
 local f = CreateFrame("Frame")
@@ -2767,6 +4156,31 @@ polling. Register like any engine event
 
 See the [LootHistory](#loothistory) section for the reconstruction and read API.
 
+### `LEARNED_SPELL_IN_SKILL_LINE` event
+
+Fires when the player learns a spell that enters the spellbook.
+
+```lua
+-- arg1 = spellID, arg2 = skillLineIndex, arg3 = isGuildPerkSpell
+local f = CreateFrame("Frame")
+f:RegisterEvent("LEARNED_SPELL_IN_SKILL_LINE")
+f:SetScript("OnEvent", function()
+    local tab = C_SpellBook.GetSpellBookSkillLineInfo(arg2)
+    print("learned", C_Spell.GetSpellName(arg1), "in", tab.name)
+end)
+```
+
+| Arg | Type | Notes |
+|---|---|---|
+| `spellID` | number | The spell that was learned. |
+| `skillLineIndex` | number | The 1-based spellbook tab that now holds it. Feed it to [`C_SpellBook.GetSpellBookSkillLineInfo`](#c_spellbookgetspellbookskilllineinfoskilllineindex). |
+| `isGuildPerkSpell` | nil | Always `nil` (false). |
+
+The event fires next to the stock `LEARNED_SPELL_IN_TAB`, under the same
+rule: the game announced the new spell (a trainer, a quest reward, a talent)
+and the spell got a spellbook slot. The spells restored at login do not fire
+it. Profession recipes do not enter the spellbook, so they do not fire it.
+
 ### `LOOT_SCAN_COMPLETED` event
 
 Fires (no payload) once a [`C_Loot.ScanNearbyLoot()`](#c_lootscannearbyloot)
@@ -2799,7 +4213,7 @@ Register like any engine event
 | Event | Args | When |
 |---|---|---|
 | `LOSS_OF_CONTROL_ADDED` | `eventIndex` (number) | A new effect was applied — `eventIndex` is its 1-based index for [`C_LossOfControl.GetActiveLossOfControlData`](#c_lossofcontrolgetactivelossofcontroldataindex). |
-| `LOSS_OF_CONTROL_UPDATE` | `unitToken` (string) | The active set changed — an effect was added, fell off, or expired. Re-scan with `GetActiveLossOfControlData`. Always `"player"` (vanilla only tracks the local player), but passed so the event shape matches modern WoW and leaves room for per-unit tracking. |
+| `LOSS_OF_CONTROL_UPDATE` | `unitToken` (string) | The active set changed — an effect was added, fell off, or expired. Re-scan with `GetActiveLossOfControlData`. Always `"player"` (only the local player is tracked), but passed so the event carries a unit token and leaves room for per-unit tracking. |
 
 Detection is a per-frame diff of the active set (effect *expiry* has no engine
 packet to hook), so events land within a frame of the change and coalesce
@@ -2815,8 +4229,7 @@ Fires on every modifier-key press and release with `(key, down)`:
 | arg1 (`key`) | `LSHIFT`, `RSHIFT`, `LCTRL`, `RCTRL`, `LALT`, `RALT` |
 | arg2 (`down`) | `1` on press, `0` on release |
 
-Only transitions fire — key autorepeat does not. Matches 2.4.3+
-semantics.
+Only transitions fire — key autorepeat does not.
 
 Releases that happen while WoW is **not the focused window** are also
 handled: keyboard messages only reach WoW while it has focus, so a
@@ -2838,7 +4251,7 @@ end)
 
 **Implementation notes**
 
-L/R modifier distinction doesn't exist anywhere in the 1.12 engine's
+L/R modifier distinction doesn't exist anywhere in the engine's
 own state — its `IsShiftKeyDown` chain bottoms out at
 `GetKeyState(VK_SHIFT)` (the merged virtual key, `0x10`), never the
 L/R-aware `VK_LSHIFT` / `VK_RSHIFT`. The OS-level keystate *does* have
@@ -2879,8 +4292,8 @@ Fire when nameplate state actually changes. Payloads:
 
 | Event | `arg1` | Notes |
 |-------|--------|-------|
-| `NAME_PLATE_CREATED` | nameplate **Frame** | Matches modern WoW. Fires once per unique `CGNamePlateFrame` pointer — same frame re-used via pool recycle does NOT refire. |
-| `NAME_PLATE_UNIT_ADDED` | `"nameplateN"` **unit token** | Matches modern WoW. Pass straight to `UnitName` / `UnitGUID` / `UnitClass` / etc., or to [`GetNamePlateForUnit`](#c_nameplategetnameplateforunitunittoken) for the frame. The token is positional — see [Unit tokens](#unit-tokens-nameplaten) for ordering semantics. |
+| `NAME_PLATE_CREATED` | nameplate **Frame** | Fires once per unique `CGNamePlateFrame` pointer — same frame re-used via pool recycle does NOT refire. |
+| `NAME_PLATE_UNIT_ADDED` | `"nameplateN"` **unit token** | Pass straight to `UnitName` / `UnitGUID` / `UnitClass` / etc., or to [`GetNamePlateForUnit`](#c_nameplategetnameplateforunitunittoken) for the frame. The token is positional — see [Unit tokens](#unit-tokens-nameplaten) for ordering semantics. |
 | `NAME_PLATE_UNIT_REMOVED` | `"nameplateN"` **unit token** | Same as above. Computed from the plate's slot *before* it shifts out of the ordered list, so the token still resolves to the leaving unit during the event handler. |
 
 ```lua
@@ -2910,24 +4323,24 @@ end)
 > `NAME_PLATE_UNIT_ADDED` (fires next tick at the latest) or fetch
 > the current frame on-demand via `GetNamePlateForUnit(arg1)`.
 
-> **Token stability gotcha.** Like modern WoW, the `arg1` token is
-> positional — `"nameplate3"` today may resolve to a different unit
-> after the slot vacates and shifts. If you need a per-unit hash key
-> for cross-event bookkeeping, call `UnitGUID(arg1)` and store the
-> GUID instead. See [Unit tokens](#unit-tokens-nameplaten) for the
-> ordering rules.
+> **Token stability gotcha.** A plate keeps its token for its whole
+> life, and the other plates never renumber when one plate is
+> removed. But a removed plate frees its slot, and a later plate can
+> reuse that slot. So `"nameplate3"` can name a different unit at a
+> later time. For a key that stays with one unit, call
+> `UnitGUID(arg1)` and store the GUID. See
+> [Unit tokens](#unit-tokens-nameplaten) for the slot rules.
 
 **Implementation notes**
 
 Detected by per-frame polling, not engine hooks. Each world tick we
 walk the object hash for nameplated units and diff against the
-previous tick's snapshot. Modern WoW also synthesizes these via
-diffing (the underlying engine has no event for "plate state
-changed"). The cost is ~20-50µs/frame even in busy raids — well
-below noise.
+previous tick's snapshot. The engine has no event for "plate state
+changed", so the events are synthesized via diffing. The cost is
+~20-50µs/frame even in busy raids — well below noise.
 
 The diff approach absorbs the engine's transient hide/reshow cycle:
-vanilla has ~7 code paths that briefly zero `unit + 0xE60` (z-order
+there are ~7 code paths that briefly zero `unit + 0xE60` (z-order
 rebuilds, anchor changes, flag-change re-eval) and the next frame's
 show path re-allocates from the pool. Those transient zeroes never
 become events because the unit appears in both the previous and
@@ -2955,17 +4368,67 @@ end)
 ```
 
 **Identity-checked**: assigning the same GUID twice is a no-op
-(no event refires), matching 3.3.5's `FUN_0051FF20` behavior.
-Mirrors modern's documented semantics — "fired whenever the
-player's focus target is changed, including when the focus target
-is lost or cleared".
+(no event refires). Fired whenever the player's focus target is
+changed, including when the focus target is lost or cleared.
+
+### `PLAYER_SWING` event
+
+Fires each time one of your attack timers resets.
+
+```
+PLAYER_SWING: swingDuration, swingType
+```
+
+- **`swingDuration`** (number) — the number of seconds from now until
+  the next swing of this type.
+- **`swingType`** — an
+  [`Enum.PlayerSwingType`](#enumplayerswingtype) value: which weapon
+  reset.
+
+```lua
+local f = CreateFrame("Frame")
+f:RegisterEvent("PLAYER_SWING")
+f:SetScript("OnEvent", function()
+    if arg2 == Enum.PlayerSwingType.MainHand then
+        MainHandBar_Start(arg1)
+    end
+end)
+```
+
+A landed main-hand or off-hand hit resets that weapon's timer. An
+on-next-swing ability (Heroic Strike, Maul) resets the main-hand timer
+in its place. A ranged shot resets the ranged timer. Several melee hits
+can land at the same moment, such as an extra attack from Windfury.
+Even then, this event fires once per weapon, not once per hit. A
+parried hit can shorten `swingDuration` below the weapon's normal
+speed. Which spells interrupt the melee timers can differ by realm.
+
+`PLAYER_SWING` does not fire for an attack that you declare while out
+of melee range. It fires once a swing is close enough to be real.
+
+### `PLAYER_SWING_RANGE_UPDATE` event
+
+Fires when your current target moves into or out of range for a swing
+type that has range checking on. See
+[`C_SwingTimer.EnableRangeCheck`](#c_swingtimerenablerangecheckswingtype-enable).
+
+```
+PLAYER_SWING_RANGE_UPDATE: swingType, isInRange, checksRange
+```
+
+- **`swingType`** — the [`Enum.PlayerSwingType`](#enumplayerswingtype)
+  value this update is for.
+- **`isInRange`** — `1` when the target is in range, `nil` when it is
+  not. Ignore this value when `checksRange` is `nil`.
+- **`checksRange`** — `1` when a range check was possible, `nil` when
+  it was not: for example, there is no current target, the target
+  cannot be attacked, or no weapon is equipped for this swing type.
 
 ### `QUEST_ACCEPTED` event
 
 Fires once per quest the player just accepted, with two payload args:
-the 1-based quest log index and the questID. Matches the Cata/WotLK
-signature `QUEST_ACCEPTED(questLogIndex, questID)`. Polyfills modern
-WoW's event of the same name (added in 3.1.0).
+the 1-based quest log index and the questID. The signature is
+`QUEST_ACCEPTED(questLogIndex, questID)`.
 
 ```lua
 local f = CreateFrame("Frame")
@@ -2979,28 +4442,33 @@ f:SetScript("OnEvent", function()
 end)
 ```
 
-Fires for every path that adds a quest to the local log — NPC accept,
-party-shared quest accept, auto-grant from quest items — by hooking
-the single engine chokepoint (`FUN_QUEST_LOG_REBUILD` at `0x004DE510`)
-that rebuilds the Lua-visible quest log from the player's
-authoritative slot data after any quest state change.
+The event fires for every path that adds a quest to the local quest
+log. These paths include an accept from an NPC, a quest shared by a
+party member, and an auto-grant from a quest item. The quest is in the
+quest log before the event fires, so `GetQuestLogTitle(questLogIndex)`
+is valid inside the handler.
 
-**Does not fire on initial login / character entry**, even though the
-same engine function runs the bulk-sync there. Suppression is
-heuristic: if a single rebuild call adds more than one quest, it's
-treated as a resync and skipped. Human input speed can't accept two
-quests within the same engine tick, so single-add is always a real
-user accept. A brand-new character's very first quest accept
-(`0 → 1` entries) fires correctly.
+The client prints the "Quest accepted" system message first, then
+fires this event. A handler for `CHAT_MSG_SYSTEM` therefore also sees
+a current quest log.
+
+The event fires again when a quest returns from complete to
+incomplete, because the client announces that quest a second time.
+
+**Does not fire on login or character entry.** The bulk sync at that
+point is not an accept, and the client does not announce those quests
+either.
+
+When the static data for a quest is not in the client cache yet, the
+event waits for the server to answer. The delay is one round trip. The
+system message waits with it, so the order does not change.
 
 ### `QUEST_REMOVED` event
 
 Fires once per quest leaving the local quest log, with the questID as
 the single payload arg. Covers **both turn-ins and abandons** — the
 two are distinguishable by whether a `QUEST_TURNED_IN` accompanies
-the removal. Polyfills modern WoW's event of the same name (added in
-8.0.1; the Classic-era signature is the bare questID, which is what
-we match).
+the removal. The signature is the bare questID.
 
 ```lua
 local f = CreateFrame("Frame")
@@ -3013,28 +4481,25 @@ f:SetScript("OnEvent", function()
 end)
 ```
 
-Synthesized from the same `FUN_QUEST_LOG_REBUILD` pre-/post-snapshot
-diff as `QUEST_ACCEPTED` — the removal side of the delta. For
-turn-ins, `QUEST_REMOVED` fires **after** `QUEST_TURNED_IN`, matching
-retail ordering: the SMSG_QUESTGIVER_QUEST_COMPLETE packet doesn't
-touch the log itself; the removal arrives in the follow-up quest-log
-update packets, whose rebuild triggers the diff. The observed turn-in
-sequence is `QUEST_TURNED_IN` → `UNIT_QUEST_LOG_CHANGED` →
-`QUEST_LOG_UPDATE` (fired inside the rebuild) → `QUEST_REMOVED`.
+A `QUEST_TURNED_IN` event for the same quest identifies a turn-in. An
+abandon has no such event. For a turn-in, `QUEST_TURNED_IN` fires
+first and `QUEST_REMOVED` follows, because the turn-in reply does not
+change the quest log by itself.
 
-**Does not fire on login / character-switch resyncs.** Same
-suppression rule as `QUEST_ACCEPTED` (a user action removes at most
-one quest per rebuild), plus one extra gate: a rebuild that removes
-one quest while adding several is a cross-character resync shape, not
-gameplay, and stays silent.
+When a quest log slot takes a different quest directly,
+`QUEST_REMOVED` fires for the old quest and `QUEST_ACCEPTED` fires for
+the new one.
+
+**Does not fire on login or character entry.** The bulk sync at that
+point is not a removal.
 
 ### `QUEST_TURNED_IN` event
 
 Fires when the server confirms a quest turn-in
-(SMSG_QUESTGIVER_QUEST_COMPLETE, opcode `0x191`). Payload
-`(questID, xpReward, moneyReward)` matches modern WoW exactly —
-`xpReward` is the experience awarded (0 at max level or for
-non-XP-bearing quests), `moneyReward` is in copper.
+(SMSG_QUESTGIVER_QUEST_COMPLETE, opcode `0x191`). Payload is
+`(questID, xpReward, moneyReward)` — `xpReward` is the experience
+awarded (0 at max level or for non-XP-bearing quests), `moneyReward`
+is in copper.
 
 ```lua
 local f = CreateFrame("Frame")
@@ -3061,25 +4526,48 @@ transitions (which fire on Detail → Progress → Reward → Close —
 not a clean turn-in signal), or on server-reject paths (bag-full,
 quest invalidated, etc.). Only fires on a real successful turn-in.
 
-> **Why not key off `QUEST_FINISHED`?** Native vanilla `QUEST_FINISHED`
+> **Why not key off `QUEST_FINISHED`?** The stock `QUEST_FINISHED`
 > fires on every quest-window state transition, including reads,
 > aborts, and player-side close. The SMSG_QUESTGIVER_QUEST_COMPLETE
 > packet, by contrast, is server-authoritative — the server only
 > sends it after committing the turn-in (XP / money / item awards
 > done, quest removed from log). Hooking the packet handler gives
-> us the same signal modern WoW's event uses.
+> us a clean turn-in signal.
+
+### `SOUNDKIT_FINISHED` event
+
+Fires when a sound finishes playing.
+
+```lua
+local f = CreateFrame("Frame")
+f:RegisterEvent("SOUNDKIT_FINISHED")
+f:SetScript("OnEvent", function()
+    print("finished:", arg1)   -- the handle of the sound that ended
+end)
+
+C_Sound.PlaySound(8959, nil, nil, true)
+```
+
+| Argument | Meaning |
+|---|---|
+| `arg1` | `soundHandle` — the handle [`C_Sound.PlaySound`](#c_soundplaysoundsoundkitid--channel-forcenoduplicates-runfinishcallback) returned for the sound that just ended. |
+
+It fires **only** for sounds played with `runFinishCallback` set to `true`.
+Sounds played any other way report nothing — every footstep and button
+click would otherwise raise an event.
+
+The event arrives on the frame after the sound ends, which is when the
+client releases it.
 
 ### `UNIT_FACTION` event (fire-coverage fix)
 
-`UNIT_FACTION` already exists in the vanilla event table — addons can
-register for it — but the 1.12 engine **never fires it** on several
-paths where modern WoW (3.3.5+) does. We restore the modern firing
-semantics so addons that observe `UNIT_FACTION` stop missing state
-changes.
+`UNIT_FACTION` already exists in the event table — addons can register
+for it — but the engine **never fires it** on several paths where it
+should. We add the missing fires so addons that observe `UNIT_FACTION`
+stop missing state changes.
 
-Payload is unchanged from modern: `arg1` is the unit token string,
-always `"player"` for these paths (you can only toggle / sync rep on
-the local player).
+Payload: `arg1` is the unit token string, always `"player"` for these
+paths (you can only toggle / sync rep on the local player).
 
 ```lua
 local f = CreateFrame("Frame")
@@ -3103,30 +4591,26 @@ end)
 
 The last one fixes the case where addons relying on `UNIT_FACTION`
 (rather than `PLAYER_LOGIN` / `VARIABLES_LOADED`) miss the initial
-load entirely on vanilla.
+load entirely.
 
 **Not yet covered:**
 - Unit-faction-template changes for *non-player* units (mind control,
-  charm, server-side faction scripts). Modern WoW fires
-  `UNIT_FACTION` on the affected unit token; the vanilla broad helper
-  isn't hooked here yet. Mostly affects nameplate / threat addons in
-  rare encounter mechanics.
+  charm, server-side faction scripts). `UNIT_FACTION` should fire on
+  the affected unit token; the broad helper isn't hooked here yet.
+  Mostly affects nameplate / threat addons in rare encounter mechanics.
 
 **Implementation notes**
 
 `FactionToggleAtWar` / `SetFactionInactive` / `SetFactionActive`'s
 inner setters (`FUN_004D5FD0`, `FUN_004D60F0`) write to the rep slot's
 flag byte and send the corresponding CMSG, but never call the
-engine's "fire UNIT_FACTION on this unit" dispatcher. 3.3.5 added a
-`FUN_0071F8F0(player, 0)` call to both paths whose inner
-`FUN_0060BF10(playerGUID, UNIT_FACTION_id)` broadcasts the event for
-every unit token referencing the local player.
+engine's "fire UNIT_FACTION on this unit" dispatcher.
 
 Since `FactionToggleAtWar` only ever runs for the player and the only
 unit token resolving to the player is `"player"`, we fire
 `UNIT_FACTION("player")` directly via the engine's printf-style
 dispatcher (`FUN_FIRE_EVENT`) — same observable result without
-re-deriving the vanilla broad helper. We resolve `UNIT_FACTION`'s
+re-deriving the broad helper. We resolve `UNIT_FACTION`'s
 event-table slot lazily by name (`Event::Custom::LookupByName`) so we
 stay correct against any DLL combination that reshuffles the table.
 
@@ -3140,16 +4624,15 @@ state across unrelated slots.
 
 ### `UPDATE_MOUSEOVER_UNIT` event (loss-fire fix)
 
-`UPDATE_MOUSEOVER_UNIT` exists in the vanilla event table and fires when a
-mouseover unit is **gained**, but the 1.12 engine **never fires it on
+`UPDATE_MOUSEOVER_UNIT` exists in the event table and fires when a
+mouseover unit is **gained**, but the engine **never fires it on
 loss** — moving the cursor off a unit clears the mouseover and signals
-nothing. Modern WoW fires it for both gain and loss, so addons observing
-`UnitExists("mouseover")` can react when it becomes false. We restore the
-loss fire.
+nothing. We add the loss fire, so addons observing
+`UnitExists("mouseover")` can react when it becomes false.
 
-Payload is unchanged (none in vanilla — same as retail): the event
-carries no args; handlers read `UnitExists("mouseover")`, which is
-`nil`/false at fire time on the loss path.
+Payload: the event carries no args; handlers read
+`UnitExists("mouseover")`, which is `nil`/false at fire time on the
+loss path.
 
 ```lua
 local f = CreateFrame("Frame")
@@ -3169,7 +4652,7 @@ end)
 
 | From | To | Fires? | Source |
 |------|----|:------:|--------|
-| unit | nothing | yes | ClassicAPI (silent in stock 1.12) |
+| unit | nothing | yes | ClassicAPI (stock is silent here) |
 | unit | gameobject | yes | ClassicAPI (mouseover unit genuinely lost) |
 | gameobject | nothing | no | — (never fired a gain; not a unit) |
 | anything | unit | yes | engine's own inline fire (gain / unit→unit) |
@@ -3200,10 +4683,9 @@ ghost wolf / etc. No payload; call
 [`GetShapeshiftFormID()`](#getshapeshiftformid) from the handler to
 read the new form.
 
-Polyfills the modern singular event. Vanilla 1.12 has only the plural
-`UPDATE_SHAPESHIFT_FORMS` (fires when the *list* of available forms
-changes — learning a new form, not changing into one). The singular
-"current form changed" event was added in a later expansion.
+The engine has only the plural `UPDATE_SHAPESHIFT_FORMS` (fires when the
+*list* of available forms changes — learning a new form, not changing
+into one). This singular event fires when the *current* form changes.
 
 ```lua
 local f = CreateFrame("Frame")
@@ -3230,13 +4712,158 @@ The cached "last form" sentinel uses `-1` for "player descriptor not
 yet resolvable" so transient resolution failures during early login
 don't get misread as leaving a form.
 
+### `UNIT_SPELLCAST_*` events
+
+Cast/channel events for the **local player and other units**. Cast-bar /
+rotation addons register these instead of the arg-less `SPELLCAST_*` events
+and read `unit, castGUID, spellID` directly. Thirteen events are provided;
+six also fire for non-player units:
+
+| Event | Fires when | Units | Args |
+|-------|-----------|-------|------|
+| `UNIT_SPELLCAST_SENT` | `CMSG_CAST_SPELL` leaves the client (earliest point) | player | `unit, target, castGUID, spellID, spellName, rank` |
+| `UNIT_SPELLCAST_START` | a cast-time spell begins | all | `unit, castGUID, spellID, spellName, rank` |
+| `UNIT_SPELLCAST_STOP` | a cast-time spell ends (any reason) | all | same |
+| `UNIT_SPELLCAST_DELAYED` | pushback extends the cast | player | same |
+| `UNIT_SPELLCAST_SUCCEEDED` | the spell goes off (`SMSG_SPELL_GO`) — incl. instants | all | same |
+| `UNIT_SPELLCAST_INTERRUPTED` | a started **cast** is interrupted (kick, movement, LoS) — never for channels | all | same |
+| `UNIT_SPELLCAST_FAILED` | a cast is rejected before it starts (range, mana, cooldown) with an error shown | player | same |
+| `UNIT_SPELLCAST_FAILED_QUIET` | a cast fails with **no** error shown (spammy retry, reticle cancel, …) | player | same |
+| `UNIT_SPELLCAST_CHANNEL_START` | a channel begins | all | same |
+| `UNIT_SPELLCAST_CHANNEL_UPDATE` | pushback shortens a channel | player | same |
+| `UNIT_SPELLCAST_CHANNEL_STOP` | a channel ends | all | same |
+| `UNIT_SPELLCAST_RETICLE_TARGET` | a ground-target reticle appears (AoE placement — Blizzard, Flare, …) | player | `unit, "", spellID, spellName, rank` |
+| `UNIT_SPELLCAST_RETICLE_CLEAR` | the reticle is placed or cancelled | player | `unit, "", spellID, spellName, rank` |
+
+`unit` (arg1) is the token of the casting unit — `"player"` for your own
+casts, or a unit token (`"target"`, `"focus"`, `"party3"`, `"nameplate2"`,
+`"pet"`, `"mouseover"`, …) for another unit. `spellName` / `rank` are
+ClassicAPI tail extensions; addons reading only the first three positional
+args are unaffected.
+
+**Per-token fan-out.** A caster GUID can map to several tokens at once (your
+`target` is also `party2` and `nameplate1`). The event fires
+**once per token** currently pointing at the caster, so a `target`-frame
+cast bar, a `party2` frame, and a nameplate cast bar each get their own
+event with the same castGUID. Tokens are resolved fresh at fire time (they
+shift frame-to-frame). If you run **SuperWoW**, its raw-GUID token (`"0x…"`)
+is deliberately filtered out — only standard tokens are fanned out.
+
+**Non-player limits.** Only the six events above fire for other units, and
+they're **best-effort** — driven purely by the packets an observer receives:
+- `SENT` never fires (only your own outgoing casts are visible).
+- `DELAYED` / `CHANNEL_UPDATE` never fire (pushback is sent only to the
+  caster, so another unit's bar can't stretch/shrink from damage).
+- `FAILED` never fires (a pre-cast requirement failure is client-local).
+- A remote cast/channel only has timing from the moment its
+  `SMSG_SPELL_START` was observed; casters who were already casting when
+  they came into range have no start time.
+
+**Channels never fire `INTERRUPTED`.** Only `CHANNEL_STOP` fires when a
+channel ends, whether it completed or was cut short, for both the player and
+other units. `INTERRUPTED` is a cast-only event.
+
+**Reticle events** fire for ground-targeted (AoE) spells only, always for the
+player: `RETICLE_TARGET` when the placement reticle comes up, `RETICLE_CLEAR`
+when it's placed or cancelled. There's no cast yet, so the castGUID slot
+(arg2) is empty — the engine's event dispatcher can't emit a `nil`
+mid-argument-list, so arg2 is `""` here. `unit` (arg1) and `spellID`
+(arg3) are exact; arg2 is inconsequential for a reticle.
+
+**castGUID.** A synthesized string of the shape
+`Cast-<type>-<serverID>-<instanceID>-<zoneUID>-<spellID>-<castUID>`. Server /
+instance / zone aren't known here, so those three fields are `0`; the
+load-bearing parts are the `spellID` (field 6, which addons `strsplit("-")`
+out) and a unique-per-cast `castUID` (field 7). **Every event of one cast
+carries the same castGUID**, so `SENT` → `START`/`CHANNEL_START` →
+`SUCCEEDED` → `STOP`/`CHANNEL_STOP` all pair up — including across the caster
+and observers (they converge on the same value), and a chained same-spell
+recast gets its own castUID. The `type` and `castUID` follow the
+[spell-cast-GUID spec](https://warcraft.wiki.gg/wiki/GUID#Cast):
+- **Type 3** (real casts — the common case): `castUID` is time-based — the
+  low 23 bits are the cast's UNIX-epoch second, the higher bits a per-second
+  counter.
+- **Type 2** (`UNIT_SPELLCAST_FAILED` — a local-only cast that never reached
+  the server): `castUID` is a plain locally-incrementing integer.
+
+**Ordering:**
+
+- Cast-time spell: `SENT → START → SUCCEEDED → STOP`.
+- Channel: `SENT → CHANNEL_START → SUCCEEDED → CHANNEL_STOP` (CHANNEL_START
+  before SUCCEEDED).
+- Instant: `SENT → SUCCEEDED`.
+
+**INTERRUPTED vs FAILED vs FAILED_QUIET:** a spell that never started (out of
+range, not enough mana, on cooldown, LoS to a target) fires `FAILED`, except
+for a fixed whitelist of "quiet" `SpellCastResult` codes that fire
+`FAILED_QUIET` instead — `SPELL_IN_PROGRESS` (casting while already casting /
+a spell-queue rejection), `DONT_REPORT` (fake fails, a cancelled ground
+reticle), and `CHARMED`. A spell that was *already casting* and gets stopped
+(an enemy kick, moving to cancel, breaking LoS mid-cast) fires `INTERRUPTED`.
+Holding the cast key while running fires `INTERRUPTED` repeatedly (once per
+retry), each reusing the interrupted cast's castGUID.
+
+**Channel pushback (player).** Taking damage while channeling shortens the
+channel; `CHANNEL_UPDATE` fires on each hit and
+[`C_Spell.UnitChannelInfo`](#c_spellunitchannelinfounit--c_spellchannelinfo)'s
+`endTimeMs` re-anchors to the server's new remaining time, so cast bars
+shrink correctly. (The event carries no time — it's a "re-read now" trigger;
+timing is read back from `UnitChannelInfo`.)
+
+Every fire is gated on whether any frame is registered for that event, so
+the whole system costs one pointer-compare per state transition when no
+addon uses it (no arg synthesis, no DBC lookups, no per-token fan-out).
+
+```lua
+local f = CreateFrame("Frame")
+for _, e in ipairs({
+    "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP",
+    "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_CHANNEL_START",
+}) do f:RegisterEvent(e) end
+f:SetScript("OnEvent", function()
+    -- vanilla passes event/arg1/... as globals, not function params
+    if arg1 == "target" then print(event, arg3) end  -- arg3 = spellID
+end)
+```
+
+> **Additive to the stock `SPELLCAST_*` events.** The engine's own arg-less
+> `SPELLCAST_START` / `SPELLCAST_CHANNEL_UPDATE` / … still fire as before;
+> these `UNIT_`-prefixed events sit on top. The empowered-cast events
+> (`UNIT_SPELLCAST_EMPOWER_*`) are not implemented — there are no empowered
+> casts here.
+
+### `WEAPON_SLOT_CHANGED` event
+
+Fires (with no payload) when the item in a weapon slot changes: main
+hand (16), off hand (17), or ranged (18). Equip, unequip, and swap all
+fire it.
+
+Slot 18 holds relics (Libram, Idol, Totem) for Paladins, Shamans, and
+Druids. A relic is not a weapon, so the event does not fire for one.
+`UnitHasRelicSlot("player")` reports which kind of slot 18 the player
+has.
+
+Use this instead of `PLAYER_EQUIPMENT_CHANGED` when only the weapons
+matter — a swing-timer bar, or any code that re-reads
+`UnitAttackSpeed` and `UnitRangedDamage`.
+
+The event collapses to one fire per frame. A single action that changes
+two weapon slots fires the event one time, not two.
+
+```lua
+local f = CreateFrame("Frame")
+f:RegisterEvent("WEAPON_SLOT_CHANGED")
+f:SetScript("OnEvent", function()
+    SwingBars_ReadWeapons()
+end)
+```
+
 ## Expansion
 
-Helpers shipped by modern Classic Era / Cata Classic for addons that
-want to gate code on which expansion the client targets. We always
-answer as `LE_EXPANSION_CLASSIC` (`0`) — the DLL is built against
-1.12 offsets, so there's nothing to detect. The matching number
-constants (`LE_EXPANSION_*`) are in the [Globals section](#le_expansion_).
+Helpers for addons that want to gate code on which expansion the client
+targets. We always answer as `LE_EXPANSION_CLASSIC` (`0`) — there's
+nothing to detect. The matching number constants (`LE_EXPANSION_*`) are
+in the [Globals section](#le_expansion_).
 
 ### `GetClassicExpansionLevel()`
 
@@ -3252,12 +4879,11 @@ end
 ### `ClassicExpansionAtLeast(expansionLevel)`
 
 Returns `true` iff `GetClassicExpansionLevel() >= expansionLevel`.
-On 1.12 that reduces to `expansionLevel <= 0`, so only
+That reduces to `expansionLevel <= 0`, so only
 `ClassicExpansionAtLeast(LE_EXPANSION_CLASSIC)` (and any negative
 argument) are true; every later expansion answers `false`.
 
-Errors if `expansionLevel` is missing or non-numeric — matches the
-modern signature.
+Errors if `expansionLevel` is missing or non-numeric.
 
 ```lua
 if ClassicExpansionAtLeast(LE_EXPANSION_WRATH_OF_THE_LICH_KING) then
@@ -3268,7 +4894,7 @@ end
 ### `ClassicExpansionAtMost(expansionLevel)`
 
 Returns `true` iff `GetClassicExpansionLevel() <= expansionLevel`.
-On 1.12 that reduces to `expansionLevel >= 0`, so the only `false`
+That reduces to `expansionLevel >= 0`, so the only `false`
 answer is for negative input.
 
 Errors if `expansionLevel` is missing or non-numeric.
@@ -3284,21 +4910,16 @@ end
 ### `GetFactionIDByIndex(factionIndex)`
 
 Returns the factionID (Faction.dbc row ID) for the entry at the given 1-based
-displayed-faction index. Modern WoW (5.0+, including Classic Era 1.15.x)
-returns this as the 14th value of `GetFactionInfo`; older clients (1.12
-through 3.3.5) don't expose it from Lua at all, even though the engine
-uses it internally to look up `Faction.dbc`.
+displayed-faction index. The engine uses this internally to look up
+`Faction.dbc`, but does not expose it from Lua.
 
 - Returns the factionID for real factions.
-- Returns `0` for header / category rows (`"Other"`, `"Inactive"`, etc.) —
-  matching the modern Classic Era client, which puts `0` in
-  `GetFactionInfo`'s `factionID` slot for those rows.
+- Returns `0` for header / category rows (`"Other"`, `"Inactive"`, etc.).
 - Returns `nil` if the index is out of range.
 
-The "headers normalize to `0`" rule deliberately matches modern WoW
-(5.0+) behavior. The 1.12 engine actually returns `0` for some header
-types (`"Other"`) and `-1` for others (`"Inactive"`-style pseudo-rows);
-we collapse both to `0` so the user-facing convention is consistent.
+The engine actually returns `0` for some header types (`"Other"`) and `-1`
+for others (`"Inactive"`-style pseudo-rows); we collapse both to `0` so the
+user-facing convention is consistent.
 
 ```lua
 for i = 1, GetNumFactions() do
@@ -3327,8 +4948,7 @@ player has rep with:
   `GetFactionInfo(displayedIndex)`.
 - **Not in the reputation list** — name and description from `Faction.dbc`,
   Neutral defaults for the rep fields: `standingID = 4`, `barMin = 0`,
-  `barMax = 3000`, `barValue = 0`, all flags `nil`. Matches what 3.3.5's
-  `GetFactionInfoByID` returns for unencountered factions.
+  `barMax = 3000`, `barValue = 0`, all flags `nil`.
 - **Invalid factionID** (out of range or empty DBC slot) — `nil`.
 
 ```lua
@@ -3352,8 +4972,7 @@ GetFactionParentID(469)    -- 0   (Alliance is top-level)
 GetFactionParentID(99999)  -- nil
 ```
 
-Modern WoW returns this as the 13th value of `GetFactionInfoByID`;
-we expose it as its own getter since 1.12's `GetFactionInfo` doesn't
+We expose this as its own getter, since `GetFactionInfo` doesn't
 have the slot.
 
 Reads `Faction.dbc` `ParentFactionID` at record `+0x48` directly —
@@ -3391,17 +5010,15 @@ for factionID, standing in pairs(C_Reputation.GetFactionStandings()) do
 end
 ```
 
-This is a ClassicAPI-only call; modern WoW's closest equivalent is
-the 11.x `C_Reputation.GetFactions()`, which returns an array of
-struct tables rather than a flat map.
+This is a ClassicAPI-only call. It returns a flat `{ [factionID] =
+standing }` map rather than an array of struct tables.
 
 ### `C_Reputation.GetWatchedFactionData()`
 
 Returns a table describing the faction shown above the XP bar, or
-`nil` if no faction is being watched. Backports the modern
-struct-style accessor — vanilla's `GetWatchedFactionInfo()` returns
-the same data as a 5-tuple without the factionID, which is the field
-modern callers rely on most.
+`nil` if no faction is being watched. The stock
+`GetWatchedFactionInfo()` returns the same data as a 5-tuple without
+the factionID; this struct accessor includes it.
 
 Returns the same `FactionData` table shape as
 [`GetFactionDataByIndex`](#c_reputationgetfactiondatabyindexfactionsortindex)
@@ -3423,6 +5040,27 @@ Implementation reads the watched `RepListID` from the player's
 `0x00B73290` to recover the factionID, then runs the shared
 `ReadFactionData` chain (Faction.dbc lookup, reaction band, rep slot
 flags, header/collapsed checks).
+
+### `C_Reputation.GetFactionDataByID(factionID)`
+
+Returns a `FactionData` table for a faction by ID, or `nil` when the ID
+has no `Faction.dbc` record.
+
+The table has the same shape as
+[`C_Reputation.GetFactionDataByIndex`](#c_reputationgetfactiondatabyindexfactionsortindex)
+— see that section for the full field list.
+
+The faction does not have to be in the player's reputation list. One the
+character has never encountered fills cleanly, with `currentStanding` `0`
+and `atWarWith` `false`, so you can read any faction's name, description,
+and standing thresholds without walking the displayed list.
+
+```lua
+local d = C_Reputation.GetFactionDataByID(69)   -- Darnassus
+if d then
+    print(d.name, d.currentStanding, d.nextReactionThreshold)
+end
+```
 
 ### `C_Reputation.GetFactionDataByIndex(factionSortIndex)`
 
@@ -3446,13 +5084,13 @@ Fields:
 | `atWarWith`                | boolean | Rep slot flags bit `0x02`. |
 | `canToggleAtWar`           | boolean | `currentStanding ≥ -3000` AND not peace-forced (flags bit `0x10`). |
 | `isHeader`                 | boolean | Faction is a category header in the displayed list. |
-| `isHeaderWithRep`          | boolean | Always `false` in vanilla — parent factions don't aggregate rep. |
+| `isHeaderWithRep`          | boolean | Always `false` — parent factions don't aggregate rep. |
 | `isCollapsed`              | boolean | UI state: user has collapsed this header. |
 | `isWatched`                | boolean | This faction is shown above the XP bar. |
 | `canSetInactive`           | boolean | True when `!isHeader && repListIndex ≥ 0` — i.e. the engine's `SetFactionInactive`/`SetFactionActive` will accept this faction. |
-| `isChild`                  | boolean | Always `false` (parent-child rep introduced post-vanilla). |
-| `hasBonusRepGain`          | boolean | Always `false` (added in MoP). |
-| `isAccountWide`            | boolean | Always `false` (added in Dragonflight). |
+| `isChild`                  | boolean | Always `false` — no parent-child rep here. |
+| `hasBonusRepGain`          | boolean | Always `false`. |
+| `isAccountWide`            | boolean | Always `false`. |
 
 ```lua
 for i = 1, GetNumFactions() do
@@ -3470,9 +5108,28 @@ shared `ReadFactionData` chain — no Lua-side round-trip through
 displayed-list header array at `0x00B736C0` (count at `0x00B736B0`)
 and the per-character bitmask at `0x0084A0A4`.
 
+### `C_Reputation.SetSelectedFactionByID(factionID)`
+
+ClassicAPI extension. Selects a faction in the reputation pane by ID —
+the same convenience
+[`C_Reputation.SetWatchedFactionByID`](#c_reputationsetwatchedfactionbyidfactionid)
+gives over the stock index-based call.
+
+The selection is held as a faction ID, so this sets it directly and the
+faction does not have to be in the displayed list at the time.
+`GetSelectedFaction()` maps the selection back to a 1-based displayed-list
+index, and reports `0` while the faction is not listed.
+
+Passing `0` clears the selection. Negative IDs are ignored.
+
+```lua
+C_Reputation.SetSelectedFactionByID(69)      -- Darnassus
+print(GetFactionInfo(GetSelectedFaction()))  -- "Darnassus"
+```
+
 ### `C_Reputation.SetWatchedFactionByID(factionID)`
 
-Sets the faction shown above the XP bar by ID. The vanilla
+Sets the faction shown above the XP bar by ID. The stock
 `SetWatchedFactionIndex(displayedIndex)` accepts only a 1-based
 displayed-list index, which forces addons to walk the index list
 themselves. This wrapper takes a `factionID` directly.
@@ -3500,6 +5157,70 @@ Implementation calls the engine's inner watched-faction setter
 directly, bypassing `Script_SetWatchedFactionIndex`'s
 displayed-index round-trip.
 
+### `C_Reputation.ToggleFactionAtWarByID(factionID)`
+
+ClassicAPI extension. Flips a faction's at-war state by ID rather than by
+displayed-list position.
+
+Every rule the stock index-based call applies still applies here. The
+toggle is refused when the faction is peace-forced (your own capitals,
+some quest factions), and peace can't be declared while standing is below
+`-3000`. Read
+[`C_Reputation.GetFactionDataByID`](#c_reputationgetfactiondatabyidfactionid)
+first to see whether a faction will accept the change:
+
+```lua
+local d = C_Reputation.GetFactionDataByID(87)   -- Bloodsail Buccaneers
+if d.canToggleAtWar then
+    C_Reputation.ToggleFactionAtWarByID(87)
+end
+```
+
+Non-positive IDs are ignored. The change is sent to the server, so it
+sticks the same way the reputation pane's checkbox does, and
+`UNIT_FACTION` fires for `"player"` when the state actually changes — a
+refused toggle stays silent.
+
+### `C_Reputation.IsFactionActive(factionSortIndex)` / `C_Reputation.IsFactionActiveByID(factionID)`
+
+Returns whether a faction is **not** filed under the "Inactive" heading
+in the reputation pane. `IsFactionActive` takes a 1-based displayed-list
+position; the `ByID` form (a ClassicAPI extension) takes a faction ID.
+
+Both report `false` for anything that isn't a real faction with a
+reputation slot — an out-of-range position, a category header, or an ID
+the character has no slot for.
+
+```lua
+C_Reputation.IsFactionActiveByID(87)        -- true until you park it
+C_Reputation.SetFactionInactiveByID(87)
+C_Reputation.IsFactionActiveByID(87)        -- now false
+```
+
+### `C_Reputation.SetFactionInactiveByID(factionID)` / `C_Reputation.SetFactionActiveByID(factionID)`
+
+ClassicAPI extension. Moves a faction into or out of the "Inactive"
+category by ID rather than by displayed-list position.
+
+Marking a faction inactive files it under the collapsible "Inactive"
+heading in the reputation pane, which is how players park factions they
+have finished with. The displayed list is rebuilt, so positions of the
+other factions shift — read them again afterwards rather than reusing an
+index from before the call.
+
+```lua
+C_Reputation.SetFactionInactiveByID(87)   -- park Bloodsail Buccaneers
+C_Reputation.SetFactionActiveByID(87)     -- and bring it back
+```
+
+Non-positive IDs are ignored. A faction with no reputation slot is left
+alone. The change is sent to the server, and `UNIT_FACTION` fires for
+`"player"` when the state actually changes.
+
+`canSetInactive` on
+[`C_Reputation.GetFactionDataByID`](#c_reputationgetfactiondatabyidfactionid)
+tells you whether a faction can take the change.
+
 ### `C_Reputation.GetLastStandingChange()`
 
 Returns `factionID, newStanding, repGained` for the rep change
@@ -3510,7 +5231,7 @@ The triple is the same payload as the event's `arg1, arg2, arg3`, but
 the getter is also live during the engine's
 `CHAT_MSG_COMBAT_FACTION_CHANGE` dispatch on the same hook — useful
 for addons that want to enrich the chat line with the factionID
-(which vanilla's chat-event payload doesn't carry) without
+(which the chat-event payload doesn't carry) without
 double-registering for `FACTION_STANDING_CHANGED`:
 
 ```lua
@@ -3530,37 +5251,34 @@ inside a `CHAT_MSG_COMBAT_FACTION_CHANGE` or `FACTION_STANDING_CHANGED`
 handler), returns nothing. There is no "last change" memory — the
 state is cleared as soon as the dispatch returns.
 
-This is a ClassicAPI-only call; modern WoW has no equivalent (modern
-addons get the factionID from `FACTION_STANDING_CHANGED` directly, so
-they don't need a separate getter).
+This is a ClassicAPI-only call. Addons can otherwise get the factionID
+from `FACTION_STANDING_CHANGED` directly.
 
 ## Focus
 
-Polyfills modern WoW's focus-target system: a single sticky GUID
-that addons can pin to a unit and address via the `"focus"` unit
-token across the entire `UnitX` API surface. Backed by a hook on
-`FUN_TOKEN_TO_GUID` (shared with the [`nameplateN`](#unit-tokens-nameplaten)
-tokens — see `unit/TokenExtensions.cpp`).
+A focus-target system: a single sticky GUID that addons can pin to a
+unit and address via the `"focus"` unit token across the entire `UnitX`
+API surface. Backed by a hook on `FUN_TOKEN_TO_GUID` (shared with the
+[`nameplateN`](#unit-tokens-nameplaten) tokens — see
+`unit/TokenExtensions.cpp`).
 
 State is **session-only** — drops on `/reload`, `/logout`, and zone
-loads that recreate Lua state. Modern Classic Era behaves the same;
-addons that want persistence have to re-`FocusUnit` from `SavedVariables`
-at `ADDON_LOADED`.
+loads that recreate Lua state. Addons that want persistence have to
+re-`FocusUnit` from `SavedVariables` at `ADDON_LOADED`.
 
 **Auto-clear on despawn.** When the focused unit leaves the client's
 object table — out of rendering range, full despawn, dies and
 decays — focus drops and [`PLAYER_FOCUS_CHANGED`](#player_focus_changed-event)
-fires. The unit re-entering range does NOT auto-refocus. Matches
-modern WoW's documented behavior. Implementation: per-tick
-`ObjectByGUID(g_focusGUID)` probe; on null result, `Set(0)`.
+fires. The unit re-entering range does NOT auto-refocus.
+Implementation: per-tick `ObjectByGUID(g_focusGUID)` probe; on null
+result, `Set(0)`.
 
 ### `FocusUnit(unit)`
 
 Sets focus to the given unit. Argument is a unit token —
 `"target"`, `"mouseover"`, `"party1"`, `"nameplate1"`, anything the
 resolver accepts. Calling with no argument is shorthand for
-`FocusUnit("target")` (matches modern's `/focus` slash command
-default).
+`FocusUnit("target")` (the `/focus` slash command default).
 
 ```lua
 FocusUnit("target")        -- pin the current target
@@ -3570,8 +5288,7 @@ FocusUnit()                -- same as FocusUnit("target")
 
 Fires [`PLAYER_FOCUS_CHANGED`](#player_focus_changed-event) if the
 resolved GUID differs from the current focus. No-op (no event) if
-the same unit is already focused — matches the
-identity-check-first behavior of 3.3.5's `FUN_0051FF20`.
+the same unit is already focused (identity-checked first).
 
 Passing a token that doesn't resolve to a unit (e.g. `"target"`
 with nothing targeted, or `"party5"` solo) clears focus — same as
@@ -3613,15 +5330,123 @@ updating while you fight something else. Backed by `Unit::TokenObserver`,
 which registers the engine's own unit-event descriptor-field observers
 for the focus unit (the exact watch the engine gives target/party/raid).
 A unit that is simultaneously your target and focus fires both
-`"target"` and `"focus"`. (Vanilla `OnEvent` handlers read the `arg1`
+`"target"` and `"focus"`. (`OnEvent` handlers read the `arg1`
 global, not a function parameter.)
 
 [`UnitTokenFromGUID`](#unittokenfromguidguid) scans `"focus"` right
-after `"target"` (matching retail order), so a focused unit's GUID
+after `"target"`, so a focused unit's GUID
 reverse-resolves to `"focus"` only if it isn't already addressable
 as `"player"` / `"party*"` / `"raid*"` / `"nameplate*"` / `"target"`.
 
-### Bindings (`FOCUSTARGET` / `TARGETFOCUS`)
+## Bindings
+
+The direct-action and temporary override binding APIs. The permanent helpers
+write action command strings into the native binding table; the override
+helpers add a separate, session-only layer in front of that table.
+
+### Permanent direct-action bindings
+
+| Function | Equivalent command |
+|----------|--------------------|
+| `ok = SetBindingSpell(key, spell)` | `SetBinding(key, "SPELL " .. spell)` |
+| `ok = SetBindingItem(key, item)` | `SetBinding(key, "ITEM " .. item)` |
+| `ok = SetBindingMacro(key, macroNameOrIndex)` | `SetBinding(key, "MACRO " .. macroNameOrIndex)` |
+| `ok = SetBindingClick(key, buttonName [, mouseButton])` | `SetBinding(key, "CLICK " .. buttonName .. (mouseButton and ":" .. mouseButton or ""))` |
+
+`key` is any binding string accepted by the client, such as `"CTRL-F"`,
+`"SHIFT-BUTTON4"`, or `"F8"`. `spell`, `item`, `macroNameOrIndex`, and
+`buttonName` identify the action to perform. `macroNameOrIndex` accepts either
+a saved macro's name or its decimal index. `mouseButton` is passed to the
+button's click handler and defaults to `"LeftButton"`; when supplied, it is
+stored as the `:MouseButton` suffix of the `CLICK` command.
+
+Each helper returns `1` if the stock `SetBinding` changed the binding and
+`nil` otherwise. It changes whichever binding set is currently loaded, fires
+the normal `UPDATE_BINDINGS` notification, and is not persisted until
+the addon calls `SaveBindings`. Use `SetBinding(key)` to unbind a key;
+the typed helpers always require an action argument.
+
+The command hook also understands manually constructed `SPELL`, `ITEM`,
+`MACRO`, and `CLICK` strings passed directly to `SetBinding`.
+
+### Temporary override bindings
+
+```lua
+SetOverrideBinding(owner, isPriority, key [, command])
+SetOverrideBindingSpell(owner, isPriority, key, spell)
+SetOverrideBindingItem(owner, isPriority, key, item)
+SetOverrideBindingMacro(owner, isPriority, key, macroNameOrIndex)
+SetOverrideBindingClick(owner, isPriority, key, buttonName [, mouseButton])
+ClearOverrideBindings(owner)
+```
+
+`owner` must be a frame and `isPriority` must be a Boolean. The typed helpers
+construct the same four action strings shown above. The generic
+`SetOverrideBinding` also accepts ordinary Bindings.xml command names, which
+are delegated to the engine's command executor. Override setters and
+`ClearOverrideBindings` return no values.
+
+Passing no `command` (or `nil`) to `SetOverrideBinding` removes that owner's
+override for `key`. `ClearOverrideBindings(owner)` removes every override
+belonging to that owner. Overrides never change or save the native binding
+table and are cleared whenever the FrameScript Lua state is recreated, such
+as on `/reload` or logout.
+
+Resolution order is:
+
+1. Priority override bindings.
+2. Non-priority override bindings.
+3. The normal native binding.
+
+When multiple owners set the same key at the same priority, the most recently
+set override wins. Removing it immediately reveals the next matching override
+or the unchanged native binding.
+
+`key` is matched case-insensitively, and its modifiers are accepted in any
+order: `"ctrl-alt-F"`, `"ALT-CTRL-F"`, and `"Alt-Ctrl-F"` all bind the same
+key. The override layer normalizes the key to the engine's own keypress form
+(`ALT-CTRL-SHIFT-` before the base key) before matching, so the override fires
+regardless of how the caller spelled it.
+
+A generic `SetOverrideBinding` command that is an ordinary Bindings.xml command
+runs through the engine's own command executor with the same execution context
+a native keypress establishes, so it behaves like the equivalent permanent
+binding.
+
+### Action execution
+
+| Command | Execution path |
+|---------|----------------|
+| `SPELL name` | Calls the stock `CastSpellByName(name)`. The usual `/cast` spell-name syntax is accepted. |
+| `ITEM item` | Calls `C_Item.UseItemByName(item)`, accepting the names, item strings, and item IDs supported by that API. |
+| `MACRO nameOrIndex` | Resolves a saved macro by name or decimal index. An addon-provided `RunMacro` is used when available; otherwise ClassicAPI resolves it with `GetMacroInfo` and dispatches its body through `ChatEdit_ParseText`. |
+| `CLICK ButtonName[:MouseButton]` | Resolves the named global frame and calls its ordinary `:Click(mouseButton)` method. The default is `LeftButton`. |
+
+`SetBindingMacro` and `SetOverrideBindingMacro` take a saved macro identifier,
+not literal macro text. To bind literal macro text, bind a named button whose
+ClassicAPI attributes describe a macro action:
+
+```lua
+local button = CreateFrame("Button", "MyMacroTextBindingButton")
+button:SetAttribute("type", "macro")
+button:SetAttribute("macrotext", "/say Bound macro text")
+
+SetBindingClick("CTRL-F7", button:GetName())
+```
+
+### 1.12 compatibility notes
+
+- There is no combat lockdown or secure execution. These functions remain
+  callable in combat, and `CLICK` invokes the frame's ordinary click path.
+- Direct actions run on key-down. The corresponding key-up is consumed; a
+  click binding does not deliver separate mouse-down and mouse-up events.
+- The override layer is not reflected by `GetBindingAction`.
+  The `GetBindingAction(key, true)` override query is not backported.
+- Override ownership is explicit. Call `ClearOverrideBindings(owner)` when the
+  addon's owner is no longer needed; all remaining overrides are also cleared
+  when the Lua state is recreated.
+
+### Predefined focus bindings (`FOCUSTARGET` / `TARGETFOCUS`)
 
 Two key bindings appear in the keybind UI (`Esc` → Key Bindings)
 under the **Targeting Functions** group, between `PETATTACK` and the
@@ -3646,11 +5471,10 @@ hook on `FUN_FILE_READ` — see [`src/bindings/Inject.cpp`](../src/bindings/Inje
 
 ## Frame
 
-Modern Region/Frame method backports. Modern addon ports routinely
-call these methods unconditionally — they're the C-level frame surface
-later clients take for granted. This section is that surface on 1.12.
-Methods are registered on the engine's own per-frame-type method
-registries
+Region/Frame method backports. Addon ports routinely call these methods
+unconditionally — they're the C-level frame surface addons take for
+granted. This section is that surface. Methods are registered on the
+engine's own per-frame-type method registries
 (`SetSize`/`GetSize` on the Region base, so they resolve on frames,
 buttons, textures and fontstrings alike), and each delegates to the
 engine's own implementations — UI-scale conversion, object resolution
@@ -3658,18 +5482,18 @@ and type checking are all the engine's code.
 
 ### `region:SetPoint("point")` (one-argument form)
 
-Vanilla's `SetPoint` parser accepts every modern call shape —
+The stock `SetPoint` parser accepts every call shape —
 `(point, region)`, `(point, region, relativePoint [, x, y])`,
 `(point, x, y)`, even an explicit `nil` region — **except** the bare
 one-argument form, which raises the usage error (a fully-omitted third
 argument fails its type validation). A co-hook on the engine's
 `Script_SetPoint` normalizes `region:SetPoint("RIGHT")` to
-`(point, 0, 0)` — vanilla's parent-relative form, which is exactly the
-modern semantic (anchor to the parent's same point, zero offsets).
+`(point, 0, 0)` — the parent-relative form (anchor to the parent's same
+point, zero offsets).
 
 ### `region:SetSize(width, height)` / `region:GetSize()`
 
-The modern combined setter/getter for `SetWidth`+`SetHeight` /
+The combined setter/getter for `SetWidth`+`SetHeight` /
 `GetWidth`+`GetHeight`. Works on any region type — frames, buttons,
 textures (including engine-created ones like
 `button:GetNormalTexture()`), fontstrings.
@@ -3678,14 +5502,14 @@ textures (including engine-created ones like
 
 `true` when the mouse cursor is within the region's rectangle, `false`
 otherwise. The four optional offsets shift the corresponding edge before
-the test (added to that edge, matching modern semantics: positive
-`topOffset` / `rightOffset` and negative `bottomOffset` / `leftOffset`
-enlarge the hit area). Registered on the Region base, so it works on any
+the test (added to that edge: positive `topOffset` / `rightOffset` and
+negative `bottomOffset` / `leftOffset` enlarge the hit area). Registered
+on the Region base, so it works on any
 region type — frames, buttons, textures, fontstrings.
 
 Uses the engine's own rect getters and cursor position, dividing the
-cursor by the region's effective scale — the exact computation vanilla
-addons have long open-coded as `MouseIsOver()`. Returns `false` for a
+cursor by the region's effective scale — the exact computation addons
+have long open-coded as `MouseIsOver()`. Returns `false` for a
 region with no resolved rect (unpositioned / zero-size).
 
 ```lua
@@ -3696,10 +5520,10 @@ Minimap:IsMouseOver(20, -20, -20, 20)        -- true within a 20px halo around i
 ### `region:GetRect()`
 
 Returns the region's `left, bottom, width, height` in one call (the
-modern combined form of `GetLeft`+`GetBottom`+`GetWidth`+`GetHeight`).
+combined form of `GetLeft`+`GetBottom`+`GetWidth`+`GetHeight`).
 Composed from the engine's own getters, so all UI-scale conversion is its
 code. On the Region base — works on any region type. Returns nothing for
-a region with no resolved rect (unpositioned), matching retail.
+a region with no resolved rect (unpositioned).
 
 ```lua
 UIParent:GetRect()   -- 0, 0, <screenWidth>, <screenHeight>
@@ -3740,23 +5564,503 @@ end
 frames, textures and fontstrings (each branch has its own engine
 Show/Hide implementation).
 
+### `fontstring:GetStringHeight()`
+
+This is the companion to `GetStringWidth`. It returns the height of the
+rendered text, in UI pixels. The result includes word wrap: wrapped text
+measures
+`lines × fontHeight + (lines − 1) × spacing` (the `SetSpacing`
+value). Empty or unset text returns `0`.
+
+```lua
+local f = frame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+f:SetWidth(100)
+f:SetText("a long line that wraps a few times")
+frame:SetHeight(f:GetStringHeight() + 16)  -- size the box to the text
+```
+
+Related: the stock `fontstring:GetStringWidth()` **includes inline
+`|T…|t` icon widths**, so the measured width matches the rendered width.
+Editbox text is not adjusted — an editbox shows and measures raw markup.
+
+### `fontstring:GetUnboundedStringWidth()`
+
+Returns the width of the text on one line, in UI pixels, with no wrap
+or size limit applied. Note: `GetStringWidth` ALSO ignores word wrap —
+that is a classic API trap. Here the two methods always agree. The width
+of the text AS RENDERED (the widest wrapped line) is `GetWrappedWidth`,
+below. Inline `|T…|t` icon widths are included. Empty or unset text
+returns `0`.
+
+### `fontstring:GetWrappedWidth()`
+
+Returns the width of the text as it renders, in UI pixels: the width
+of the widest wrapped line. This is the method to use for the visible
+size of wrapping text — `GetStringWidth` and `GetUnboundedStringWidth`
+both measure the string on one line and ignore wrapping. Text that does
+not wrap returns the same value as `GetStringWidth`. Inline `|T…|t`
+icons are counted. Empty or unset text returns `0`.
+
+The wrapped width can carry a ≤1px difference from a direct measure of
+the same line text — the same rounding noise `GetStringWidth` itself
+carries.
+
+```lua
+local f = frame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+f:SetWidth(100)
+f:SetText("a long line that wraps a few times")
+-- f:GetStringWidth()   -> ~165 (one line, ignores wrap)
+-- f:GetWrappedWidth()  -> ~94  (the widest rendered line)
+```
+
+### `fontstring:GetNumLines()`
+
+Returns the number of wrapped lines the text renders as. It works
+whether or not the text has rendered yet. Empty or unset text returns
+`0`.
+
+### `fontstring:GetLineHeight()`
+
+Returns the height of one text line in UI pixels — the font height,
+without the `SetSpacing` value. Use it with `GetNumLines` and
+`GetSpacing` to reconstruct `GetStringHeight` per line.
+
+### `fontstring:IsTruncated()`
+
+Returns `true` when the engine cut the text off with an ellipsis
+(`...`). The engine truncates only when the text does not fit a bounded
+box. The fontstring needs a width and a height, and the text must
+overflow that box. Fontstrings always wrap at spaces. So a box that is
+only one line tall truncates, but a taller box wraps the text and fits
+it.
+
+The result reflects what is on screen, so the fontstring must have
+drawn at least once. `GetText` still returns the full text, not the
+cut-off line.
+
+```lua
+local f = frame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+f:SetWidth(60)
+f:SetHeight(14)             -- one line tall
+f:SetText("a name too long to fit")
+-- after it draws: f:IsTruncated() -> true  (draws "a name too...")
+```
+
+### `fontstring:SetMaxLines(maxLines)` / `fontstring:GetMaxLines()`
+
+Caps the fontstring to `maxLines` wrapped lines. Text past the cap
+is cut off with an ellipsis (`...`). Pass `0` (or nothing) for no
+cap.
+
+This is the way to make a truncating label. Fontstrings always wrap
+at spaces, and there is no `SetWordWrap`. So `SetMaxLines(1)` gives a
+single-line label that ends in `...` when the text is too wide, even
+inside a tall box.
+
+The cap needs a width to take effect: the text must have an edge to
+overflow. `GetMaxLines` returns the current cap (`0` when unset). Use
+`IsTruncated` to check whether the cap actually cut the text.
+
+```lua
+local f = frame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+f:SetWidth(120)
+f:SetMaxLines(1)                 -- one line, then "..."
+f:SetText("a really long guild or player name that will not fit")
+-- draws "a really long gu..."   ; f:IsTruncated() -> true
+```
+
+### `fontstring:SetFormattedText(format [, ...])`
+
+Sets the text to `string.format(format, ...)` — a convenience over
+`SetText(format(...))`. A bad format string raises a normal Lua error.
+The set goes through the same engine path as `SetText`, so escape
+handling is identical.
+
+```lua
+f:SetFormattedText("%d/%d (%.1f%%)", cur, max, cur / max * 100)
+```
+
+### `texture:SetRotation(angle [, cx, cy])`
+
+Rotates a texture by `angle` radians. A positive angle turns the texture
+counter-clockwise.
+
+The optional `cx, cy` set the pivot point, as a normalized position inside the
+texture from `0` to `1`. The default pivot is the center, `(0.5, 0.5)`. An
+angle of `0` clears the rotation and returns the texture to upright.
+
+The method turns the four corners of the drawn quad, so the whole texture stays
+visible and no corner is clipped. It works on any texture, including
+engine-created ones. The rotation holds across moves and resizes, and costs
+nothing per frame while it stays still. `GetRotation()` returns the current
+angle in radians.
+
+```lua
+local t = frame:CreateTexture(nil, "ARTWORK")
+t:SetAllPoints(frame)
+t:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+t:SetRotation(math.rad(45))      -- 45 degrees counter-clockwise
+t:SetRotation(math.pi, 0, 1)     -- half turn around the top-left corner
+```
+
+### `texture:SetVertexOffset(vertexIndex, offsetX, offsetY)`
+
+Moves one corner of a texture by `offsetX, offsetY` pixels. `vertexIndex` picks
+the corner: `UPPER_LEFT_VERTEX`, `LOWER_LEFT_VERTEX`, `UPPER_RIGHT_VERTEX`, or
+`LOWER_RIGHT_VERTEX` (values 1 to 4). `+x` is right and `+y` is up.
+
+Moving the corners warps the whole quad, so the texture and its background move
+together. It suits skew, trapezoid, and fake-perspective effects, and waving
+animations. It composes with `SetRotation`: the texture rotates first, then the
+offsets apply. The offset holds across moves, resizes, and `SetTexture`, and
+costs nothing per frame while it stays still.
+
+`GetVertexOffset(vertexIndex)` returns the current `offsetX, offsetY` for a
+corner (`0, 0` if unset).
+
+Note: an offset that turns the quad inside-out — mirroring it past its opposite
+edge — is not drawn. The engine skips a back-facing quad, so keep the warp
+within a non-mirrored shape.
+
+```lua
+local t = frame:CreateTexture(nil, "ARTWORK")
+t:SetAllPoints(frame)
+t:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+-- pull the top two corners inward: a trapezoid (fake perspective)
+t:SetVertexOffset(UPPER_LEFT_VERTEX, 20, 0)
+t:SetVertexOffset(UPPER_RIGHT_VERTEX, -20, 0)
+```
+
+### `texture:SetColorTexture(colorR, colorG, colorB [, a])`
+
+Fills the texture with a solid color. Each channel is `0` to `1`. The alpha `a`
+is optional and defaults to `1` (opaque). This is a second name for a fill the
+engine already does — `SetTexture(r, g, b [, a])` with numbers instead of a
+path. It is the same engine call under a second name, so the clamping and the
+opaque default match the engine.
+
+```lua
+local t = frame:CreateTexture(nil, "BACKGROUND")
+t:SetAllPoints(frame)
+t:SetColorTexture(0.1, 0.6, 1.0, 0.8)  -- semi-transparent blue fill
+```
+
+### `texture:SetMask(path)`
+
+Clips a texture to the shape of a mask — for round portraits, round minimap
+buttons, and other shaped art.
+
+`path` is a mask texture. The mask's ALPHA channel is the shape: where the mask
+is opaque the texture shows, where the mask is transparent the texture is
+hidden. The mask stretches across the texture's full display area, so it always
+lines up with the texture. Pass `nil` or `""` to remove the mask; the texture
+returns to its full rectangle.
+
+A mask file must be one the client can load and must hold its shape in the alpha
+channel:
+
+- A BLP, or an UNCOMPRESSED 32-bit TGA. The client cannot decode an
+  RLE-compressed TGA.
+- The shape must be in the alpha channel, with white color. A mask that is fully
+  opaque does nothing; a mask whose shape is only in its color does not clip.
+- Bottom-origin. A top-origin TGA loads upside down.
+
+Two masks ship in the client and need no file of your own: `Textures\MinimapMask`
+(round) and `Interface\CharacterFrame\TempPortraitAlphaMask` (round portrait).
+For any other shape, put your own mask texture in your addon folder and pass its
+path, the same way you ship any custom texture.
+
+```lua
+local t = frame:CreateTexture(nil, "ARTWORK")
+t:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+t:SetMask("Textures\\MinimapMask")               -- clip the icon to a circle
+t:SetMask("Interface\\AddOns\\MyAddon\\round")   -- or your own mask texture
+t:SetMask(nil)                                    -- remove the mask
+```
+
+> The mask ignores `SetTexCoord`. If you crop the
+> texture to one sprite of a sprite sheet, the full mask shape still clips that
+> sprite. The mask follows
+> [`texture:SetRotation`](#texturesetrotationangle--cx-cy). It also combines
+> with masks from [`texture:AddMaskTexture`](#textureaddmasktexturemask): the
+> texture shows only where every mask is opaque.
+
+### `frame:CreateMaskTexture([name, layer, ...])`
+
+Creates a MaskTexture and returns it. A MaskTexture is a texture that never draws
+itself. Instead it clips other textures to its shape.
+
+Give the mask a shape with `SetTexture`, place and size it like any texture
+(`SetPoint`, `SetSize`, `SetAllPoints`), then attach it with
+`texture:AddMaskTexture`. Because the mask has its own position and size, it can
+cover only part of the target, sit to one side, or move each frame.
+
+The arguments match `frame:CreateTexture`. The mask shape lives in the texture's
+alpha channel and must load from a BLP or an uncompressed 32-bit TGA — the same
+rule as [`texture:SetMask`](#texturesetmaskpath).
+
+```lua
+local mask = frame:CreateMaskTexture()
+mask:SetTexture("Interface\\AddOns\\MyAddon\\circle")
+mask:SetAllPoints(icon)      -- cover the whole icon → a round icon
+icon:AddMaskTexture(mask)
+```
+
+### `texture:AddMaskTexture(mask)`
+
+Clips this texture to `mask`'s shape and position. Where the mask is opaque the
+texture shows; where the mask is transparent the texture is hidden.
+
+Call it again with a different mask to add another. A texture with several masks
+shows only where ALL of them are opaque — the masks intersect. So two circles
+show their overlapping lens, and a square plus a circle show a square with
+rounded corners. Up to 7 masks apply at once. A mask set with
+[`texture:SetMask`](#texturesetmaskpath) uses one of the 7 slots. Masks cannot
+subtract, so you cannot cut a hole with this.
+
+A mask honors [`texture:SetRotation`](#texturesetrotationangle--cx-cy): rotate
+the mask and its clip shape turns with it. The mask can also move or resize each
+frame (drive it from an `OnUpdate`), so the clip animates.
+
+### `texture:RemoveMaskTexture([mask])`
+
+Removes `mask` from this texture. With no argument, removes every mask, so the
+texture returns to its full rectangle.
+
+### `texture:GetNumMaskTextures()`
+
+Returns the number of masks attached to this texture.
+
+### `texture:GetMaskTexture(index)`
+
+Returns the mask at `index` (1 is the first one added), or `nil` when there is
+no mask at that index.
+
+### `texture:SetAtlas(atlas [, useAtlasSize])`
+
+Points the texture at a named piece of art. This sets the texture file and the
+coordinates of the rectangle inside it, so one call replaces a `SetTexture` and a
+`SetTexCoord`. See [Texture](#texture) for the atlas names and for
+`C_Texture.RegisterAtlas`.
+
+Pass `true` for `useAtlasSize` to also resize the texture to the art's own pixel
+size. Any further arguments are accepted and ignored.
+
+After `SetAtlas`, texture coordinates address the art and not the file it sits
+in, so `0` to `1` covers the whole of the art. `SetTexCoord(0, 0.5, 0, 0.5)`
+shows the top-left quarter of the art, and `GetTexCoord` reads back what you
+asked for. `SetTexture` points the texture at a file again and clears the atlas.
+
+When the name is not known, the texture keeps whatever it was showing. Call
+`_classicapi_DumpAtlasMisses()` to list the names that were asked for and not
+found.
+
+```lua
+local t = frame:CreateTexture(nil, "ARTWORK")
+t:SetAtlas("MinimapArrow", true)   -- draws the art at its own 32x32 size
+```
+
+### `texture:GetAtlas()`
+
+Returns the atlas name last set on this texture, or `nil` when it is showing
+something else. Pointing the texture at a file with `SetTexture` clears the name.
+
+### `texture:ResetTexCoord()`
+
+Drops a crop made with `SetTexCoord` or `SetSpriteSheetCell` and shows the whole
+of what the texture points at.
+
+For a texture set with `SetAtlas`, the whole of what it points at is the atlas's
+own rectangle, so the art comes back and the atlas name stays set. For any other
+texture it is the whole file, the same as `SetTexCoord(0, 1, 0, 1)`.
+
+```lua
+local t = frame:CreateTexture(nil, "ARTWORK")
+t:SetAtlas("MinimapArrow")
+t:SetTexCoord(0, 0.5, 0, 0.5)   -- shows the top-left quarter of the art
+t:ResetTexCoord()               -- shows the art again
+```
+
+### `texture:SetSpriteSheetCell(cell, numRows, numColumns)`
+
+Crops the texture to one cell of an evenly divided grid. A sprite sheet holds
+several images in one file, and this works out the share of the file that one
+image occupies, so you do not write the coordinates yourself.
+
+- `cell` — which image to show. The first cell is `1`. Cells count left to right,
+  then top to bottom.
+- `numRows`, `numColumns` — the shape of the grid.
+
+Two further arguments, `cellWidth` and `cellHeight`, are accepted and ignored.
+
+The texture keeps what it was showing when `cell` falls outside the grid.
+
+```lua
+-- The eight raid markers share one 4x4 sheet. Cell 8 is the skull.
+t:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
+t:SetSpriteSheetCell(8, 4, 4)
+```
+
+### `texture:SetDesaturation(amount)`
+
+Removes some or all of the color from a texture. `amount` is a number from `0`
+(full color) to `1` (grayscale). The method clamps values outside this range.
+At every amount, the texture keeps the tint that `SetVertexColor` gives it.
+
+`SetDesaturated(true)` is the same as `SetDesaturation(1)`, and
+`SetDesaturated(false)` is the same as `SetDesaturation(0)`. All three methods
+change the same setting, so `SetDesaturated(false)` also clears a partial
+amount.
+
+```lua
+icon:SetDesaturation(0.5)          -- half of the color is gone
+icon:SetVertexColor(1, 0.5, 0.5)   -- the gray keeps a red tint
+icon:SetDesaturated(false)         -- full color again
+```
+
+### `texture:GetDesaturation()`
+
+Returns the current desaturation amount as a number from `0` to `1`. A texture
+that `SetDesaturated(true)` made gray returns `1`.
+
+The texture stores the amount in 255 steps, so the value that you read back can
+differ a little from the value that you set. For example, `0.5` reads back as
+`0.50196`.
+
+### Texture size and shape
+
+A texture can have any width and any height. The two sides do not need to be
+powers of two, and they do not need to be equal. A 397x385 photo, a 1919x1079
+screenshot, and a 32x1024 strip all load and draw correctly.
+
+There is no fixed upper limit on texture size. The only limit is the maximum
+texture size of your graphics card, which is 16384 on most modern cards. A
+texture larger than this limit does not load.
+
+This applies to every path that loads a texture: `SetTexture`, `SetTexCoord`
+sprite sheets, inline texture markup, tooltips, and masks. The client allocates
+memory for a large texture only when an addon loads one. An addon that uses
+small textures costs nothing extra.
+
+Two limits remain. Both are about the BLP format, not the image size:
+
+- A very large uncompressed BLP file does not load. The limit is the file size,
+  about 2 MB, or 32 MB with VanillaHelpers. The texture stays blank. This
+  affects only uncompressed BLP. A DXT-compressed BLP is about eight times
+  smaller and stays under the limit. A TGA file has no size limit.
+- A non-power-of-two BLP with DXT compression or a mip chain is untested.
+
+For a large or non-power-of-two image, use an uncompressed 32-bit TGA, or a
+DXT-compressed BLP for a smaller file.
+
+```lua
+local t = frame:CreateTexture(nil, "ARTWORK")
+t:SetSize(397, 385)
+t:SetTexture("Interface\\AddOns\\MyAddon\\photo")   -- a 397x385 uncompressed TGA
+```
+
+### `fontstring:SetRotation(angle [, cx, cy])`
+
+Rotates a FontString's text by `angle` radians. A positive angle turns the text
+counter-clockwise.
+
+The optional `cx, cy` set the pivot point, as a normalized position inside the
+text from `0` to `1`. The default pivot is the center, `(0.5, 0.5)`. An angle of
+`0` clears the rotation and returns the text to upright.
+
+The rotation is visual only. `GetStringWidth`, `GetStringHeight`, `GetRect`, and
+`SetPoint` all stay axis-aligned, so a rotated label measures and anchors as if
+it were upright. `GetRotation()` returns the current angle
+in radians.
+
+The method turns the glyph vertices, so the whole text stays visible. It works on
+any FontString, and the rotation holds across text changes, moves, and resizes.
+It costs nothing per frame while the text stays still.
+
+Inline `|T…|t` icons inside a rotated FontString do not turn with the text. They
+draw as separate anchored regions. Plain text rotates correctly.
+
+```lua
+local fs = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+fs:SetPoint("CENTER")
+fs:SetText("Rotate me")
+fs:SetRotation(math.rad(45))     -- 45 degrees counter-clockwise
+fs:SetRotation(0)                -- back to upright
+```
+
+### `editBox:SetCursorPosition(position)`
+
+Moves the text cursor to `position` in the edit box, and clears any selected
+text. `position` is a 0-based offset in bytes. For plain ASCII text a byte
+offset is the same as a character index. The engine limits an out-of-range
+value to the text length, so `editBox:SetCursorPosition(string.len(text))`
+always lands at the end.
+
+### `editBox:GetCursorPosition()`
+
+Returns the cursor's current offset in the edit box, in bytes.
+
+```lua
+local box = ChatFrameEditBox
+box:SetText("hello world")
+box:SetCursorPosition(5)          -- cursor after "hello"
+print(box:GetCursorPosition())    -- 5
+```
+
+### `editBox:GetUTF8CursorPosition()`
+
+Returns the cursor position as a character count, not a byte count. For text
+with only ASCII characters this equals `GetCursorPosition`. For text with
+multibyte characters it counts characters, so the two values differ.
+
+### `editBox:ClearHighlightText()`
+
+Clears the selected text, leaving the cursor where it is.
+
+### `editBox:HasFocus()`
+
+Returns `true` if this edit box has keyboard focus.
+
+### `editBox:HasText()`
+
+Returns `true` if the edit box holds any text.
+
+### `editBox:SetHighlightColor(r, g, b [, a])`
+
+Sets the color of the text-selection highlight. Each value is `0` to `1`.
+Alpha is optional and defaults to `1`. The new color shows the next time the
+box paints a selection.
+
+```lua
+ChatFrameEditBox:SetHighlightColor(1, 0, 0)   -- red selection
+```
+
+### `editBox:GetHighlightColor()`
+
+Returns the selection-highlight color as four numbers: `r, g, b, a`, each `0`
+to `1`.
+
+### `editBox:ClearHistory()`
+
+Removes every line from the up/down input history. The history line limit
+(`SetHistoryLines`) stays, so the box keeps recording new lines afterward.
+Does nothing when the box has no history.
+
 ### `frame:SetResizeBounds(minWidth, minHeight [, maxWidth, maxHeight])`
 
-The modern rename of vanilla's `SetMinResize` / `SetMaxResize` pair.
+A rename of the `SetMinResize` / `SetMaxResize` pair.
 The max pair is applied only when both values are given.
 
 ### `frame:HookScript(scriptType, handler)`
 
-Vanilla has no `HookScript` at all. This backport chains: the
-previously-set handler runs first, vanilla-style (no arguments — it
-reads the `this`/`event`/`argN` globals like every 1.12 handler), then
-`handler` is invoked **modern-style** with positional arguments:
-`(frame, event, arg1..arg9)` for `OnEvent` scripts and
-`(frame, arg1..arg9)` for everything else. That matches the compat
-convention modern addon ports expect, so handlers written as
-`function(self, ...) ... end` work unmodified. Vanilla-style handlers
-passed to `HookScript` also keep working — the globals are set as
-usual and extra arguments are simply ignored.
+Adds `HookScript` to every frame. It chains: the previously-set handler
+runs first, globals-style (no arguments — it reads the
+`this`/`event`/`argN` globals like every handler), then `handler` is
+invoked with positional arguments: `(frame, event, arg1..arg9)` for
+`OnEvent` scripts and `(frame, arg1..arg9)` for everything else. So
+handlers written as `function(self, ...) ... end` work unmodified.
+Globals-style handlers passed to `HookScript` also keep working — the
+globals are set as usual and extra arguments are simply ignored.
 
 ```lua
 button:HookScript("OnEnter", function(self)
@@ -3768,25 +6072,73 @@ end)
 
 ### `frame:IsEventRegistered(event)`
 
-Vanilla ships `RegisterEvent` / `UnregisterEvent` but not the query.
-Returns `true` if the frame is currently registered for `event`,
-`false` otherwise (including for an unknown event name). Reuses the
-engine's own subscriber-chain membership check — the same walk
-`RegisterEvent` performs before appending — so the answer is exactly
-what the event dispatcher sees. Works on any frame.
+Returns `true` if the frame is registered for `event`, else `false` (also
+`false` for an unknown event name). If the registration came from
+`frame:RegisterUnitEvent`, the unit tokens follow as extra returns, in the
+order they were given. Works on any frame.
 
 ```lua
 local f = CreateFrame("Frame")
 f:RegisterEvent("PLAYER_LOGIN")
 f:IsEventRegistered("PLAYER_LOGIN")   -- true
 f:IsEventRegistered("PLAYER_LOGOUT")  -- false
+
+f:RegisterUnitEvent("UNIT_HEALTH", "player", "target")
+f:IsEventRegistered("UNIT_HEALTH")    -- true, "player", "target"
 ```
+
+### `frame:RegisterUnitEvent(event, ...units)`
+
+Registers the frame for `event`, but the frame's `OnEvent` runs only when the
+event's first argument (the unit token) is one of `units`. Use it in place of
+`RegisterEvent` for `UNIT_*` events, so a handler for one unit does not receive
+every other unit's events. Returns whether the frame is now registered.
+
+```lua
+local f = CreateFrame("Frame")
+f:RegisterUnitEvent("UNIT_HEALTH", "player")
+f:SetScript("OnEvent", function(self, event, unit)
+    -- unit is always "player" here
+end)
+```
+
+Unit tokens compare without regard to case. Every token that names a unit
+works, including `focus`, `nameplateN`, and `markN`. A unit that is several
+tokens at once (your target who is also `party1`) fires the event once for
+each token that matches.
+
+Pass as many units as you need. Other clients take at most four, so keep to
+four for code you also run elsewhere — accepting more is a ClassicAPI
+extension.
+
+```lua
+f:RegisterUnitEvent("UNIT_HEALTH", "player", "party1", "party2", "party3")
+```
+
+Behavior notes:
+
+- A registration keeps its kind until you unregister it. `RegisterEvent` on a
+  unit-filtered registration keeps the filter. `RegisterUnitEvent` on a plain
+  registration keeps it plain. `RegisterUnitEvent` on a unit-filtered
+  registration replaces the units. To switch kinds, call `UnregisterEvent`
+  first.
+- If you give no unit, or no unit argument is a string, the call acts as
+  `RegisterEvent`.
+- The filter applies only when the event's first argument is a string. For an
+  event whose first argument is a number, or that has no arguments, the frame
+  receives the event as with `RegisterEvent`.
+- `UnregisterEvent` and `UnregisterAllEvents` remove the filter with the
+  registration.
+- `frame:IsEventRegistered(event)` returns the unit tokens after the boolean.
+
+`FrameUtil.RegisterFrameForUnitEvents(frame, events, ...units)` calls
+`RegisterUnitEvent` for each event in the `events` table.
 
 ### `frame:GetEffectiveAlpha()`
 
 Returns the frame's **effective** alpha — its own `GetAlpha()` multiplied
 by every ancestor's, i.e. the opacity WoW actually composites at render
-time (fading `UIParent` fades all of its children). Vanilla exposes only
+time (fading `UIParent` fades all of its children). The engine exposes only
 `GetAlpha` (a frame's own alpha); this walks `self → parent → …` via the
 engine's own `GetAlpha`/`GetParent`, so it sees exactly what the engine
 does — including the 8-bit quantization of alpha (`SetAlpha(0.5)` stores
@@ -3800,14 +6152,13 @@ Minimap:GetEffectiveAlpha()    -- ~0.498 (0.5 truncates to 127/255)
 
 ### `frame:SetAttribute(name, value)` / `frame:SetAttributeNoHandler(name, value)` / `frame:ClearAttribute(name)` / `frame:GetAttribute(...)`
 
-Backports the frame **attribute** system — a per-frame, case-insensitive
-key→value store — to 1.12 as native methods on every frame. Attributes were
-added in 2.0 with secure frames and don't exist in vanilla at all; `value`
+Adds the frame **attribute** system — a per-frame, case-insensitive
+key→value store — as native methods on every frame. `value`
 can be any Lua type and round-trips exactly.
 
-`cleared = frame:ClearAttribute(name)` (retail 11.2.0) removes an attribute and
+`cleared = frame:ClearAttribute(name)` removes an attribute and
 returns whether it was set. Unlike `SetAttribute`, it does **not** fire
-`OnAttributeChanged` — matching retail (verified against a live 12.0 client).
+`OnAttributeChanged`.
 
 ```lua
 f:SetAttribute("unit", "party1")
@@ -3820,8 +6171,8 @@ f:GetAttribute("missing")         -- nil
 ```
 
 `GetAttribute` also has the modifier form `GetAttribute(prefix, name, suffix)`,
-which tries, in order, and returns the first match (the same precedence retail
-uses for `type1`/`*type1`-style resolution):
+which tries, in order, and returns the first match (the precedence used for
+`type1`/`*type1`-style resolution):
 
 1. `prefix..name..suffix`
 2. `"*"..name..suffix`
@@ -3835,8 +6186,8 @@ uses for `type1`/`*type1`-style resolution):
 **Unit-frame mouseover — the headline use.** Setting a **string `unit`
 attribute** makes the frame a mouseover source: while the cursor is over it,
 the `mouseover` unit token resolves to that frame's unit. This is the piece of
-SecureUnitButton behavior modern unit-frame addons rely on — and since 1.12 has
-no combat lockdown or taint, no secure machinery is needed to provide it.
+SecureUnitButton behavior unit-frame addons rely on — and there is no combat
+lockdown or taint here, so no secure machinery is needed to provide it.
 
 ```lua
 local f = CreateFrame("Button", "MyUnitFrame", UIParent)
@@ -3850,8 +6201,8 @@ f:SetAttribute("unit", "party1")
 
 How it works, and why it's robust: rather than installing `OnEnter`/`OnLeave`
 on the frame (which an addon's own `SetScript("OnEnter", …)` would overwrite —
-pfUI sets `unit` *before* its scripts, for instance), this mirrors retail and
-SuperWoW's `SetMouseoverUnit`. The engine's mouse-focus frame is watched once
+pfUI sets `unit` *before* its scripts, for instance), this mirrors SuperWoW's
+`SetMouseoverUnit`. The engine's mouse-focus frame is watched once
 per frame; when a hovered frame carries a `unit` attribute, the engine's **real
 mouseover setter** is invoked for that unit — **1:1 with hovering the unit's 3D
 model**: the model highlights, the mouseover tooltip builds, and
@@ -3869,7 +6220,7 @@ may be any token the resolver understands — `"party1"`, `"target"`, `"focus"`,
 to stop the binding.
 
 **Click actions (`type1` / `type2` / …).** A `type` attribute makes clicking the
-frame perform one action on its `unit` — the retail secure-button model: exactly
+frame perform one action on its `unit` — the secure-button model: exactly
 **one verb per click**, resolved from the attributes.
 
 ```lua
@@ -3895,9 +6246,9 @@ modifier/button-qualified, same precedence as `type`):
 | `target` | — | Targets the `unit` (or clears the target if `unit` is `"none"`). Respects the engine's default-interaction precedence: with a spell on the cursor it casts on the unit, with an item on the cursor it drops it on the unit, instead of switching target. |
 | `assist` | — | Targets the `unit`'s target. |
 | `focus` | — | Sets the ClassicAPI focus to the `unit`. |
-| `spell` | `spell` | Casts the `spell` on the `unit` via [`C_Spell.CastAtUnit`](#c_spellcastatunitspellidorname-unit) — the unit's GUID goes straight to the cast dispatcher (no target juggling), and ground-target spells land at the unit's feet. |
+| `spell` | `spell` | Casts the `spell`. With a `unit`, it casts on that unit via [`C_Spell.CastAtUnit`](#c_spellcastatunitspellidorname-unit--placegroundspell) — the unit's GUID goes straight to the cast dispatcher (no target juggling), and a ground-target spell lands at the unit's feet. With no `unit`, it casts on the current target through `CastSpellByName`, like a plain `/cast`. |
 | `item` | `item`, or `bag`+`slot` | Uses an item on the `unit`. `item` may be a name / itemID / link (used via `C_Item.UseItemByName`, unit as the target) or a `"bag slot"` string like `"0 1"` (used via `UseContainerItem`). The deprecated `bag`+`slot` attributes are used when `item` is unset. |
-| `macro` | `macrotext` or `macro` | Runs the macro text. Prefers an addon `RunMacro` (e.g. SuperCleveRoidMacros — named macros + extended conditionals); otherwise runs the text natively, line by line, through the stock `ChatEdit_ParseText`. |
+| `macro` | `macrotext` or `macro` | Runs the macro text. To give the macro a unit, the handler selects the clicked `unit`, runs the macro, then restores the target from before the click. It prefers an addon `RunMacro` (for example, SuperCleveRoidMacros — named macros and extended conditionals). If no addon `RunMacro` exists, it runs the text natively, line by line, through the stock `ChatEdit_ParseText`. |
 | `stopcasting` | — | Stops the current cast. |
 | `menu` / `togglemenu` | — | Pops the standard unit dropdown at the cursor (whisper / inspect / trade / invite / …, the same menu `PlayerFrame` / `TargetFrame` / `PartyMemberFrame` show). |
 
@@ -3920,7 +6271,7 @@ double-chains.
 
 **`OnAttributeChanged`** is a real `SetScript` / `GetScript` / `HookScript`-able
 frame script, on **every** frame — `SetAttribute` fires it after setting the
-value, `SetAttributeNoHandler` doesn't. As with all 1.12 frame scripts, the
+value, `SetAttributeNoHandler` doesn't. As with all frame scripts, the
 handler takes no parameters and reads its context from globals: `this` = the
 frame, `arg1` = the (lowercased) attribute name, `arg2` = the new value.
 
@@ -3936,42 +6287,296 @@ f:SetAttributeNoHandler("unit", "party2")  -- sets it silently, no handler
 
 It's implemented the same way as the tooltip-side `OnTooltipSet*` scripts — a
 co-hook on the base-frame script-name resolver that hands out an external
-per-frame handler slot for this one name (1.12 frames are never destroyed, so
+per-frame handler slot for this one name (frames are never destroyed, so
 the slot never goes stale). Recursion-guarded, so a handler may itself call
 `SetAttribute`.
 
 ### `SetModernScriptArgs(enable)` / `GetModernScriptArgs()`
 
-Global toggle (not a frame method) for **modern positional script arguments**.
-Vanilla always invokes a frame-script handler with **zero** Lua arguments — the
-handler reads `this` / `arg1..argN` / `event` as globals. With this enabled, every
-handler additionally receives its values as real positional arguments, so modern
-addon ports written as `function(self, delta) … end` work unmodified:
+Global toggle (not a frame method) for **positional script arguments**.
+The engine always invokes a frame-script handler with **zero** Lua arguments —
+the handler reads `this` / `arg1..argN` / `event` as globals. With this enabled,
+every handler additionally receives its values as real positional arguments, so
+handlers written as `function(self, delta) … end` work unmodified:
 
 - most scripts: `(self, arg1..argN)` — e.g. `OnMouseWheel(self, delta)`,
   `OnClick(self, button)`, `OnValueChanged(self, value)`, `OnUpdate(self, elapsed)`.
 - `OnEvent`: `(self, event, arg1..argN)`.
 
-It's purely **additive** — the `this` / `arg1` / `event` globals are still set, so
-vanilla-style handlers keep working; a handler declaring no parameters just ignores
-the extras. `SetModernScriptArgs(enable)` sets the state and returns it;
+The `this` / `arg1` / `event` globals stay set, so a handler that reads them still
+works. A handler that declares no parameters is unaffected — it cannot see the
+positional arguments. `SetModernScriptArgs(enable)` sets the state and returns it.
 `GetModernScriptArgs()` returns the current state.
 
-**Default OFF (opt-in).** It reimplements the tail of the engine's hottest Lua
-path (the runner that fires for every `OnUpdate`, every frame), so it stays off
-unless you ask for it; while off the dispatch path is exactly vanilla. Enable it
-once at load if your addon relies on the modern handler signature.
+**Caveat — a parameter that was always nil now gets a value.** With zero
+arguments passed, any parameter a handler declared was always nil. When this
+feature is on, a declared parameter gets its real value. A
+`function(self, delta)` handler needs this behavior. But it also changes a
+handler that declared a parameter and expected it to be nil. One example is a
+function used both as a direct call (with a real argument) and as a script
+handler. If such a handler misbehaves, disable the feature with
+`SetModernScriptArgs(false)`.
+
+**Default ON.** Positional handler signatures are a core Lua 5.1 feature, so
+ports that use them work with no setup. It reimplements the tail of the engine's
+hottest Lua path (the runner that fires for every `OnUpdate`, every frame); if
+you ever need the exact stock dispatch, `SetModernScriptArgs(false)` turns it off
+and both runners become a straight passthrough.
 
 ```lua
-SetModernScriptArgs(true)   -- returns true
-
+-- On by default; SetModernScriptArgs(false) would turn it off.
 local f = CreateFrame("Frame")
 f:EnableMouseWheel(true)
 f:SetScript("OnMouseWheel", function(self, delta)
     -- `self` and `delta` are bound; `this` / `arg1` still work too
 end)
 
-GetModernScriptArgs()       -- true
+GetModernScriptArgs()       -- true (default)
+```
+
+### `SecureCmdOptionParse(options [, quiet])`
+
+Parses a macro conditional string. Returns the value of the first clause that
+matches. This is the parser behind `/cast [combat] Spell`-style options.
+
+The `options` string is a list of clauses, separated by `;`. A clause is zero
+or more `[...]` condition groups, then a value:
+
+```lua
+SecureCmdOptionParse("[combat] Attack; [nostealth] Prowl; Rest")
+```
+
+Rules:
+- A clause with no group always matches.
+- Groups in one clause are OR'd. The first group that passes wins.
+- Conditions in a group are separated by `,` and are AND'd.
+- A `no` prefix negates a condition. A `:a/b/c` suffix adds arguments, which
+  are OR'd.
+- A `@unit` or `target=unit` piece sets the group's target. Conditions that
+  need a unit use it, and default to `"target"`.
+- The unit can be a character name as well as a token, so
+  `[target=Feral] Rejuvenation` heals the player called Feral. The name
+  matches on its start and picks the nearest match, and it has to be
+  someone around you. See
+  [`UnitTokenFromName`](#unittokenfromnamename--exactmatch).
+- A group whose only piece is a `@unit` matches only while that unit exists.
+  So `[@mouseover][] Spell` uses the mouseover unit when there is one, and
+  falls through to `[]` (your target) when there is not. A bare `[]` always
+  matches. A group with conditions leaves the existence test to them, so
+  `[@focus,noexists]` works as written.
+- `@none` and `@cursor` name no unit, so they always match. `@none` asks for
+  no unit: `/target` clears your target, and the other commands act with no
+  unit named. `@cursor` names the position under your mouse, which `/cast`
+  and `/use` use to place a ground-target spell or item.
+
+Returns the matched value, plus the passing group's target token as a second
+value (nil when the group set no target). Returns nil when no clause matches.
+
+A condition this parser does not know cannot pass, so its group fails. The
+name of the first such condition comes back as a third value, and the parser
+also prints it once. Pass `quiet` to get the third value without the message.
+
+Use `quiet` when you read options that somebody else wrote. Another macro
+addon has its own conditions, and a macro that works under that addon names
+conditions this parser never heard of. The third value tells you those
+options belong to that addon, so you can leave them to it. The
+`#showtooltip` reader does exactly this: a macro whose conditions it cannot
+evaluate stays as the engine left it.
+
+```lua
+SecureCmdOptionParse("hello")                -- "hello"
+SecureCmdOptionParse("[combat] a; b")        -- "a" in combat, else "b"
+SecureCmdOptionParse("[@focus,harm] a; b")   -- "a", "focus" when focus is hostile
+SecureCmdOptionParse("[nocombat] rest")      -- "rest" out of combat, else nil
+```
+
+**Supported conditions.** Each maps to real 1.12 state:
+
+| Condition | Meaning |
+|---|---|
+| `combat` | the player is in combat |
+| `exists` / `dead` | the target exists / is dead or a ghost |
+| `help` / `harm` | the target is friendly / hostile |
+| `party` / `raid` | the target is in your party / raid |
+| `group` / `group:party` / `group:raid` | you are in a group / party or raid / raid |
+| `stance` / `stance:N` | you are shapeshifted / in bar form N (`form` is the same) |
+| `stealth` / `mounted` / `swimming` / `indoors` / `outdoors` | player state |
+| `mod` / `mod:shift` / `mod:ctrl` / `mod:alt` | a modifier key is held (`modifier` is the same) |
+| `button:N` | the click running now used button N — 1 left, 2 right, 3 middle, 4, 5 (`btn` is the same) |
+| `bar:N` / `actionbar:N` | the current action bar page is N |
+| `bonusbar` / `bonusbar:N` | a bonus bar is active / bonus bar N is active |
+| `pet` / `pet:name` | you have a pet / a pet with that name or family |
+| `channeling` / `channeling:spell` | you are channeling / channeling that spell |
+| `equipped:type` | an item of that type, subtype, or slot is equipped (`worn` is the same) |
+| `cursor` | the cursor holds an item, a spell, or money |
+| `spec` / `spec:1` | always true (there is one spec) |
+| `known:spellID` / `known:name` | you know that spell |
+
+**Always false.** `flying`, `flyable`, `vehicleui`, and `unithasvehicleui`
+describe state that does not exist here, so they never match.
+
+**Unknown condition.** An unrecognized keyword never matches, and prints a
+warning once. Keywords are case-sensitive: `[Combat]` is unknown, `[combat]` is
+not.
+
+The `[stance:N]` number is the shapeshift bar slot, not the form ID that
+[`GetShapeshiftFormID()`](#getshapeshiftformid) returns. On a druid, bar slot 1
+is Bear and slot 3 is Cat.
+
+`[button:N]` reads the button of the click the macro is running inside, the
+same value [`GetMouseButtonClicked()`](#getmousebuttonclicked) returns. You can
+give a button name in place of the number: `[button:rightbutton]` and
+`[button:2]` are the same test, and names are not case-sensitive.
+
+When no click is running, `[button:N]` answers as if the left button were used.
+That is the case for a state driver poll and for the re-evaluation behind a
+macro's `#showtooltip` icon, neither of which comes from a click.
+
+`known` is a ClassicAPI extension, not a Blizzard conditional. A numeric
+argument uses [`IsPlayerSpell`](#isplayerspellspellid), so it matches any known
+spell — a spellbook spell, a talent, a profession recipe, or a racial. A name
+argument matches only a spellbook spell, because there is no name-to-ID
+resolver. Use the spell ID for a talent or a recipe.
+
+### `RegisterStateDriver` / `UnregisterStateDriver`
+
+`RegisterStateDriver(frame, state, values)` drives a frame's state from a macro
+conditional string. The driver re-runs `SecureCmdOptionParse(values)` on a
+0.2 second poll and applies the result.
+
+For the state `"visibility"`, the value `"show"` or `"hide"` shows or hides the
+frame:
+
+```lua
+RegisterStateDriver(myFrame, "visibility", "[combat] hide; show")
+```
+
+For any other state, the driver sets the attribute `"state-"..state` to the
+value. An `OnAttributeChanged` handler then reacts to it.
+
+`UnregisterStateDriver(frame, state)` removes one driver.
+`UnregisterStateDriver(frame)` with no state removes every driver on the frame.
+
+The driver also rescans at once on combat, target, focus, form, pet, group,
+action-bar, and modifier-key changes, so state that a poll would lag catches up
+without delay.
+
+### `RegisterAttributeDriver` / `UnregisterAttributeDriver`
+
+`RegisterAttributeDriver(frame, attribute, values)` is the same as the
+state-driver pair, but it sets `attribute` directly instead of adding the
+`"state-"` prefix. An attribute name that starts with `_` is ignored.
+
+The driver coerces a numeric value to a number, and the literal string `"nil"`
+to nil, before it sets the attribute.
+
+`UnregisterAttributeDriver(frame, attribute)` removes one driver.
+`UnregisterAttributeDriver(frame)` with no attribute removes every driver on the
+frame.
+
+### `RegisterUnitWatch` / `UnregisterUnitWatch` / `UnitWatchRegistered`
+
+`RegisterUnitWatch(frame [, asState])` shows or hides a frame as its `unit`
+attribute comes into and out of existence. Set the `unit` attribute first:
+
+```lua
+myUnitFrame:SetAttribute("unit", "target")
+RegisterUnitWatch(myUnitFrame)     -- shown only while you have a target
+```
+
+With `asState` true, the watch sets the boolean attribute `"state-unitexists"`
+instead of calling Show/Hide, so an `OnAttributeChanged` handler drives the
+visibility.
+
+The Show/Hide form also sets a `"statehidden"` attribute (true when hidden), so
+unit-frame code can tell a driver-hidden frame from one the user hid.
+
+`UnregisterUnitWatch(frame)` stops the watch. The frame stays in its last shown
+or hidden state. `UnitWatchRegistered(frame)` returns whether a watch is active.
+
+### `SecureButton_GetAttribute` / `SecureButton_GetUnit`
+
+`SecureButton_GetAttribute(frame, name)` reads an attribute. When the frame opts
+in with a `"useparent-"..name` or `"useparent*"` attribute, it walks up to the
+parent frame to find the value.
+
+`SecureButton_GetUnit(frame)` returns the frame's `unit` attribute, with an
+optional `unitsuffix` attribute appended. The unit-watch and click systems use
+it to find a frame's unit.
+
+**No taint.** These are functional copies of the secure templates. There
+is no combat lockdown or taint here, so nothing is protected — the names exist
+for addon compatibility.
+
+### `PreClick` / `PostClick` button scripts
+
+Two button scripts that run immediately before and after a click. They are
+real scripts: set them with `SetScript`, read them with `GetScript`, and hook
+them with `HookScript`.
+
+One click runs the handlers in this order:
+
+```
+PreClick  ->  OnClick  ->  PostClick
+```
+
+`PreClick` and `PostClick` fire on every click. The button does not need an
+`OnClick` handler.
+
+Each handler gets `arg1` — the mouse button name (`"LeftButton"`,
+`"RightButton"`, …) — the same value `OnClick` gets. With positional
+arguments on (the default), the handler signature is `function(self, button)`.
+
+A `CheckButton` changes its checked state before `PreClick` runs, so
+`GetChecked()` inside `PreClick` already returns the new state.
+
+A double-click runs `OnDoubleClick` only. It does not run `PreClick` or
+`PostClick`.
+
+```lua
+local btn = CreateFrame("Button", "MyButton", UIParent)
+btn:SetScript("PreClick",  function() print("before the click:", arg1) end)
+btn:SetScript("OnClick",   function() print("the click") end)
+btn:SetScript("PostClick", function(self, button) print("after the click:", button) end)
+```
+
+### `Button:RegisterForClicks("AnyUp" | "AnyDown" | ...)`
+
+`RegisterForClicks` accepts two collective names:
+
+- `"AnyUp"` — the button responds to the release of every mouse button.
+- `"AnyDown"` — the button responds to the press of every mouse button.
+
+`"AnyUp"` stands for the five `*Up` names and `"AnyDown"` for the five
+`*Down` names. You can mix them with the explicit names.
+
+```lua
+btn:RegisterForClicks("AnyUp")
+btn:RegisterForClicks("AnyDown", "LeftButtonUp")
+```
+
+The explicit names are `LeftButtonUp`, `LeftButtonDown`, `RightButtonUp`,
+`RightButtonDown`, `MiddleButtonUp`, `MiddleButtonDown`, `Button4Up`,
+`Button4Down`, `Button5Up`, and `Button5Down`. Names are not case-sensitive.
+
+A name that is not in this list counts as no click type. A call with only
+unknown names makes the button respond to no click at all. `Button:Click()`
+ignores the click types, so a button in that state still responds to
+`Click()`.
+
+### `GetClickFrame(name)`
+
+Returns the frame with the given global name. The `/click` command uses it to
+change a frame name into the frame.
+
+The function returns the frame only when `_G[name]` holds a real frame, and the
+`GetName()` of that frame is equal to `name`. If the global holds a different
+value, a plain table, or a frame with a different name, the function returns
+nil. This name test makes sure that a changed global does not return the wrong
+frame.
+
+```lua
+GetClickFrame("MyButton")     -- the frame named "MyButton", or nil
 ```
 
 ## FriendList
@@ -3983,7 +6588,7 @@ buffer into the engine's WhoList so a normal `WHO_LIST_UPDATE` +
 `GetWhoInfo(i)` flow can read them — no chat output, no
 `"Found N players matching..."` system message.
 
-Vanilla 1.12 exposes `SendWho(query)` and `SetWhoToUI(flag)` only as
+The engine exposes `SendWho(query)` and `SetWhoToUI(flag)` only as
 separate primitives, so addons that want to silently look up a
 single player's class/level/zone (e.g. to color an unknown name in
 chat) have to manage state, cooldown timing, and friends-panel
@@ -4001,8 +6606,8 @@ pending flag is set, and the cooldown isn't extended. Safe to call
 on every chat line that mentions an unknown player; the call will
 naturally rate-limit.
 
-The cooldown matches the server's: vanilla's CMSG_WHO is silent-
-dropped server-side at roughly 5-second granularity, so a faster
+The cooldown matches the server's: CMSG_WHO is silent-dropped
+server-side at roughly 5-second granularity, so a faster
 client just wastes queries that won't get a response.
 
 ```lua
@@ -4057,6 +6662,224 @@ contribute to the same pending window. This is acceptable for the
 "suppress popup for any in-flight DLL-issued query" use case;
 addons that need per-call tracking should manage their own ticket
 state on top.
+
+### `C_FriendList.GetNumWhoResults()`
+
+Returns two numbers: how many /who results you can read, and a
+server-reported count.
+
+```lua
+local shown, serverCount = C_FriendList.GetNumWhoResults()
+```
+
+`shown` is the number of entries you can index with
+[`GetWhoInfo`](#c_friendlistgetwhoinfoindex). The server caps the list
+(50, or 49 on some cores), so `shown` is at most that. Run a `/who` (or
+[`SendWhoQueryByName`](#c_friendlistsendwhoquerybynamename)) first to
+populate the list.
+
+`serverCount` is the second header value the server sends, and its
+meaning depends on the server core:
+
+- Mangos and cmangos derived cores send the number of characters that
+  matched your query.
+- Turtle WoW (tortoise-wow) sends the whole realm's online population
+  when more than 49 players are online, ignoring your filter. Below
+  that count it sends the match count.
+
+Do not rely on one meaning across servers. On Turtle it is a live
+population counter for any query. On other cores it is a match total.
+
+### `C_FriendList.GetWhoInfo(index)`
+
+Returns a table for the /who result at `index` (1-based), or `nil` when
+the index is out of range.
+
+```lua
+local info = C_FriendList.GetWhoInfo(1)
+-- {
+--   fullName = "Nadamage", fullGuildName = "",
+--   level = 26, raceStr = "Troll",
+--   classStr = "Mage", filename = "MAGE",
+--   area = "Hillsbrad Foothills",
+-- }
+```
+
+Table fields:
+
+- `fullName` — the character name.
+- `fullGuildName` — the guild name, or `""` when the player has no
+  guild.
+- `level` — the character level.
+- `raceStr` — localized race name, or `nil` when unknown.
+- `classStr` — localized class name, or `nil` when unknown.
+- `filename` — locale-independent class token (`"WARRIOR"`, `"MAGE"`,
+  …), or `nil` when unknown. This is the key for `RAID_CLASS_COLORS`.
+  The stock `GetWhoInfo` does not provide it, which is the main
+  reason to use this table form.
+- `area` — the zone name.
+
+There is no `gender` field — the /who result stores no sex.
+
+The global `GetWhoInfo(index)` is also kept, which returns positional
+values and no class token. This namespaced form returns a table and
+adds `filename`.
+
+### `C_FriendList.IsFriend(guid)`
+
+Returns `true` if the player with the given GUID is on your friends
+list, `false` if not.
+
+```lua
+C_FriendList.IsFriend(UnitGUID("target"))    -- true if the target is a friend
+C_FriendList.IsFriend("0x00000000000ABCDE")
+```
+
+`guid` is a GUID string — the `"0x…"` form that `UnitGUID` returns.
+You can also pass a plain character name, because the friends
+list is keyed by name (`AddFriend(name)`).
+
+The check reads the engine's friends list directly. It matches the
+input GUID against each friend's stored GUID. The server sends that
+GUID for both online and offline friends. As a fallback it also
+compares character names, so the answer holds for any friend the
+client saw this session.
+
+### `C_FriendList.IsIgnored(token)`
+
+Returns `true` if the player is on your ignore list, `false` if not.
+
+```lua
+C_FriendList.IsIgnored("Bob")
+C_FriendList.IsIgnored("0x00000000000ABCDE")
+```
+
+`token` is a character name or a GUID string. The ignore list stores
+GUIDs, not names. A GUID always matches. A name matches only a player
+the client has seen this session — the same players `GetIgnoreName` can
+name — because the name comes from the client's name cache.
+
+### `C_FriendList.IsIgnoredByGuid(guid)`
+
+Returns `true` if the player with the given GUID is on your ignore
+list, `false` if not.
+
+```lua
+C_FriendList.IsIgnoredByGuid(UnitGUID("target"))
+C_FriendList.IsIgnoredByGuid("0x00000000000ABCDE")
+```
+
+`guid` is a GUID string — the `"0x…"` form that `UnitGUID` returns.
+This is the exact key the ignore list uses, so it works for every
+ignored player.
+
+### `C_FriendList.GetNumFriends()`
+
+Returns the number of players on your friends list. The stock global
+`GetNumFriends()` returns the same count — this is the namespaced form.
+
+```lua
+C_FriendList.GetNumFriends()   -- e.g. 12
+```
+
+### `C_FriendList.GetNumOnlineFriends()`
+
+Returns how many friends on your list are online. This is a subset of
+[`GetNumFriends`](#c_friendlistgetnumfriends), which counts online and
+offline friends together.
+
+```lua
+C_FriendList.GetNumOnlineFriends()   -- e.g. 3
+```
+
+There is no stored online count, so the value is the number of friends
+whose `connected` flag is set — the same flag
+[`GetFriendInfo`](#c_friendlistgetfriendinfoname) reports.
+
+### `C_FriendList.GetFriendInfo(name)`
+
+Returns a `FriendInfo` table for the friend with the given name, or
+`nil` if that name is not on your list. The name match is
+case-insensitive.
+
+```lua
+local info = C_FriendList.GetFriendInfo("Sarahnity")
+-- {
+--   name = "Sarahnity", connected = true, level = 60,
+--   className = "Druid", classFilename = "DRUID", area = "Stratholme",
+--   guid = "0x000000003B9CB7BF",
+--   afk = false, dnd = false,
+--   mobile = false, referAFriend = false, rafLinkType = 0,
+-- }
+```
+
+Table fields:
+
+- `name` — the friend's character name.
+- `connected` — `true` when the friend is online.
+- `level` — the friend's level, or `0` when unknown.
+- `className` — localized class name, or `nil` when unknown.
+- `classFilename` — locale-independent class token (`"WARRIOR"`,
+  `"MAGE"`, …), or `nil` when unknown. Present whenever `className`
+  is. This is the key for `RAID_CLASS_COLORS` and other class tables,
+  so you can color a friend's name without matching the localized
+  class name.
+- `area` — localized zone name, resolved to the parent zone, or `nil`
+  when unknown.
+- `guid` — the friend's GUID string.
+- `notes` — your note for this friend, or `nil` if none. Set it with
+  [`SetFriendNotes`](#c_friendlistsetfriendnotesname-notes).
+- `afk` / `dnd` — the friend's status flags.
+- `mobile` / `referAFriend` / `rafLinkType` — always `false` / `false`
+  / `0`. There is no mobile app, Recruit-A-Friend, or RAF link data.
+
+Notes are a ClassicAPI addition — there is no stock note field. ClassicAPI
+persists them per character in
+`WTF\Account\<acct>\<realm>\<char>\ClassicAPI_FriendNotes.txt`, local to
+this client (not stored on the server, not shared with other machines).
+
+### `C_FriendList.GetFriendInfoByIndex(index)`
+
+The same `FriendInfo` table, addressed by a 1-based list index instead
+of a name. Returns `nil` for an index below 1 or above
+[`GetNumFriends`](#c_friendlistgetnumfriends).
+
+```lua
+for i = 1, C_FriendList.GetNumFriends() do
+    local info = C_FriendList.GetFriendInfoByIndex(i)
+    print(info.name, info.connected, info.className, info.area)
+end
+```
+
+See [`C_FriendList.GetFriendInfo`](#c_friendlistgetfriendinfoname) for
+the field list.
+
+### `C_FriendList.SetFriendNotes(name, notes)`
+
+Sets your note for the friend with the given name. Pass an empty string
+or `nil` to clear it. There is no return value, and the name must
+already be on your friends list.
+
+```lua
+C_FriendList.SetFriendNotes("Sarahnity", "raid healer")
+C_FriendList.SetFriendNotes("Sarahnity", "")   -- clears the note
+```
+
+The note is stored client-side and read back through the `notes` field
+of [`GetFriendInfo`](#c_friendlistgetfriendinfoname). Setting a note
+fires `FRIENDLIST_UPDATE` so the friends UI and note-aware addons
+refresh. See the persistence note under `GetFriendInfo`.
+
+### `C_FriendList.SetFriendNotesByIndex(index, notes)`
+
+The same as
+[`SetFriendNotes`](#c_friendlistsetfriendnotesname-notes), addressed by
+a 1-based list index instead of a name. An out-of-range index does
+nothing.
+
+```lua
+C_FriendList.SetFriendNotesByIndex(1, "tank")
+```
 
 ## GameObject
 
@@ -4116,16 +6939,16 @@ end
 The game-object counterpart of
 [`ClosestUnitPosition`](#closestunitpositioncreatureid) — same visible-
 object-manager scan, filtered to game objects (GUID prefix `0xF110`).
-Same retail-vs-vanilla caveat: this finds the nearest **currently-visible**
-object of that entry rather than reading retail's static starting-zone
-database (which vanilla ships no equivalent of).
+Same caveat: this finds the nearest **currently-visible**
+object of that entry rather than reading a static starting-zone
+database (there is no such database here).
 
 ## GameTooltip
 
 ### `GameTooltip:SetItemByID(itemID)`
 
-Modern method that renders an item tooltip from just an itemID. The
-1.12 workaround was constructing an item hyperlink and calling
+Renders an item tooltip from just an itemID. The
+alternative is constructing an item hyperlink and calling
 `SetHyperlink` — `tooltip:SetHyperlink("item:" .. id .. ":0:0:0:0:0:0:0")`
 — which works but forces every caller to know the hyperlink format.
 
@@ -4157,8 +6980,8 @@ existing `Script_GameTooltip_SetHyperlink` (registry slot 12).
 > ```
 >
 > This caching behavior matches what `C_Item.GetItemInfoInstant`
-> documents — same underlying cache. Modern WoW (5.0+) has the same
-> caveat, just with `C_Item.RequestLoadItemData(itemLocation)` /
+> documents — same underlying cache. The same
+> caveat applies with `C_Item.RequestLoadItemData(itemLocation)` /
 > `Item:OnItemLoad`-style continuation.
 
 ### `GameTooltip:SetItemByGUID(itemGUID)`
@@ -4194,10 +7017,13 @@ go to a different resolver and won't match).
 
 ### `GameTooltip:SetUnitAura(unit, index, [filter])`
 
-Modern unified-aura method. 1.12 splits this into `SetUnitBuff` and
-`SetUnitDebuff`; we dispatch to the right one based on the `filter`
-string (`"HARMFUL"` → `SetUnitDebuff`, anything else → `SetUnitBuff`).
-`filter` defaults to helpful when omitted, matching modern.
+Unified-aura method. `index` is in the same `HELPFUL` / `HARMFUL` index
+space as `C_UnitAuras.GetAuraDataByIndex`, so an index you got from
+`C_UnitAuras` always opens the matching tooltip. That includes a debuff
+that the server parked in a buff slot. The tooltip itself comes from the
+engine's own `SetUnitBuff` or `SetUnitDebuff`. `filter` defaults to
+helpful when omitted. Only its `HELPFUL` or `HARMFUL` token is read, so
+pass an index from the same plain list.
 
 ```lua
 GameTooltip:SetOwner(UIParent, "ANCHOR_CURSOR")
@@ -4207,9 +7033,9 @@ GameTooltip:SetUnitAura("player", 1)              -- defaults to HELPFUL
 GameTooltip:Show()
 ```
 
-Pure dispatcher — no engine changes; the underlying logic is whatever
-1.12's `SetUnitBuff` / `SetUnitDebuff` already does. Just lets you use
-the modern call shape (which most aura libraries backport from)
+The engine methods index their own slot ranges, which differ from the
+`C_UnitAuras` index space once a debuff sits in a buff slot. This method
+translates between the two, so you never need to
 without conditionally splitting on filter.
 
 ### `GameTooltip:SetSpellByID(spellID)`
@@ -4246,7 +7072,7 @@ tooltip's "primary" spell, so `GetSpell` keeps reflecting whatever `SetX`
 call (if any) built the base tooltip. Silent no-op for `spellID <= 0` or an
 unknown spell.
 
-> Vanilla's tooltip builder only exposes "append" via its internal talent
+> The engine's tooltip builder only exposes "append" via its internal talent
 > "next rank" preview, which emits a `Next rank:` header instead of the
 > spell name; we overwrite that header line with the real name so the
 > appended block reads normally.
@@ -4254,8 +7080,8 @@ unknown spell.
 ### `GameTooltip:GetItem()`
 
 Returns `(name, link, itemID)` for whichever item the tooltip is
-currently displaying, or nothing if it isn't showing an item. Modern
-WoW returns only `(name, link)`; we extend with `itemID` as a third
+currently displaying, or nothing if it isn't showing an item. The
+standard call returns only `(name, link)`; we extend with `itemID` as a third
 return so callers don't have to gsub-extract it from the link.
 
 The engine stashes two fields per Set* item call:
@@ -4320,8 +7146,7 @@ local name, rank, spellID = GameTooltip:GetSpell()
 
 `rank` is the empty string (not nil) for spells whose Spell.dbc rank
 slot is blank — most racials, talent passives, and proc-triggered
-spells. This matches the modern semantics where the rank position is
-always populated.
+spells. The rank position is always populated.
 
 ### `GameTooltip:HasItem()` / `GameTooltip:HasSpell()`
 
@@ -4338,45 +7163,46 @@ if GameTooltip:HasItem() then
 end
 ```
 
-### `GameTooltip:GetUnitGUID()` / `GameTooltip:HasUnit()`
+### `GameTooltip:GetUnit()` / `GameTooltip:GetUnitGUID()` / `GameTooltip:HasUnit()`
 
-`GetUnitGUID()` returns `(name, guidString)` for whichever unit the
-tooltip is currently displaying, or nothing if it isn't showing a
-unit. Return order mirrors modern's `GameTooltip:GetUnit()` (name
-first) — so addons porting from
-`local name, unit = ttip:GetUnit()` can swap to `GetUnitGUID` and
-keep their existing destructuring. `name` is the unit's display name
-— the same string that appears in the tooltip header, or one of the
-engine's `"UNKNOWNOBJECT"` / `"Unknown Being"` fallbacks for a remote
-unit whose info hasn't been queried yet. `guidString` is the
-canonical `"0xHHHHHHHHLLLLLLLL"` format returned by
-[`UnitGUID(unit)`](#unitguidunit).
+`GetUnit()` returns `(name, unitToken)` for the unit that the tooltip
+shows. It returns nothing if the tooltip does not show a unit.
 
-`HasUnit()` is a boolean companion — returns `true` if the tooltip is
-currently displaying a unit.
+- `name` is the unit's display name. This is the same string that is
+  in the tooltip header. For a remote unit that is not in the cache
+  yet, it is `"UNKNOWNOBJECT"` or `"Unknown Being"`.
+- `unitToken` is the string that was given to `SetUnit`, as it was
+  given (for example `"target"`, `"party2"`, `"focus"`). For the
+  tooltip that shows when the cursor is on a unit in the world, it is
+  `"mouseover"`. For the tooltip that shows when the cursor is on a
+  unit frame with a `unit` attribute, it is the frame's unit (for
+  example `"party1"`). This token also works for a group member who
+  is offline or far away, but `"mouseover"` does not.
+
+`GetUnitGUID()` returns `(name, guidString)`. `guidString` has the
+`"0xHHHHHHHHLLLLLLLL"` format of [`UnitGUID(unit)`](#unitguidunit).
+Use it when you must identify the unit after its token changes. For
+example, `"mouseover"` does not point to the unit after the cursor
+moves away, but the GUID stays the same.
+
+`HasUnit()` returns `true` if the tooltip shows a unit.
 
 ```lua
 GameTooltip:SetUnit("target")
-local name, guid = GameTooltip:GetUnitGUID()
--- name = "Hogger"
+local name, unit = GameTooltip:GetUnit()
+-- name = "Hogger", unit = "target"
+
+local _, guid = GameTooltip:GetUnitGUID()
 -- guid = "0xF130001234..." (Creature) or "0x000000...ABC123" (Player)
 
 if GameTooltip:HasUnit() then
-    -- cheap predicate, no name-resolution work
+    -- fast check, no name lookup
 end
 ```
 
-> **Why not match modern's `GetUnit()` signature?** Modern WoW's
-> `GetUnit()` returns `(name, unitToken)` where `unitToken` is the
-> exact `"target"` / `"focus"` / `"mouseover"` / etc. string passed
-> to `SetUnit`. Vanilla 1.12 drops the token at the
-> `Script_GameTooltip_SetUnit` boundary — it converts the token to a
-> 64-bit GUID and discards the original string. Reconstructing a
-> plausible token by walking known tokens and reverse-matching by
-> GUID is possible but lossy (multiple tokens can refer to the same
-> GUID — `"target"` and `"raid1"` simultaneously, for instance), so
-> we expose the GUID directly instead, which is what addons actually
-> need for cross-referencing with `UnitGUID`, the NameCache, etc.
+> **Note:** If a tooltip continues to show a unit from `SetUnit`, and
+> the cursor then moves onto the same unit in the world, `GetUnit()`
+> continues to return the `SetUnit` token, not `"mouseover"`.
 
 ### `GameTooltip:GetGameObject()` / `GameTooltip:HasGameObject()`
 
@@ -4404,7 +7230,7 @@ if GameTooltip:HasGameObject() then
 end
 ```
 
-There is **no Lua-callable `SetGameObject` method** in vanilla 1.12
+There is **no Lua-callable `SetGameObject` method**
 — gameobjects only populate the tooltip via in-world mouseover. The
 engine's hover handler at `FUN_00492890` dispatches to a tooltip
 populator (`0x0052AA20`) that writes the GUID into
@@ -4423,9 +7249,8 @@ object has been freed.
 
 Returns the frame that called `tooltip:SetOwner(frame, anchor)`, or
 `nil` if the tooltip hasn't been owned by anyone since its last
-`Clear` / `Hide`. Vanilla 1.12 ships `SetOwner` and `IsOwned` but
-never added the matching reader; modern Classic Era's signature is
-backported here for parity.
+`Clear` / `Hide`. The engine ships `SetOwner` and `IsOwned` but
+never the matching reader; this adds it.
 
 ```lua
 GameTooltip:SetOwner(SomeFrame, "ANCHOR_TOPLEFT")
@@ -4433,8 +7258,8 @@ local owner = GameTooltip:GetOwner()
 -- owner == SomeFrame
 ```
 
-Returns only the owner frame, not `(owner, anchorPoint)` like modern
-Classic. The anchor string is reachable via vanilla's native
+Returns only the owner frame, not `(owner, anchorPoint)`. The anchor
+string is reachable via the stock
 [`GameTooltip:GetAnchorType()`](https://wowwiki-archive.fandom.com/wiki/API_GameTooltip_GetAnchorType)
 (slot 5 in the GameTooltip method registry).
 
@@ -4452,13 +7277,13 @@ Two-tier resolution:
 | Player class (rich) | `talentID` belongs to one of the player's loaded tabs | Full talent tooltip — name, "Rank N/M", description, prereqs, "click to learn" prompts |
 | Cross-class (fallback) | `talentID` is from another class | Spell tooltip for the talent's rank-1 spellID — name, cast time, range, mana cost, description |
 
-The fallback exists because vanilla 1.12 only loads the local
-player's class talent data into the engine's per-player TabInfo
+The fallback exists because the engine only loads the local
+player's class talent data into its per-player TabInfo
 arrays. For other classes, we look up the talent in `Talent.dbc`
 directly and dispatch the rank-1 spell tooltip — functionally
-"what does this talent do?" without the rank counter. Modern WoW
-adds talent name and "Rank 0/N" decorations on top of the spell
-description for cross-class; we don't replicate that here yet.
+"what does this talent do?" without the rank counter. Talent name and
+"Rank 0/N" decorations on top of the spell description for cross-class
+are not replicated here yet.
 
 Silent no-op (no tooltip change) when:
 
@@ -4500,8 +7325,7 @@ Silent no-op if the item isn't currently equipped — fall back to
 When the player has duplicates of the same itemID equipped
 (matched MH/OH weapons, identical rings, identical trinkets), the
 **lower-numbered slot wins** — MAINHAND before OFFHAND, FINGER1
-before FINGER2, TRINKET1 before TRINKET2. Matches modern client
-behavior (verified empirically).
+before FINGER2, TRINKET1 before TRINKET2 (verified empirically).
 
 ```lua
 local _, _, _, _, _, _, _, _, _, _, _, _, _, link = GetItemInfo(itemID)
@@ -4531,8 +7355,8 @@ frame works).
 |-----|---------|
 | `itemLink` | The item being compared (chat link, `item:` string, or bare itemID). Optional if `comparisonTooltip` is given. |
 | `offset` | 1-based slot selector for two-slot items — rings, trinkets, and one-hand weapons expose `offset` 1 and 2 (Finger1/2, Trinket1/2, MainHand/OffHand). Default 1. |
-| `shiftButton` | Gates the stat-change breakdown. Deltas show by default (`true`/`1`/`nil`/omitted) and are hidden only for an explicit `false`/`0` (header + equipped item only). Both the boolean and vanilla `1`/`nil` conventions are accepted. |
-| `comparisonTooltip` | Optional. When `itemLink` is omitted, the compared item is taken from whatever this tooltip is displaying (matches the retail tooltip-to-tooltip call). |
+| `shiftButton` | Gates the stat-change breakdown. Deltas show by default (`true`/`1`/`nil`/omitted) and are hidden only for an explicit `false`/`0` (header + equipped item only). Both the boolean and `1`/`nil` conventions are accepted. |
+| `comparisonTooltip` | Optional. When `itemLink` is omitted, the compared item is taken from whatever this tooltip is displaying (a tooltip-to-tooltip call). |
 
 **Returns** the number of comparison slots for the item (1, or 2 for
 rings/trinkets/one-hand weapons; 0 if it isn't equippable, isn't
@@ -4544,7 +7368,7 @@ The stat deltas cover the same keys as
 resistances, weapon DPS, and on-equip-spell bonuses like crit / attack
 power / spell power), colored with the client's
 `INCREASE_STAT_COLOR` / `DECREASE_STAT_COLOR`. The method only
-populates the tooltip; the caller shows/anchors it (as retail's
+populates the tooltip; the caller shows/anchors it (as
 `SetHyperlinkCompareItem` does).
 
 ```lua
@@ -4563,8 +7387,7 @@ end
 ### `GameTooltip:IsEquippedItem()`
 
 Returns `true` when the item the tooltip is **currently displaying** is
-equipped in one of the player's character-pane slots (1..19). Backports
-the 3.3.5 `GameTooltip:IsEquippedItem` method.
+equipped in one of the player's character-pane slots (1..19).
 
 Works regardless of how the tooltip was populated — link paths
 (`SetItemByID`, `SetHyperlink`) and CGItem paths (`SetInventoryItem`,
@@ -4586,7 +7409,7 @@ if GameTooltip:IsEquippedItem() then ... end  -- false unless that item is also 
 `OnTooltipSetGameObject` — real frame scripts, settable with the standard
 `SetScript` / `GetScript` /
 `HookScript` — that fire whenever a tooltip's **item**, **spell**, **unit**, or
-**gameobject** is set. Backport the modern tooltip scripts so addons annotate
+**gameobject** is set. These tooltip scripts let addons annotate
 tooltips by hooking one script per object type instead of wrapping every
 `Set*` method. Available on all GameTooltip-type frames (`GameTooltip`,
 `ItemRefTooltip`, `ShoppingTooltip1/2`, `AtlasLootTooltip`, …).
@@ -4598,13 +7421,13 @@ tooltips by hooking one script per object type instead of wrapping every
 | `OnTooltipSetUnit` | `SetUnit` and unit mouseover |
 | `OnTooltipSetGameObject` | gameobject mouseover (herb/ore nodes, chests, mailboxes, signs) |
 
-Vanilla only shipped `OnTooltipAddMoney` / `OnTooltipCleared` /
-`OnTooltipSetDefaultAnchor`; these four are the backported set.
+The engine ships only `OnTooltipAddMoney` / `OnTooltipCleared` /
+`OnTooltipSetDefaultAnchor`; these four are added.
 
-The handler receives the tooltip as the **global `this`**, the 1.12
-frame-script convention — *not* a `self` argument (like every built-in vanilla
-script: `OnShow`, `OnEvent`, `OnTooltipCleared`, …). Modern-style
-`function(self) self:… end` handlers will see `self == nil`; use `this`.
+The handler receives the tooltip as the **global `this`**, the
+frame-script convention — *not* a `self` argument (like every built-in
+script: `OnShow`, `OnEvent`, `OnTooltipCleared`, …). A
+`function(self) self:… end` handler will see `self == nil`; use `this`.
 
 ```lua
 GameTooltip:HookScript("OnTooltipSetItem", function()
@@ -4620,8 +7443,8 @@ end)
 
 **Auras don't fire `OnTooltipSetSpell`** — `SetUnitBuff` / `SetUnitDebuff` /
 `SetPlayerBuff` / `SetUnitAura` use a separate aura-tooltip builder, so hovering
-a buff/debuff does not trigger the spell script. This matches retail, where unit
-auras are a distinct tooltip data type rather than a spell.
+a buff/debuff does not trigger the spell script. Unit auras are a distinct
+tooltip data type rather than a spell.
 
 **Caveat — the event fires from inside the tooltip build.** Lightweight handler
 work is fine: reading `this:GetItem()` / `this:GetUnit()`, `this:AddLine(...)`,
@@ -4643,8 +7466,7 @@ end)
 Fills the tooltip with a summary of the named equipment set: header,
 total item count, and per-bucket counts (equipped / in inventory /
 ignored / missing). Each missing item is listed on its own line by
-name. Mirrors 4.3.4's native `GameTooltip:SetEquipmentSet` at
-`0x0046E690`.
+name.
 
 ```lua
 GameTooltip:SetOwner(UIParent, "ANCHOR_CURSOR")
@@ -4667,8 +7489,7 @@ doesn't re-anchor the tooltip frame.
 
 Item classification reuses `Locations::FindGUID` (the same walk
 `GetItemCount` uses), so items in the bank count as "in inventory"
-without requiring the bank window to be open. The 4.3.4 binary did
-the same.
+without requiring the bank window to be open.
 
 **Localization.** The count lines are formatted through
 [`Game::Lua::PushLocalizedFormatInt`](#) — Blizzard's `ITEMS_VARIABLE_QUANTITY`,
@@ -4703,8 +7524,7 @@ lines; re-saving a set repopulates itemIDs.
 ### `GameTooltip:SetTotem(slot)`
 
 Fills the tooltip with the shaman totem currently active in `slot`
-(`1` Fire, `2` Earth, `3` Water, `4` Air). A TBC (2.4.0) tooltip method
-backported to 1.12; mirrors retail's `Script_GameTooltip_SetTotem`.
+(`1` Fire, `2` Earth, `3` Water, `4` Air).
 
 ```lua
 GameTooltip:SetOwner(TotemButton, "ANCHOR_BOTTOMRIGHT")
@@ -4716,18 +7536,16 @@ Searing Totem              (name, yellow)
 45 Sec                     (time remaining, white)
 ```
 
-Two lines, matching retail exactly: the totem name (`NORMAL_FONT_COLOR`)
-and the time remaining (white). Built natively with the engine's own
-per-tooltip clear and raw add-line — the same path `SetSpellByID` and
-`SetHyperlinkCompareItem` use — and **shows itself** at the end, so no
-trailing `:Show()` is required (retail's `TotemFrame.xml` OnEnter calls
-`SetOwner` then `SetTotem` with no show, and the C method shows). Set the
-owner/anchor before the call.
+Two lines: the totem name (`NORMAL_FONT_COLOR`) and the time remaining
+(white). Built natively with the engine's own per-tooltip clear and raw
+add-line — the same path `SetSpellByID` and `SetHyperlinkCompareItem`
+use — and **shows itself** at the end, so no trailing `:Show()` is
+required. Set the owner/anchor before the call.
 
 Silent no-op when the slot has no active totem, so a totem-button
 `OnEnter` can call it unconditionally.
 
-**Localization.** The time line mirrors retail's `SecondsToTimeAbbrev`
+**Localization.** The time line mirrors `SecondsToTimeAbbrev`
 (raw seconds under a minute, minutes rounded up above) and formats
 through the FrameXML GlobalStrings `SPELL_TIME_REMAINING_SEC` /
 `SPELL_TIME_REMAINING_MIN` (English `%d Sec` / `%d Min` fallbacks for
@@ -4764,15 +7582,25 @@ if CLASSIC_API_VERSION == 99999999 then
 end
 ```
 
+### `INTERFACE_VERSION`
+
+The client's interface (TOC) version number — `11200` on this client. This is
+the number the addon loader checks each addon's `## Interface:` line against,
+so it's the right value to compare a required version to. Read from the engine
+and re-published on every `/reload`.
+
+```lua
+if INTERFACE_VERSION >= 11200 then ... end
+```
+
 ### `LE_EXPANSION_*`
 
-The retail / Classic Era expansion-level enum, exposed as Lua globals
-so addons backporting from later expansions don't have to gate on
-`if LE_EXPANSION_CLASSIC then` (the constant being defined is itself
-the version probe). Values match the modern `Enum.ExpansionLevel`
-table. The matching helper functions
-(`GetClassicExpansionLevel` / `ClassicExpansionAtLeast` /
-`ClassicExpansionAtMost`) live in the [Expansion section](#expansion).
+The expansion-level enum, exposed as Lua globals so addons don't have to
+gate on `if LE_EXPANSION_CLASSIC then` (the constant being defined is
+itself the probe). Values match the `Enum.ExpansionLevel` table. The
+matching helper functions (`GetClassicExpansionLevel` /
+`ClassicExpansionAtLeast` / `ClassicExpansionAtMost`) live in the
+[Expansion section](#expansion).
 
 | Constant                              | Value |
 |---------------------------------------|------:|
@@ -4804,8 +7632,8 @@ end
 
 ### `LE_ITEM_QUALITY_*`
 
-The item-quality enum (modern `Enum.ItemQuality`), exposed as Lua
-globals so addons backporting modern code can do
+The item-quality enum (`Enum.ItemQuality`), exposed as Lua
+globals so addons can do
 `if quality >= LE_ITEM_QUALITY_RARE then ...` against the integer
 quality returned by `GetItemInfo` / `C_Item.GetItemInfoInstant`.
 
@@ -4817,15 +7645,15 @@ quality returned by `GetItemInfo` / `C_Item.GetItemInfoInstant`.
 | `LE_ITEM_QUALITY_RARE`         | `3`   | blue |
 | `LE_ITEM_QUALITY_EPIC`         | `4`   | purple |
 | `LE_ITEM_QUALITY_LEGENDARY`    | `5`   | orange |
-| `LE_ITEM_QUALITY_ARTIFACT`     | `6`   | gold *(TBC+ only)* |
-| `LE_ITEM_QUALITY_HEIRLOOM`     | `7`   | light blue *(WotLK+ only)* |
-| `LE_ITEM_QUALITY_WOWTOKEN`     | `8`   | orange *(WoD+ only)* |
+| `LE_ITEM_QUALITY_ARTIFACT`     | `6`   | gold |
+| `LE_ITEM_QUALITY_HEIRLOOM`     | `7`   | light blue |
+| `LE_ITEM_QUALITY_WOWTOKEN`     | `8`   | orange |
 
 Values 0..5 (POOR..LEGENDARY) correspond to actual qualities present
-in vanilla 1.12. Higher values are exposed for source compatibility
-with modern addons — vanilla items will never carry those quality
-values, so a comparison like `quality == LE_ITEM_QUALITY_HEIRLOOM`
-trivially never matches and the rest of the code path is unreachable.
+here. Higher values are exposed for source compatibility — items here
+will never carry those quality values, so a comparison like
+`quality == LE_ITEM_QUALITY_HEIRLOOM` trivially never matches and the
+rest of the code path is unreachable.
 
 ```lua
 local _, _, quality = GetItemInfo(itemID)
@@ -4836,7 +7664,7 @@ end
 
 ### `LE_UNIT_STAT_*`
 
-The primary-stat enum (modern `Enum.UnitStat`), exposed as Lua globals
+The primary-stat enum (`Enum.UnitStat`), exposed as Lua globals
 so addons can index `UnitStat(unit, statIndex)` symbolically:
 
 | Constant                | Value | Stat |
@@ -4899,7 +7727,7 @@ and the argument the `C_Item.GetItemInventorySlot*` functions take.
 
 Values `29..34` (`IndexProfessionToolType`, `IndexProfessionGearType`,
 `IndexEquipablespell{Offensive,Utility,Defensive,Weapon}Type`) are
-post-vanilla and included for parity — vanilla items never report them.
+included for parity — items here never report them.
 
 ```lua
 if C_Item.GetItemInventoryType(loc) == Enum.InventoryType.IndexHeadType then ...
@@ -4910,9 +7738,9 @@ if C_Item.GetItemInventoryType(loc) == Enum.InventoryType.IndexHeadType then ...
 The item-class enum — the numeric `classID` reported as the 12th return
 of [`GetItemInfo`](#c_itemgetiteminfoiteminfo) and taken by
 [`GetItemClassInfo`](#getitemclassinfoclassid) /
-[`GetItemSubClassInfo`](#getitemsubclassinfoclassid-subclassid). The
-numeric values match retail; the obsolete slots keep their modern key
-names even though `ItemClass.dbc` labels them `"…(OBSOLETE)"`.
+[`GetItemSubClassInfo`](#getitemsubclassinfoclassid-subclassid--c_itemgetitemsubclassinfoclassid-subclassid). The
+obsolete slots keep their key names even though `ItemClass.dbc` labels
+them `"…(OBSOLETE)"`.
 
 | Value | Field | Value | Field |
 |------:|-------|------:|-------|
@@ -4926,7 +7754,7 @@ names even though `ItemClass.dbc` labels them `"…(OBSOLETE)"`.
 | 7 | `Tradegoods` | 15 | `Miscellaneous` |
 
 Values `16..19` (`Glyph`, `Battlepet`, `WoWToken`, `Profession`) are
-post-vanilla and included for parity — vanilla items never report them.
+included for parity — items here never report them.
 
 ```lua
 if select(12, GetItemInfo(id)) == Enum.ItemClass.Weapon then ...
@@ -4945,20 +7773,29 @@ The item-quality enum — the numeric `quality` reported by
 | 2 | `Uncommon` | 6 | `Artifact` |
 | 3 | `Rare` | | |
 
-The post-vanilla `Heirloom` (7) and `WoWToken` (8) tiers are omitted —
-no such items exist on 1.12.
+The `Heirloom` (7) and `WoWToken` (8) tiers are omitted —
+no such items exist here.
 
 ```lua
 if select(3, GetItemInfo(id)) == Enum.ItemQuality.Epic then ...
 ```
 
+### `Enum.PlayerSwingType`
+
+The weapon that a [`PLAYER_SWING`](#player_swing-event) or
+[`C_SwingTimer`](#swingtimer) value applies to:
+
+| Value | Field      | Meaning |
+|------:|------------|---------|
+| `0`   | `MainHand` | The main-hand melee weapon. |
+| `1`   | `OffHand`  | The off-hand melee weapon, when one is equipped. |
+| `2`   | `Ranged`   | The ranged weapon: a bow, gun, crossbow, or wand. |
+
 ### `Enum.PowerType`
 
 The integer enum `UnitPowerType` returns and `UnitPower` /
-`UnitPowerMax` accept. Vanilla 1.12 only defines slots 0..4 — the
-WotLK additions (Runes, Runic Power) and post-WotLK extensions
-aren't included. Slot 4 is `Happiness` (vanilla pet happiness),
-not modern's `ComboPoints` reuse of the same number.
+`UnitPowerMax` accept. Only slots 0..4 are defined. Slot 4 is
+`Happiness` (pet happiness).
 
 | Value | Field        | Notes |
 |------:|--------------|-------|
@@ -4968,11 +7805,64 @@ not modern's `ComboPoints` reuse of the same number.
 | `1`   | `Rage`       | |
 | `2`   | `Focus`      | |
 | `3`   | `Energy`     | |
-| `4`   | `Happiness`  | Pet happiness — vanilla-specific. |
+| `4`   | `Happiness`  | Pet happiness. |
 
 ```lua
 local rage = UnitPower("player", Enum.PowerType.Rage)
 ```
+
+### `Enum.SpellBookSpellBank`
+
+Selects which spellbook a `C_SpellBook.*` slot query reads. Passed as the
+`spellBank` argument to
+[`C_SpellBook.GetSpellBookItemInfo`](#c_spellbookgetspellbookiteminfoslotindex-spellbank).
+
+| Value | Field    |
+|------:|----------|
+| `0`   | `Player` |
+| `1`   | `Pet`    |
+
+### `Enum.SpellBookItemType`
+
+Categorizes a spellbook slot. The spellbook only ever holds real
+spells, so `C_SpellBook.GetSpellBookItemInfo` returns `Spell` for a
+player-book slot and `PetAction` for a pet-book slot. The other values
+exist for signature parity but never occur.
+
+| Value | Field         | Notes |
+|------:|---------------|-------|
+| `0`   | `None`        | Empty slot. Never returned — an empty slot yields `nil` instead. |
+| `1`   | `Spell`       | A player-book spell. |
+| `2`   | `FutureSpell` | A not-yet-learned trainer spell. Never occurs. |
+| `3`   | `PetAction`   | A pet-book spell. |
+| `4`   | `Flyout`      | A flyout group. Never occurs. |
+
+### `Enum.UICursorType`
+
+What the cursor is holding. Reported as the `newCursorType` and
+`oldCursorType` arguments of
+[`CURSOR_CHANGED`](#cursor_changed-event).
+
+| Value | Field | Notes |
+|------:|-------|-------|
+| `0` | `Default` | Cursor empty. |
+| `1` | `Item` | |
+| `2` | `Money` | |
+| `3` | `Spell` | |
+| `4` | `PetAction` | |
+| `5` | `Merchant` | |
+| `6` | `ActionBar` | Never occurs. |
+| `7` | `Macro` | |
+| `8` | `Ammo` | Never occurs. |
+| `9` | `Pet` | A pet dragged in the stable. |
+| `10`-`20` | `GuildBank` … `PerksProgramVendorItem` | Never occur. |
+
+The values marked "never occur" name content this client does not have.
+They are still defined, so comparing against any field is valid.
+
+`PetAction` and `Pet` are the two types
+[`GetCursorInfo`](#getcursorinfo) returns `nil` for — no type string
+fits them, but the enum names them, so the event reports them.
 
 ## Glue
 
@@ -5017,20 +7907,19 @@ end
 
 ## Gossip
 
-Retail-shaped wrappers around vanilla's flat `GetGossipText` /
+Struct-shaped wrappers around the flat `GetGossipText` /
 `GetGossipOptions` / `GetGossipAvailableQuests` / `GetGossipActiveQuests`
 / `SelectGossipOption` / `SelectGossipAvailableQuest` /
 `SelectGossipActiveQuest` / `CloseGossip` surface. The data is the
 same — these calls just read the engine's two gossip-state arrays
 (`0x00BBBE90` for options, `0x00BB74C0` for quests, both filled by the
 SMSG_GOSSIP_MESSAGE handler at `0x004E26E0`) and shape it into the
-modern struct-tables that addons ported from retail expect.
+struct-tables that addons expect.
 
-**Fields the 1.12 server simply doesn't send** — and therefore aren't
-in any of the returned tables — include `rewards` and `spellID` (added
-after the post-vanilla quest/spell system rework), per-option
-`status` (Available / Unavailable / Locked / AlreadyComplete — vanilla
-servers don't compute this), and modern UX hints like `overrideIconID`
+**Fields the server simply doesn't send** — and therefore aren't
+in any of the returned tables — include `rewards` and `spellID`,
+per-option `status` (Available / Unavailable / Locked / AlreadyComplete
+— the server doesn't compute this), and UX hints like `overrideIconID`
 and `selectOptionWhenOnlyOption`.
 
 The `icon` field is the raw icon-type byte from SMSG_GOSSIP_MESSAGE
@@ -5065,7 +7954,7 @@ contains:
 
 | Field            | Type    | Notes |
 |------------------|---------|-------|
-| `gossipOptionID` | number  | Vanilla `optionIndex`. The same value `C_GossipInfo.SelectOption` expects; arbitrary integer assigned by the server. |
+| `gossipOptionID` | number  | The engine's `optionIndex`. The same value `C_GossipInfo.SelectOption` expects; arbitrary integer assigned by the server. |
 | `name`           | string  | Option text (locale-applied by the server). |
 | `icon`           | number  | Raw icon-type byte from SMSG_GOSSIP_MESSAGE — passed through unmapped so pserver-added types (anything past the default `0..10` range) survive. See the type table above for the default Blizzard categories and the `Interface\GossipFrame\<Type>GossipIcon` path each one resolves to. |
 | `flags`          | number  | Bit 0 set = `boxCoded` (the option asks for confirmation text — `Are you sure?` boxes). |
@@ -5080,7 +7969,7 @@ end
 ### `C_GossipInfo.GetAvailableQuests()`
 
 Returns an array of deliverable-quest tables (quests the giver is
-offering to start), in display order. Filter mirrors vanilla's
+offering to start), in display order. Filter mirrors the engine's
 `GetGossipAvailableQuests` — status field at `+0x008` not in `{3, 4}`.
 
 | Field        | Type   | Notes |
@@ -5109,18 +7998,18 @@ above without building the table.
 
 ### `C_GossipInfo.SelectOption(gossipOptionID)` / `SelectOptionByIndex(orderIndex)`
 
-Picks a gossip option. `SelectOption` resolves the modern
-`gossipOptionID` to vanilla's 1-based slot, then tail-calls the
+Picks a gossip option. `SelectOption` resolves the
+`gossipOptionID` to the engine's 1-based slot, then tail-calls the
 engine's native `SelectGossipOption`. `SelectOptionByIndex` is a thin
 passthrough for callers that already have the slot index (e.g. from
 `opt.orderIndex` on a `GetOptions()` entry, or from a UI button bound
 directly to the slot).
 
 Both end in the same CMSG; the option-ID variant exists so addons can
-drive selections off the modern `gossipOptionID` key without keeping
+drive selections off the `gossipOptionID` key without keeping
 their own slot mapping. Returns nothing.
 
-Vanilla's `SelectGossipOption` doesn't accept a confirmation-text
+The stock `SelectGossipOption` doesn't accept a confirmation-text
 argument, so for `boxCoded` options the engine's own confirm dialog
 runs as usual — there is no way to send the password from the script.
 
@@ -5146,7 +8035,7 @@ Closes the gossip window. Direct passthrough to the engine's
 
 ### `hooksecurefunc(name, callback)` / `hooksecurefunc(table, name, callback)`
 
-Modern post-call hook: the original function runs first, then
+Post-call hook: the original function runs first, then
 `callback` runs with the same args (return values discarded). The
 original's return values propagate to the caller.
 
@@ -5161,11 +8050,10 @@ hooksecurefunc(GameTooltip, "SetInventoryItem", function(self, unit, slot)
 end)
 ```
 
-The "secure" label refers to taint-propagation behavior introduced in
-2.0 for protected-frame manipulation. Vanilla 1.12 has no taint
-system, so the function is functionally equivalent to a plain
-"after-hook" — just preserves modern API parity for addons being
-backported from later expansions.
+The "secure" label refers to taint-propagation behavior for
+protected-frame manipulation. There is no taint system here, so the
+function is equivalent to a plain "after-hook" — the name is kept for
+API parity.
 
 Implemented in pure C: builds a Lua C closure with `(orig, callback)`
 as upvalues; the wrapper calls orig with `LUA_MULTRET`, then callback,
@@ -5177,12 +8065,21 @@ Errors via `lua_error` on:
 - Non-function `callback`
 - `target[name]` not resolvable to a function (covers typos and
   hooking unknown frame methods)
+- The two-argument form naming a function that cannot be hooked on `_G`
+  (error `hooksecurefunc: function is unhookable`): `getfenv`,
+  `getmetatable`, `hooksecurefunc`, `ipairs`, `issecurevalue`,
+  `issecurevariable`, `next`, `pairs`, `pcall`, `pcallwithenv`, `rawget`,
+  `rawset`, `scrub`, `securecall`, `securecallfunction`,
+  `secureexecuterange`, `select`, `setfenv`, `setmetatable`, `type`,
+  `unpack`, `wipe`, `xpcall`. This is the same list the current client
+  enforces. The three-argument form is not restricted, even with `_G` as
+  the table.
 
 ## Input
 
-1.12 ships `IsShiftKeyDown` / `IsControlKeyDown` / `IsAltKeyDown` but
-they only report "any shift/ctrl/alt" — there's no built-in way to tell
-left from right. These seven functions add the missing distinction
+The engine ships `IsShiftKeyDown` / `IsControlKeyDown` / `IsAltKeyDown`
+but they only report "any shift/ctrl/alt" — there's no built-in way to
+tell left from right. These seven functions add the missing distinction
 plus an `IsModifierKeyDown()` rollup.
 
 ### `IsLeftShiftKeyDown()` / `IsRightShiftKeyDown()`
@@ -5190,7 +8087,7 @@ plus an `IsModifierKeyDown()` rollup.
 ### `IsLeftAltKeyDown()` / `IsRightAltKeyDown()`
 
 Each returns `1` when the corresponding key is physically down, `nil`
-otherwise — matching the convention 1.12's own `IsShiftKeyDown` etc.
+otherwise — matching the convention the stock `IsShiftKeyDown` etc.
 use.
 
 ```lua
@@ -5222,9 +8119,8 @@ mouse button is held.
 | `4` | `"Button4"` (XBUTTON1 / first side button) |
 | `5` | `"Button5"` (XBUTTON2 / second side button) |
 
-Unrecognized IDs / names return `false` (matches modern semantics:
-the named button just isn't held — bad input doesn't fall through
-to the any-button check).
+Unrecognized IDs / names return `false` (the named button just isn't
+held — bad input doesn't fall through to the any-button check).
 
 State is maintained from the same `WH_GETMESSAGE` hook that drives
 `GLOBAL_MOUSE_DOWN` / `GLOBAL_MOUSE_UP`, so press/release transitions
@@ -5243,27 +8139,26 @@ end
 
 ### `GetMouseButtonClicked()`
 
-Returns the name of the button responsible for the mouse handler
-currently running (`"LeftButton"`, `"RightButton"`, `"MiddleButton"`,
-`"Button4"`, `"Button5"`), or `nil` when no click is being handled.
+Returns the name of the mouse button that started the handler that is
+now running. It works inside these handlers, on any frame:
+`OnMouseDown`, `OnMouseUp`, `PreClick`, `OnClick`, `PostClick`, and
+`OnDoubleClick`. At any other time it returns `nil`.
 
-Modern addons call this inside a mouse handler (`OnClick`,
-`OnMouseDown`, `OnMouseUp`, `OnDragStart`, …) to learn which button
-drove it — an alternative to reading vanilla's `arg1`, and readable
-from nested helper functions where `arg1` isn't in scope. The value
-is captured by the same `WH_GETMESSAGE` hook behind
-`GLOBAL_MOUSE_DOWN` / `GLOBAL_MOUSE_UP`, then evicted a couple of
-frames later so — matching the real API — it reads `nil` outside a
-handler rather than lingering as the last click forever.
+A helper function that the handler calls can also read the name.
+`arg1` is not in scope there.
 
-The button stays readable for the whole frame its click lands in (so
-multiple addons hooking the same `OnClick` all see it), and while a
-button is physically held (so `OnDragStart` reads it). It is a
-best-effort replica: WoW dispatches these handlers deferred from the
-OS message, so eviction is time-based (per-frame) rather than exactly
-bracketed around the handler as on retail. Values can therefore
-linger ~2 frames past a click — harmless, since it's only meaningful
-inside a mouse handler.
+The name is one of `"LeftButton"`, `"MiddleButton"`, `"RightButton"`,
+`"Button4"`, or `"Button5"`. A `Button:Click()` call with no argument
+gives `"LeftButton"`. A `Button:Click(name)` call with any other name
+gives `"UNKNOWN"`.
+
+`OnDragStart` is not in the list above. In `OnDragStart` this function
+returns `nil`, and `arg1` holds the button.
+
+The name is valid only while the handler runs. A held mouse button does
+not keep it set. If a handler clicks a
+second button, the name of that inner click applies until the inner
+handler ends. Then the outer name comes back.
 
 ```lua
 button:SetScript("OnClick", function()
@@ -5277,9 +8172,8 @@ end)
 
 ### `GetInstanceInfo()`
 
-Returns the same 9-value tuple modern WoW does (TBC and later), with
-vanilla-degenerate values for the fields the 1.12 client doesn't
-actually track:
+Returns a 9-value tuple, with degenerate values for the fields this
+client doesn't actually track:
 
 ```
 name, instanceType, difficultyID, difficultyName, maxPlayers,
@@ -5288,19 +8182,17 @@ dynamicDifficulty, isDynamic, instanceID, instanceGroupSize
 
 - `name` — localized instance/zone name from `Map.dbc`.
 - `instanceType` — `"none"` (open world), `"party"` (5-man dungeon),
-  `"raid"`, `"pvp"` (battleground), or `"arena"` (unused in vanilla).
-- `difficultyID` — always `1`. No heroic mode pre-TBC.
+  `"raid"`, `"pvp"` (battleground), or `"arena"` (unused).
+- `difficultyID` — always `1`. There is no heroic mode.
 - `difficultyName` — always `"Normal"`.
 - `maxPlayers` — type-default cap: `5` for dungeons, `40` for raids,
   `40` for battlegrounds, `0` for open world. **See caveat below.**
-- `dynamicDifficulty` — always `0` (dynamic difficulty was a Cataclysm
-  addition).
+- `dynamicDifficulty` — always `0`.
 - `isDynamic` — always `false`.
-- `instanceID` — current map ID. Modern API calls this "instanceID" but
-  it's really the `Map.dbc` row ID — both vanilla and modern WoW put
-  the same value here.
+- `instanceID` — current map ID. The field is named "instanceID" but
+  it's really the `Map.dbc` row ID.
 - `instanceGroupSize` — mirrors `maxPlayers` (no per-group-config
-  variants in vanilla).
+  variants).
 
 ```lua
 /dump GetInstanceInfo()
@@ -5309,9 +8201,9 @@ dynamicDifficulty, isDynamic, instanceID, instanceGroupSize
 -- In Molten Core:  "Molten Core","raid", 1, "Normal", 40, 0, false, 409, 40
 ```
 
-**Caveat on `maxPlayers`.** Vanilla genuinely has no per-instance cap
-data client-side — `MapDifficulty.dbc` was a TBC addition. The server
-enforces caps via `SMSG_TRANSFER_ABORTED` when entry is denied, but
+**Caveat on `maxPlayers`.** There is no per-instance cap data
+client-side. The server enforces caps via `SMSG_TRANSFER_ABORTED` when
+entry is denied, but
 that information never reaches the client otherwise. So we return the
 type's canonical max. **Zul'Gurub and AQ20 return `40` instead of
 their true `20`; non-AV battlegrounds (WSG `10`, AB `15`) return `40`
@@ -5324,7 +8216,7 @@ that need exact caps must supply their own per-mapID table.
 > ### `itemLocation` argument shapes
 >
 > Every `C_Item.*` function on this page that takes `itemLocation` accepts
-> any of three forms, matching the modern `ItemLocation` mixin plus a
+> any of three forms — the `ItemLocation` mixin shapes plus a
 > GUID-string convenience form:
 >
 > ```lua
@@ -5361,25 +8253,37 @@ if C_Item.DoesItemExist({equipmentSlotIndex = INVSLOT_HEAD}) then ... end
 if C_Item.DoesItemExistByID(6948) then ... end
 ```
 
-### `C_Item.EquipItemByName(itemInfo [, dstSlot])`
+### `C_Item.EquipItemByName(item [, dstSlot])`
 
-Finds the first item in the player's bags matching `itemInfo` and
-equips it. With `dstSlot` (a 1-based character-pane slot, 1..19),
+Equips `item`. With `dstSlot` (a 1-based character-pane slot, 1..19),
 equips to that specific slot; without, the engine auto-picks based on
 the item's inventory type.
 
-`itemInfo` accepts the same shapes as
-[`C_Item.IsEquippedItem`](#c_itemisequippeditemitem) — itemID number,
-bare `"item:N"` string, full chat link, or a localized item name. Name
-matching is case-insensitive against each candidate's *decorated* name
-(random suffix included — a suffixed item matches its full name, not the
-base), the same shared predicate `C_Item.IsEquippedItem` uses.
+`item` takes either of two forms:
+
+- An item **reference**: an itemID number, bare `"item:N"` string, a full
+  chat link, or a localized item name — the shapes
+  [`C_Item.IsEquippedItem`](#c_itemisequippeditemitem) takes. The first
+  matching item in your bags is equipped. Name matching is case-insensitive
+  against each candidate's *decorated* name (random suffix included — a
+  suffixed item matches its full name, not the base), the same shared
+  predicate `C_Item.IsEquippedItem` uses.
+- An item **location**: `{bagID = B, slotIndex = S}`,
+  `{equipmentSlotIndex = N}`, or an item GUID string — the shapes
+  [`C_Item.GetItemID`](#c_itemgetitemiditemlocation) takes. A location names
+  one exact item, so use it when you hold two of the same item with
+  different enchants or suffixes and which one you equip matters.
+
+An `{equipmentSlotIndex = N}` location names an item you are already
+wearing, so it needs a `dstSlot` to move to: that is how you swap rings
+(11 ↔ 12), trinkets (13 ↔ 14) or weapons (16 ↔ 17). Without `dstSlot` there
+is nothing for the engine to pick, and the call does nothing.
 
 Returns nothing. Silently no-ops when:
 
 - the input is `nil`, an empty string, or otherwise unparseable
-- no matching item is in bags (already-equipped items aren't moved —
-  matches modern API behavior)
+- you do not have the item; a reference searches your bags only, so an
+  item you are already wearing is only reachable by location
 - the engine refuses the equip — combat, locked item, type mismatch
   with `dstSlot`, locked equipment slot, etc.
 
@@ -5396,10 +8300,12 @@ Two paths based on `dstSlot`:
   stays on the cursor.
 - **No `dstSlot` (engine auto-picks slot from inventory type):**
   falls back to the cursor-pickup + `AutoEquipCursorItem` path
-  because 1.12's auto-pick logic reads off cursor state. For this
-  path only, the function refuses to operate (no-op) when
-  `CursorHasItem()` is already true, to avoid clobbering whatever's
-  held.
+  because the auto-pick logic reads off cursor state.
+
+Both paths first return anything on the cursor to the slot it came from, so
+a held item is neither clobbered nor left visually locked. The item is
+resolved after that, which means a location naming the slot a held item came
+from still finds it — while held, that slot reads empty.
 
 ```lua
 -- By itemID, auto-pick slot:
@@ -5410,17 +8316,22 @@ C_Item.EquipItemByName("Linen Cloth", 17)
 
 -- From a chat link:
 C_Item.EquipItemByName(itemLink)
+
+-- That exact bag slot, auto-pick where it goes:
+C_Item.EquipItemByName({ bagID = 0, slotIndex = 1 })
+
+-- Move the main-hand weapon to the off-hand:
+C_Item.EquipItemByName({ equipmentSlotIndex = 16 }, 17)
 ```
 
 ### `C_Item.GetCurrentItemLevel(itemLocation)` / `C_Item.GetDetailedItemLevelInfo(item)`
 
 Returns the item's base ilvl from `m_itemLevel` (cache record `+0x38`).
-Vanilla 1.12 has no per-instance scaling (no upgrades, no warforging),
-so "current" and "base" item level are always identical — both APIs
-return the same single value. Modern `GetDetailedItemLevelInfo` is
-spec'd to return `(current, isPreview, base)`; we push only the
-current level, callers that care about the extra returns will see
-`nil` for them.
+There is no per-instance scaling (no upgrades, no warforging), so
+"current" and "base" item level are always identical — both APIs
+return the same single value. `GetDetailedItemLevelInfo` is spec'd to
+return `(current, isPreview, base)`; we push only the current level,
+callers that care about the extra returns will see `nil` for them.
 
 ```lua
 local ilvl = C_Item.GetCurrentItemLevel({equipmentSlotIndex = INVSLOT_HEAD})
@@ -5435,9 +8346,10 @@ bags, and optionally bank.
 count = C_Item.GetItemCount(itemInfo [, includeBank [, includeUses]])
 ```
 
-- `itemInfo` — numeric `itemID` or string containing `"item:NNN"`
-  (full chat links work). Item names are NOT accepted (vanilla has
-  no name → ID resolver).
+- `itemInfo` — a numeric `itemID`, a string that contains `"item:NNN"`
+  (full chat links work), or an item name. A name is compared, without
+  regard to case, with the full name of each item that you carry (the
+  suffix included, so `"Foo of the Owl"` matches and `"Foo"` does not).
 - `includeBank` *(optional, default false)* — also walk bank slots
   (bag `-1` for the main bank, bags `5..10` for bank-bag slots).
 - `includeUses` *(optional, default false)* — when `true`, multiplies
@@ -5449,6 +8361,7 @@ count = C_Item.GetItemCount(itemInfo [, includeBank [, includeUses]])
 local n = C_Item.GetItemCount(2589)               -- Linen Cloth in bags + equipped
 local n = C_Item.GetItemCount(2589, true)         -- + bank
 local n = C_Item.GetItemCount("item:2589")        -- string form works too
+local n = C_Item.GetItemCount("Linen Cloth")      -- by name
 
 -- Equipped items count toward the total:
 local trinketID = GetInventoryItemID("player", INVSLOT_TRINKET1)
@@ -5459,7 +8372,7 @@ C_Item.GetItemCount(wandID, false, true)          -- 50 for one 50-charge wand
 C_Item.GetItemCount(linenID, false, true)         -- same as stack count (no charges)
 ```
 
-> **Bank works cold — no banker visit required.** The 1.12 server
+> **Bank works cold — no banker visit required.** The server
 > sends bank inventory at login alongside the rest of the player's
 > data; only the engine's own `GetItemBySlot` gates bank slots until
 > the window opens. We bypass that gate by reading the GUID array
@@ -5478,8 +8391,7 @@ directly off the CGItem's m_objectFields descriptor at +0x20
 (`ITEM_FIELD_STACK_COUNT`, verified by decoding
 `Script_GetContainerItemInfo` at `0x004F9670`).
 
-Equivalent to the legacy global `GetItemCount` (since 3.0) and the
-modern `C_Item.GetItemCount` introduced in 10.x.
+Equivalent to the global `GetItemCount` and `C_Item.GetItemCount`.
 
 ### `C_Item.GetItemData(itemLocation)` / `C_Item.GetItemDataByID(item)`
 
@@ -5527,7 +8439,7 @@ Returned table:
 | `maxStackSize` | number | `m_stackable`. |
 | `maxCount` | number | `m_maxCount` — 0=unlimited, 1=unique, otherwise per-character cap. |
 | `containerSlots` | number | `m_containerSlots` — bag slot count, 0 for non-bags. |
-| `bagFamily` | number | `m_bagFamily` converted to modern bitmask (`1 << (id-1)`). |
+| `bagFamily` | number | `m_bagFamily` converted to a bitmask (`1 << (id-1)`). |
 | `buyPrice` | number | Vendor buy price in copper. |
 | `sellPrice` | number | Vendor sell price in copper. |
 | `itemLevel` | number | Base ilvl from `ItemSparse`. |
@@ -5536,7 +8448,7 @@ Returned table:
 | `requiredSkillRank` | number | Skill rank required. |
 | `requiredSpell` | number | `Spell.dbc` row required to learn / use, 0=none. |
 | `requiredHonorRank` | number | PvP honor rank required, 0=none. |
-| `requiredCityRank` | number | Reserved; 0 for vanilla. |
+| `requiredCityRank` | number | Reserved; always 0 here. |
 | `requiredFaction` | number | `Faction.dbc` row, 0=none. |
 | `requiredFactionRank` | number | Reputation tier (Friendly/Honored/…). |
 | `allowableClass` | number | Class bitmask, `-1` = all classes. |
@@ -5595,7 +8507,7 @@ prefetch before `PLAYER_ENTERING_WORLD` returns; for other items
 the load.
 
 **Stats encoding.** The `stats` table is keyed by the **ItemModType**
-enum (vanilla's encoding):
+enum:
 
 | Key | Meaning |
 |-----|---------|
@@ -5609,14 +8521,13 @@ enum (vanilla's encoding):
 
 Higher-numbered slots (consumable per-second-regen, defense rating,
 hit/crit/dodge/parry chance, weapon/spell-power) only appear on items
-the server actually carries — vanilla 1.12 mostly uses 0..7. Empty
+the server actually carries — items here mostly use 0..7. Empty
 slots (both type and value zero) are omitted, so iterating `stats`
 yields only the stats actually allocated.
 
-No equivalent in modern WoW — `GetItemInfo` returns the 14-tuple
-piecemeal and `C_Item.GetItemInfo` adds a few more. ClassicAPI's
-`GetItemData` is a single-call superset useful for backporting tooltip
-addons and item-data caches.
+A ClassicAPI-only reader — `GetItemInfo` returns its tuple piecemeal and
+`C_Item.GetItemInfo` adds a few more. `GetItemData` is a single-call
+superset useful for tooltip addons and item-data caches.
 
 ### `C_Item.GetItemFamily(item)`
 
@@ -5640,10 +8551,10 @@ C_Item.GetItemFamily(2447)   -- 32  (Peacebloom → herb bag-family)
 C_Item.GetItemFamily(6948)   -- 0   (Hearthstone → general-purpose)
 ```
 
-Bitmask values follow the vanilla `ItemBagFamily.dbc` IDs converted to
-the modern bitmask form (`1 << (familyID - 1)`). The IDs 1–9 match
-retail exactly; **10–13 are Turtle WoW custom families** (retail vanilla
-1.12 stops at Keys):
+Bitmask values follow the `ItemBagFamily.dbc` IDs converted to
+the bitmask form (`1 << (familyID - 1)`). The IDs 1–9 are the standard
+families; **10–13 are Turtle WoW custom families** (the stock client
+stops at Keys):
 
 | Bit | Value  | Raw ID | Family                | Notes |
 |-----|--------|--------|-----------------------|-------|
@@ -5654,33 +8565,32 @@ retail exactly; **10–13 are Turtle WoW custom families** (retail vanilla
 | 6   | 64     | 7      | Enchanting Bag        | |
 | 7   | 128    | 8      | Engineering Bag       | |
 | 8   | 256    | 9      | Keyring               | |
-| 9   | 512    | 10     | **Meat Bag** (Turtle) | ⚠ collides with retail's Gem Bag (`0x200`) |
-| 10  | 1024   | 11     | **Fish Bag** (Turtle) | ⚠ collides with retail's Mining Bag (`0x400`) |
-| 11  | 2048   | 12     | **Leather Bag** (Turtle) | no retail equivalent bit |
-| 12  | 4096   | 13     | **Mining Bag** (Turtle)  | ⚠ not retail's Mining Bag bit (`0x400`) |
+| 9   | 512    | 10     | **Meat Bag** (Turtle) | ⚠ collides with the standard Gem Bag bit (`0x200`) |
+| 10  | 1024   | 11     | **Fish Bag** (Turtle) | ⚠ collides with the standard Mining Bag bit (`0x400`) |
+| 11  | 2048   | 12     | **Leather Bag** (Turtle) | no standard equivalent bit |
+| 12  | 4096   | 13     | **Mining Bag** (Turtle)  | ⚠ not the standard Mining Bag bit (`0x400`) |
 
-> **Turtle custom families & the retail collision.** Turtle added four
+> **Turtle custom families & the bit collision.** Turtle added four
 > cooking/gathering bag families (Meat, Fish, Leather, Mining) as
-> `ItemBagFamily.dbc` rows 10–13, rather than reusing retail's later
-> IDs 4 (Leatherworking) / 5 (Inscription), which vanilla left unused.
+> `ItemBagFamily.dbc` rows 10–13, rather than reusing the standard later
+> IDs 4 (Leatherworking) / 5 (Inscription), which this client left unused.
 > Because we convert the raw ID straight through `1 << (rawID - 1)`,
-> these land on bits 9–12 — the same numeric values retail assigned to
-> **Gem Bag** (`0x200`) and **Mining Bag** (`0x400`). So an addon
-> backported from retail that hard-codes `family == 0x200` to mean "Gem
+> these land on bits 9–12 — the same numeric values assigned to
+> **Gem Bag** (`0x200`) and **Mining Bag** (`0x400`) elsewhere. So an addon
+> that hard-codes `family == 0x200` to mean "Gem
 > Bag" will misread a Turtle Meat Bag. The values are self-consistent
 > *within* Turtle (a Meat Bag and the meat items it holds both report
 > `0x200`, which is all the "does this item fit this bag" test needs) —
-> just don't assume retail's bit meanings for anything above `0x100`.
+> just don't assume the standard bit meanings for anything above `0x100`.
 
-> **Encoding deviation under the hood.** 1.12 actually stores the raw
+> **Encoding under the hood.** The engine stores the raw
 > 1-based BagFamily ID (`arrow=1, bullet=2, soul shard=3, herb=6, …`).
-> Modern WoW (Wrath+) flipped to the bitmask form for the same field.
 > We convert on the way out via `bitmask = 1 << (rawID - 1)`, so
-> callers backporting from modern see the encoding they expect — addons
+> callers see the bitmask encoding they expect — addons
 > can `band(family, FAMILY_BAG_HERB_BAG)` directly.
 
 > **Legacy Blizzard bags derive from `(class, subClass)`.** The stock
-> vanilla bags shipped with an empty `m_bagFamily` field — the four
+> bags shipped with an empty `m_bagFamily` field — the four
 > profession bags (Soul Bag, Herb Bag, Enchanting Bag, Engineering Bag,
 > all Container class) *and* quivers/ammo pouches (Quiver class). For a
 > bag whose field is `0` we recover the family from its class + subclass
@@ -5694,33 +8604,30 @@ retail exactly; **10–13 are Turtle WoW custom families** (retail vanilla
 > Turtle-specific resolver module supplies their mapping as a safety net,
 > kept separate from the stock table.)
 
-> **`nil` vs `0`.** Modern WoW returns `0` for items the cache lookup
-> fails on; we return `nil` so callers can distinguish "item not
-> cached, retry after the event lands" from "item exists but has no
-> family preference." Both are safe to treat as `0` for routing-logic
-> purposes; the distinction helps debugging.
+> **`nil` vs `0`.** We return `nil` (not `0`) for items the cache lookup
+> fails on, so callers can distinguish "item not cached, retry after the
+> event lands" from "item exists but has no family preference." Both are
+> safe to treat as `0` for routing-logic purposes; the distinction helps
+> debugging.
 
 > **Auto-warmup on cache miss.** First call for an uncached item
 > returns `nil` AND triggers the engine's cache fill in the
 > background. Listen for `GET_ITEM_INFO_RECEIVED(itemID, success)` and
-> retry once the matching `itemID` arrives. This matches Classic Era
-> 1.15's observed behavior of "nil first call, value second call." We
-> diverge from 1.15 in one detail: 1.15's `GetItemFamily` doesn't fire
-> any event when the cache lands (silent fill), whereas we fire
-> `GET_ITEM_INFO_RECEIVED` to stay consistent with our other implicit-
-> warmup paths (`GetItemInfo`, `SetItemByID`). Addons that already
-> listen for that event get the notification for free.
+> retry once the matching `itemID` arrives — "nil first call, value
+> second call." We fire `GET_ITEM_INFO_RECEIVED` when the cache lands, to
+> stay consistent with our other implicit-warmup paths (`GetItemInfo`,
+> `SetItemByID`). Addons that already listen for that event get the
+> notification for free.
 
-Equivalent to the legacy global `GetItemFamily` (since 3.0) and the
-modern `C_Item.GetItemFamily` introduced in 10.x.
+Equivalent to the global `GetItemFamily` and `C_Item.GetItemFamily`.
 
 ### `C_Item.GetItemGUID(itemLocation)`
 
 Returns the per-instance 64-bit GUID of the item at the location,
 formatted as `"0xHHHHHHHHLLLLLLLL"` (16 hex digits, hi dword first).
-Same format `UnitGUID` uses — 1.12 GUIDs are plain qwords with no
-`"Item-Server-..."`-style prefix scheme (modern's prefix format
-arrived in 6.x). Returns `nil` for empty / invalid locations.
+Same format `UnitGUID` uses — GUIDs are plain qwords with no
+`"Item-Server-..."`-style prefix scheme. Returns `nil` for empty /
+invalid locations.
 
 ```lua
 local guid = C_Item.GetItemGUID({equipmentSlotIndex = INVSLOT_HEAD})
@@ -5752,10 +8659,10 @@ end
 
 ### `C_Item.GetItemInfo(itemInfo)`
 
-The full modern `GetItemInfo` tuple, sourced from the client-side item cache
+The full `GetItemInfo` tuple, sourced from the client-side item cache
 plus the class/subclass/inventory-type DBC name lookups. The namespaced
-counterpart to the stock global `GetItemInfo` (which returns only vanilla's
-short tuple); this returns the wide modern set backported addons expect.
+counterpart to the stock global `GetItemInfo` (which returns only a
+short tuple); this returns the wide set.
 
 Accepts a numeric `itemID`, an `"item:NNN"` string, or a full chat link.
 
@@ -5772,21 +8679,20 @@ Returns 18 values:
 | 7 | `itemSubType` | localized subclass name (e.g. "Sword") |
 | 8 | `itemStackCount` | max stack size |
 | 9 | `itemEquipLoc` | `INVTYPE_*` token, `""` for non-equippable |
-| 10 | `itemTexture` | icon **path** (1.12 has no fileID system) |
+| 10 | `itemTexture` | icon **path** (no fileID system here) |
 | 11 | `sellPrice` | vendor sell price in copper |
 | 12 | `classID` | |
 | 13 | `subclassID` | |
 | 14 | `bindType` | 0 none / 1 BoP / 2 BoE / 3 BoU / 4 quest |
 | 15 | `expansionID` | always `0` (classic) |
 | 16 | `setID` | item-set ID, `nil` if none |
-| 17 | `isCraftingReagent` | always `false` (no such flag in 1.12 data) |
+| 17 | `isCraftingReagent` | always `false` (no such flag in the item data) |
 | 18 | `itemDescription` | item flavor/description text (`""` if none) |
 
 **Asynchronous on a cache miss:** if the item isn't cached yet it returns
 nothing (nil) and warms the cache; the value lands on a retry after
-`GET_ITEM_INFO_RECEIVED` fires — same contract as the stock `GetItemInfo`
-and modern clients. Fields 4–18 are the ones the vanilla global never
-returned.
+`GET_ITEM_INFO_RECEIVED` fires — same contract as the stock `GetItemInfo`.
+Fields 4–18 are the ones the stock global never returned.
 
 ```lua
 local name, link, quality, ilvl, minLevel, itype, isub, stack, equipLoc,
@@ -5796,15 +8702,15 @@ local name, link, quality, ilvl, minLevel, itype, isub, stack, equipLoc,
 
 ### `C_Item.GetItemInfoInstant(item)`
 
-Modern-style accessor for the always-available subset of item info — the
-fields that depend only on classification, not on player-specific state.
-Synchronous, side-effect-free: peeks the client-side item cache and
-returns whatever it has without warming or queueing.
+Accessor for the always-available subset of item info — the fields that
+depend only on classification, not on player-specific state. Synchronous,
+side-effect-free: peeks the client-side item cache and returns whatever
+it has without warming or queueing.
 
 Accepts a numeric `itemID` or a string containing `"item:NNN"` (matches both
 the bare `"item:1234"` shorthand and full chat links like
 `"|cff...|Hitem:1234:...|h[Name]|h|r"`). Item names are not accepted —
-vanilla itself has no name → ID resolver, and it's rarely the form addon code
+there is no name → ID resolver, and it's rarely the form addon code
 actually has on hand.
 
 Returns seven values:
@@ -5826,8 +8732,8 @@ positional shape is preserved.
 - `itemEquipLoc` is the `"INVTYPE_*"` constant (e.g. `"INVTYPE_HEAD"`), or
   `""` for non-equippable items.
 - `icon` is a path string (`"Interface\\Icons\\..."`), matching what the
-  rest of the 1.12 API returns. Modern WoW returns a numeric fileID here,
-  but 1.12 has no fileID system, so a path is the only meaningful value.
+  rest of the API returns. There is no fileID system here, so a path is
+  the only meaningful value.
 - `classID` / `subClassID` are the raw enum integers (e.g. `2`, `7` for
   one-handed swords).
 
@@ -5842,9 +8748,9 @@ local id = C_Item.GetItemInfoInstant("|cff...|Hitem:6948:0:0:0|h[Hearthstone]|h|
 -- to extract the ID without consulting the cache.
 ```
 
-The actual class/subclass values reflect 1.12.1's data, which differs from
-modern WoW. For example, vanilla had no Cloth subclass under Trade Goods —
-Silk Cloth lives at `(7, 0)` in this client, not the modern `(7, 5)`.
+The actual class/subclass values reflect this client's data. For example,
+there is no Cloth subclass under Trade Goods — Silk Cloth lives at
+`(7, 0)` in this client, not `(7, 5)`.
 
 > **No auto-warmup.** Unlike `GetItemInfo` or `C_Item.GetItemNameByID`,
 > `GetItemInfoInstant` does not trigger a network query on a cache
@@ -5889,12 +8795,10 @@ record's `m_inventoryType` field (`+0x2C`) — the integer sibling of
 | 26    | `INVTYPE_RANGEDRIGHT` | ranged                       |
 | 27    | `INVTYPE_QUIVER`      | quiver/ammo pouch            |
 
-Vanilla items only produce values `0..28`; the higher modern
-constants (`INVTYPE_PROFESSION_*`, `INVTYPE_EQUIPABLESPELL_*`, etc.)
-were introduced post-vanilla and are never returned. Modern
-backport code that compares against the higher enum values still
-resolves correctly because vanilla items just don't carry those
-types.
+Items here only produce values `0..28`; the higher constants
+(`INVTYPE_PROFESSION_*`, `INVTYPE_EQUIPABLESPELL_*`, etc.) are never
+returned. Code that compares against the higher enum values still
+resolves correctly because items here just don't carry those types.
 
 ```lua
 local t = C_Item.GetItemInventoryTypeByID(19019)  -- Thunderfury: 17 = INVTYPE_2HWEAPON
@@ -5939,10 +8843,9 @@ local loc = C_Item.GetItemLocation(guid)
 -- loc might now be { bagID = 1, slotIndex = 4 }, or nil if sold
 ```
 
-Modern WoW returns an `ItemLocation` mixin object; we return a plain
-table with the same field shape every other `C_Item.*` API in
-ClassicAPI accepts as input (`{equipmentSlotIndex=N}` or
-`{bagID=B, slotIndex=S}`), so the result pipes straight into
+We return a plain table with the same field shape every other
+`C_Item.*` API in ClassicAPI accepts as input (`{equipmentSlotIndex=N}`
+or `{bagID=B, slotIndex=S}`), so the result pipes straight into
 `C_Item.GetItemQuality(loc)`, `C_Item.GetItemLink(loc)`, etc.
 
 **Walked scope.** Character-pane equipment (slots 1..19) + backpack
@@ -5982,7 +8885,7 @@ uncached / invalid inputs.
 The **location** form points at a live item instance, so it returns the
 *decorated* name — random suffix included (`"Iridium Chain of the Owl"`,
 not the base `"Iridium Chain"`) — built off the `CGItem` via the engine's
-own name builder, matching modern WoW and the bracketed name in
+own name builder, matching the bracketed name in
 [`C_Item.GetItemLink`](#c_itemgetitemlinkitemlocation). (It falls back to
 the base `ItemStats_C.m_name[0]` name if the instance build yields
 nothing.)
@@ -6015,8 +8918,8 @@ end
 
 Returns the vendor sell price in copper, **per unit** (multiply by
 stack count for the per-stack value). Matches the 11th return of
-modern WoW's `GetItemInfo`. Returns `nil` on cache miss / invalid
-input. Cache miss fires a background fill so a follow-up call after
+`GetItemInfo`. Returns `nil` on cache miss / invalid input. Cache miss
+fires a background fill so a follow-up call after
 `GET_ITEM_INFO_RECEIVED` returns the value.
 
 ```lua
@@ -6024,11 +8927,10 @@ local unit = C_Item.GetItemSellPriceByID(2589)   -- Linen Cloth → 25 (copper)
 local stack = unit * C_Item.GetItemMaxStackSizeByID(2589)
 ```
 
-Single `uint32` read at cache record `+0x28` (`m_sellPrice`). Vanilla
-1.12 doesn't surface this in tooltips — the field is populated on
-every sellable item but the engine's tooltip code never reads it —
-so this function exposes data that's been sitting in the cache
-unused.
+Single `uint32` read at cache record `+0x28` (`m_sellPrice`). Tooltips
+don't surface this — the field is populated on every sellable item but
+the engine's tooltip code never reads it — so this function exposes data
+that's been sitting in the cache unused.
 
 ### `C_Item.GetItemSetID(itemLocation)` / `C_Item.GetItemSetIDByID(item)`
 
@@ -6045,7 +8947,7 @@ local setID = C_Item.GetItemSetIDByID(6948)    -- Hearthstone: nil
 local chestSet = C_Item.GetItemSetID({ equipmentSlotIndex = 5 })
 ```
 
-This is the 16th return of modern WoW's `GetItemInfo` (the `setID`
+This is the 16th return of `GetItemInfo` (the `setID`
 field). Single `uint32` read at cache record `+0x1C0`
 (`m_itemSet`). Same cache-warm pattern as the other `*ByID` getters
 — cache misses return `nil` and fire a background load; call
@@ -6112,7 +9014,7 @@ C_Item.GetItemSpell(2589)   -- Linen Cloth, no spell
 -- nil
 ```
 
-Returns the **ON_USE** spell only. Vanilla items can carry up to 5
+Returns the **ON_USE** spell only. Items can carry up to 5
 spell entries in their `ItemStats_C` record, each with its own
 trigger code:
 
@@ -6125,9 +9027,9 @@ trigger code:
 | 5 | `ON_USE_NO_DELAY` | no (TODO: should we add this?) |
 | 6 | `LEARN_SPELL` (recipes) | no |
 
-This matches modern WoW's `GetItemSpell`, which only reports on-use
-triggers. Addons that need the other trigger types (proc auras,
-recipe targets) should reach into the cache directly — the spell
+`GetItemSpell` reports on-use triggers only. Addons that need the other
+trigger types (proc auras, recipe targets) should reach into the cache
+directly — the spell
 slots are at `ItemStats +0x11C` (5 spell IDs) and `+0x130` (5 trigger
 codes).
 
@@ -6178,7 +9080,7 @@ what the item actually grants — not just its stored stat slots:
 
 1. **Base record** — the stored attributes, armor, resistances, and (for
    weapons) DPS.
-2. **On-equip spells** (`SpellTrigger == ON_EQUIP`) — vanilla stores the
+2. **On-equip spells** (`SpellTrigger == ON_EQUIP`) — the engine stores the
    "special" bonuses (crit, attack power, spell power, hit, mp5, defense,
    …) as an equip spell whose aura effect carries the value, not as a
    stat slot. Their auras are decoded into the keys below.
@@ -6212,26 +9114,25 @@ what the item actually grants — not just its stored stat slots:
 | `ITEM_MOD_BLOCK_RATING` | Block chance % | `MOD_BLOCK_PERCENT` (51) |
 | `ITEM_MOD_BLOCK_VALUE` | Shield block value | record (`m_block`) |
 
-> **Values are vanilla-native, not ratings.** Vanilla has no rating
-> system, so the percent-based stats (crit / hit / defense) report the raw
-> **percentage** under the modern `*_RATING` key — e.g. Krol Blade's
-> "+1% crit" is `ITEM_MOD_CRIT_MELEE_RATING = 1`, where TBC/Era would
-> show the level-scaled rating (`13`). A native percent is the only
-> value that's honest and level-independent. Flat stats (attack power,
-> spell damage, healing, mp5) are the item's actual magnitudes.
+> **Values are native percentages, not ratings.** There is no rating
+> system here, so the percent-based stats (crit / hit / defense) report the
+> raw **percentage** under the `*_RATING` key — e.g. Krol Blade's
+> "+1% crit" is `ITEM_MOD_CRIT_MELEE_RATING = 1`. A native percent is
+> level-independent. Flat stats (attack power, spell damage, healing, mp5)
+> are the item's actual magnitudes.
 >
-> Rating stats that didn't exist in 1.12 at all (haste, mastery,
-> versatility, expertise, resilience) never appear. A generic "+N attack
-> power" item carries both a melee and a ranged AP aura in vanilla; the
-> generic `ITEM_MOD_ATTACK_POWER_SHORT` key subsumes it, so
+> Rating stats that don't exist here (haste, mastery, versatility,
+> expertise, resilience) never appear. A generic "+N attack power" item
+> carries both a melee and a ranged AP aura; the generic
+> `ITEM_MOD_ATTACK_POWER_SHORT` key subsumes it, so
 > `ITEM_MOD_RANGED_ATTACK_POWER_SHORT` shows only for ranged-only items
 > (scopes, ranged weapons). Rarer auras with no clean single key —
 > percent attack power, per-weapon-line skill, damage-taken, on-hit /
 > on-use procs — are skipped.
 
 **Input.** Accepts a full chat hyperlink, an `item:N…` link string, or a
-bare itemID (a superset of retail, which is link-only). Returns `nil` if
-the item isn't cached yet — warm it via `GetItemInfo` and retry.
+bare itemID. Returns `nil` if the item isn't cached yet — warm it via
+`GetItemInfo` and retry.
 
 ### `GetItemClassInfo(classID)`
 
@@ -6246,9 +9147,8 @@ GetItemClassInfo(1)   -- "Container"
 ```
 
 Returns `nil` for an unknown class. Obsolete slots return the client's
-literal string (`GetItemClassInfo(3)` → `"Jewelry(OBSOLETE)"`), which is
-the real vanilla data — use [`Enum.ItemClass`](#enumitemclass) for the
-modern key names.
+literal string (`GetItemClassInfo(3)` → `"Jewelry(OBSOLETE)"`) — use
+[`Enum.ItemClass`](#enumitemclass) for the key names.
 
 ### `GetItemSubClassInfo(classID, subClassID)` / `C_Item.GetItemSubClassInfo(classID, subClassID)`
 
@@ -6264,41 +9164,38 @@ GetItemSubClassInfo(4, 1)   -- "Cloth", true
   form, e.g. `"One-Handed Swords"`; falls back to the short form for
   subclasses that only populate it, e.g. `"Consumable"`).
 - `subClassUsesInvType` (boolean) — true for subclasses whose items are
-  labeled by inventory slot rather than by subclass name. On vanilla data
-  that's exactly the armor material types (Miscellaneous, Cloth, Leather,
+  labeled by inventory slot rather than by subclass name. Here that's
+  exactly the armor material types (Miscellaneous, Cloth, Leather,
   Mail, Plate); false for weapons, shields, librams, idols, totems, and
-  non-equipment. Read from the `ItemSubClass.dbc` flags bit `0x200`
-  (verified against the 1.15 client).
+  non-equipment. Read from the `ItemSubClass.dbc` flags bit `0x200`.
 
 Returns `nil` if the `(classID, subClassID)` pair has no row.
 
 ### `C_Item.GetItemUniqueness(itemLocation)` / `C_Item.GetItemUniquenessByID(item)`
 
-The two functions have **different signatures** in modern (Classic
-Era 1.15.x) WoW — we mirror them exactly:
+The two functions have **different signatures**:
 
 `C_Item.GetItemUniqueness(itemLocation)` returns
 `(limitCategory, limitMax)`:
 
-| Field | Vanilla source |
-|-------|----------------|
-| `limitCategory` | Always `0` — vanilla has no `LimitCategory.dbc` (TBC addition). |
+| Field | Source |
+|-------|--------|
+| `limitCategory` | Always `0` — there is no `LimitCategory.dbc`. |
 | `limitMax` | `ItemStats_C.m_maxCount` — `0` = unlimited, `1` = "Unique", higher = inventory cap. |
 
 `C_Item.GetItemUniquenessByID(itemID)` returns
 `(isUnique, limitCategoryName, limitCategoryCount, limitCategoryID)`:
 
-| Field | Vanilla source |
-|-------|----------------|
+| Field | Source |
+|-------|--------|
 | `isUnique` | `m_maxCount > 0` — true for any unique-tagged item. |
-| `limitCategoryName` | Always `nil` — no categories in vanilla. |
+| `limitCategoryName` | Always `nil` — no categories here. |
 | `limitCategoryCount` | `m_maxCount` when `isUnique`, else `nil`. |
 | `limitCategoryID` | Always `nil`. |
 
-Both functions return nothing (zero Lua return values, matching
-modern's `MayReturnNothing` annotation) if the item record isn't
-cached. The by-ID variant fires a background cache fill on miss;
-re-call after `GET_ITEM_INFO_RECEIVED`.
+Both functions return nothing (zero Lua return values) if the item
+record isn't cached. The by-ID variant fires a background cache fill on
+miss; re-call after `GET_ITEM_INFO_RECEIVED`.
 
 ```lua
 local _, max = C_Item.GetItemUniqueness({equipmentSlotIndex = 13})
@@ -6307,9 +9204,9 @@ local isUnique, _, count = C_Item.GetItemUniquenessByID(81013)
 -- isUnique = true, count = 10  (Southern Sand Crawler Leg, "Unique (10)")
 ```
 
-Modern WoW populates the category half for items like Brewfest Mug
-or Heart of Azeroth ("Unique-Equipped: Eye of Azshara"). Vanilla
-has no such items, so the category fields stay nil/0.
+The category half is for items with a shared unique-equipped limit
+("Unique-Equipped: Eye of Azshara"). There are no such items here, so
+the category fields stay nil/0.
 
 ### `C_Item.GetStackCount(itemLocation)`
 
@@ -6327,11 +9224,156 @@ Reads `ITEM_FIELD_STACK_COUNT` directly off the item's
 `m_objectFields` — same field `GetContainerItemInfo` returns as
 `itemCount`. Returns `0` for empty / unresolvable locations.
 
+### `C_Item.GetWeaponEnchantInfo()`
+
+Returns a 12-tuple, including the **temp-enchant IDs** that the stock
+8-return global omits.
+
+```
+hasMain, mainExpire, mainCharges, mainEnchantID,
+hasOff,  offExpire,  offCharges,  offEnchantID,
+hasRanged, rangedExpire, rangedCharges, rangedEnchantID
+   = C_Item.GetWeaponEnchantInfo()
+```
+
+```lua
+-- Apply Brilliant Mana Oil to mainhand, then:
+local has, expireMs, charges, enchantID = C_Item.GetWeaponEnchantInfo()
+-- has = true, expireMs = 1800000, charges = 0, enchantID = 2629
+
+-- Apply Instant Poison instead:
+-- has = true, expireMs = 1800000, charges = 40, enchantID = 323
+```
+
+An oil runs on time alone and reports `charges = 0`. A poison reports a
+charge count as well as a time.
+
+Reads the **temporary** enchant slot (`ITEM_FIELD_ENCHANTMENT`
+slot 1 at descriptor `+0x4C`) — the same slot oils, sharpening
+stones, and poisons populate and the engine drains as they expire.
+This is what `GetWeaponEnchantInfo` measures.
+
+The permanent enchant (Crusader, Mongoose, etc., in slot 0 at
+`+0x40`) is **not** reported here — that's a separate field and
+`GetWeaponEnchantInfo` doesn't expose it either. Get the
+permanent enchant ID by parsing `GetInventoryItemLink("player",
+slot)` (the link includes it as the 2nd numeric field).
+
+The stock global `GetWeaponEnchantInfo` is unchanged — old
+addons reading positions 4..8 by index still work.
+
+Equivalent to the extended form of `GetWeaponEnchantInfo`.
+
+### `C_Item.GetItemTempEnchantInfo(itemLocation)`
+
+Returns the temporary enchant on any item you own — a poison, a weapon
+oil, a sharpening stone, or a shaman imbue:
+
+```
+hasEnchant, expirationMs, charges, enchantID
+   = C_Item.GetItemTempEnchantInfo(itemLocation)
+```
+
+```lua
+-- The poison on a swap weapon that sits in a bag
+local has, expireMs, charges, enchantID =
+    C_Item.GetItemTempEnchantInfo({ bagID = 0, slotIndex = 3 })
+if has then
+    local info = C_Item.GetEnchantInfo(enchantID)
+    print(info.name, charges .. " charges")
+end
+```
+
+The location takes the same forms as the other `C_Item` location calls:
+a table (`{equipmentSlotIndex=N}` or `{bagID=B, slotIndex=S}`), or the
+GUID string from `C_Item.GetItemGUID`.
+
+The four returns match one weapon slot of
+[`C_Item.GetWeaponEnchantInfo`](#c_itemgetweaponenchantinfo), so the two
+read the same way. `enchantID` goes straight into
+[`C_Item.GetEnchantInfo`](#c_itemgetenchantinfoenchantid) for the name
+and the effects.
+
+A weapon keeps its poison while it rests in a bag. The equipped-slot
+calls cannot see that weapon. This call can.
+
+This call never returns the permanent enchant (Crusader, Mongoose).
+That enchant is a separate field.
+
+An empty slot returns `false, 0, 0, 0`. An item you do not own returns
+the same, and so does a location that resolves to nothing.
+
+This call is a ClassicAPI extension.
+
+### `C_Item.GetEnchantInfo(enchantID)`
+
+Resolves an item-enchantment ID — the `enchantID` returned by
+[`C_Item.GetWeaponEnchantInfo`](#c_itemgetweaponenchantinfo) for a
+weapon's temporary enchant, and the same IDs item permanent enchants
+use — into a table:
+
+```lua
+local info = C_Item.GetEnchantInfo(enchantID)
+-- info.enchantID = <id>
+-- info.name      = "Crusader"        -- localized display name
+-- info.effects   = { {type=1, amount=0, arg=20007} }
+-- info.spellID   = 20007             -- spell-type enchants only
+```
+
+```lua
+-- A proc/equip enchant → chain its spellID into C_Spell:
+local info = C_Item.GetEnchantInfo(1900)          -- "Crusader"
+if info.spellID then
+    print(C_Spell.GetSpellDescription(info.spellID))  -- the proc's text
+end
+```
+
+`effects` is an array of the record's non-empty effect slots, each
+`{ type, amount, arg }` where `type` is the standard
+`ITEM_ENCHANTMENT_TYPE`:
+
+| type | meaning | carries |
+|------|---------|---------|
+| 1 | combat-proc spell | `arg` = spellID |
+| 2 | weapon damage | `amount` = +damage |
+| 3 | equip spell / aura | `arg` = spellID |
+| 4 | resistance / armor | `amount` = +value |
+| 5 | stat | `arg` = stat index, `amount` = value |
+| 6 | totem | — |
+| 7 | use spell | `arg` = spellID |
+
+For spell types (1/3/7) `arg` is a spellID feedable into
+[`C_Spell.GetSpellInfo`](#getspellinfospellid--getspellinfoslot-booktype) /
+`GetSpellDescription`; the first such id is also surfaced at top level
+as `spellID` for convenience (absent for non-spell enchants like
+sharpening stones).
+
+Returns `nil` for a non-numeric / non-positive id, an out-of-range
+id, or a record with no name.
+
+Reads `SpellItemEnchantment.dbc` (records `0x00C0D7D8`, count
+`0x00C0D7DC`) — the 24-column table every enchant ID indexes:
+`Type[3]@+0x04`, `Amount[3]@+0x10`, `EffectArg[3]@+0x28`,
+`Name[8]@+0x34` (locale-indexed). The layout was verified by parsing
+the on-disk DBC against known records (Crusader 1900 → type 1, arg
+20007; Sharpened +3 → type 2, amount 3). Fully resident from boot, so
+it answers for any enchant ID with no caching or round-trip.
+
+Lives in `C_Item` (not `C_Spell`) because the id originates from
+`C_Item.GetWeaponEnchantInfo` and the concept is an item enchantment —
+`SpellItemEnchantment` is just the DBC's internal name (enchants are
+*implemented* via spell effects).
+
+> **Not derivable: the source item.** The enchant record holds no
+> back-reference to the item that applied it, and there is no
+> client-side reverse index (enchantID → item). Finding it would need
+> an external scraped DB (pfQuest/Questie-style).
+
 ### `C_Item.IsBound(itemLocation)`
 
 Returns `true` if the item at the given location is soulbound, `false` otherwise
-(including when the slot is empty or the location is malformed). The 1.12
-client tracks the soulbound bit on each item instance directly; previously
+(including when the slot is empty or the location is malformed). The client
+tracks the soulbound bit on each item instance directly; previously
 the only way to read it from Lua was a scan-tooltip hack
 (`SetBagItem` + string-compare against the localized `ITEM_SOULBOUND`
 constant) — slow, locale-fragile, and one of the hottest paths during bag
@@ -6352,7 +9394,7 @@ and thrown weapons being consumed in use. Registered as both the bare
 global and the namespaced `C_Item` form, like `IsUsableItem`.
 
 `item` is an itemID number or `"item:N..."` link. Item names aren't
-accepted (vanilla has no name→ID resolver). Returns `false` for uncached
+accepted (there is no name→ID resolver). Returns `false` for uncached
 items (no async load fired) — same cache contract as
 `C_Item.IsEquippableItem`.
 
@@ -6364,14 +9406,10 @@ C_Item.IsConsumableItem(6948)     -- Hearthstone → false
 C_Item.IsConsumableItem(18820)    -- Talisman of Ephemeral Power → false (on-use trinket)
 ```
 
-This is a class/ammo check, **not** a "has a usable effect" check.
-3.3.5's `IsConsumableItem` walked the item's on-use spells and returned
-true for any with a real effect (which would include on-use trinkets),
-but that heuristic didn't survive into the modern client: verified in-game
-that an on-use trinket with a numeric `Use:` effect (Talisman of Ephemeral
+This is a class/ammo check, **not** a "has a usable effect" check. An
+on-use trinket with a numeric `Use:` effect (Talisman of Ephemeral
 Power) returns `false`, while class-`Consumable` items (potions, bandages,
-the class-0 "Faintly Glowing Skull") and ammo return `true`. We match the
-modern contract.
+the class-0 "Faintly Glowing Skull") and ammo return `true`.
 
 ### `C_Item.IsEquippableItem(item)`
 
@@ -6382,7 +9420,7 @@ value, so any non-zero inventory type passes (head, neck, weapon,
 shield, holdable, …).
 
 `item` is an itemID number or `"item:N..."` link. Item names aren't
-accepted — vanilla has no name→ID resolver, and equippability is an
+accepted — there is no name→ID resolver, and equippability is an
 itemID-keyed property anyway.
 
 Returns `false` for uncached items (no async load fired). If you
@@ -6461,8 +9499,7 @@ or a string that doesn't parse as any of the above.
 
 Name matching is against the item's **decorated** name: a random-suffix
 item matches only its full name (`"Krol Blade of the Bear"`), not the
-base (`"Krol Blade"`) — the same behavior as modern WoW (verified
-in-game). Unsuffixed items match their plain name. The candidate must be
+base (`"Krol Blade"`). Unsuffixed items match their plain name. The candidate must be
 in the client item cache; equipped items always are, so that's a non-issue
 in practice. This match logic is shared with the by-name action APIs
 (`C_Item.UseItemByName` / `EquipItemByName`) — one predicate, one set of
@@ -6484,7 +9521,7 @@ if C_Item.IsEquippedItem("Thunderfury, Blessed Blade of the Windseeker") then ..
 
 Returns `true` if the item's static data is currently in the client-side
 item cache, `false` otherwise. The "ByID" variant takes an itemID or
-"item:NNN"-style string; the location variant takes the modern
+"item:NNN"-style string; the location variant takes the
 `{equipmentSlotIndex=}` / `{bagID=, slotIndex=}` table.
 
 These read the cache without firing a server query — pair with
@@ -6502,7 +9539,7 @@ end
 
 Returns whether the item with the given `"0x…"` GUID is currently carried
 by the player — the 19 equipment slots plus the bags (backpack + the four
-equipped bags). Equipped items count (verified against retail); the bank
+equipped bags). Equipped items count; the bank
 does not.
 
 ```lua
@@ -6521,11 +9558,10 @@ cover the bank, use `C_Item.GetItemCount(itemID, true) > 0` instead.
 Returns `true` if the item is in range of `targetUnit`, `false` if out
 of range, and `nil` when the range check doesn't apply — the item has no
 on-use spell, its on-use spell is rangeless, or the item / unit can't be
-resolved. Matches retail, which likewise returns `nil` for items with no
-range restriction.
+resolved. Returns `nil` for items with no range restriction.
 
 `item` is an itemID, `"item:NNN"` string, or item link (item *names*
-aren't resolvable — vanilla has no name→ID map — and return `nil`).
+aren't resolvable — there is no name→ID map — and return `nil`).
 `targetUnit` is a unit token.
 
 ```lua
@@ -6601,7 +9637,7 @@ engine's tooltip builder uses at `0x0052E323` to gate the
 Returns `true` if the item is in the client-side "in-transaction"
 lock state — picked up onto the cursor, mail-attached, trade-attached,
 mid-swap, etc. Reads the per-CGItem instance flag at `+0x314` bit 0
-(not the `ITEM_FIELD_FLAGS` descriptor field — vanilla's actual lock
+(not the `ITEM_FIELD_FLAGS` descriptor field — the actual lock
 is on the instance, not in `m_objectFields`).
 
 ```lua
@@ -6618,7 +9654,7 @@ The lock is **client-managed, server-confirmed**:
 - Engine clears the bit when the matching `SMSG_UPDATE_OBJECT`
   confirms the transaction.
 
-Listen for the vanilla-native `ITEM_LOCK_CHANGED` event (no payload —
+Listen for the engine's `ITEM_LOCK_CHANGED` event (no payload —
 the engine fires it on every set/clear and addons re-poll the items
 they care about) to react without timed polling.
 
@@ -6670,7 +9706,7 @@ dropped into a bag/equipment slot, deleted (`DeleteCursorItem`), sold
 at a merchant, etc.
 
 `itemInfo` accepts the same shapes as
-[`C_Item.EquipItemByName`](#c_itemequipitembynameiteminfo--dstslot) —
+[`C_Item.EquipItemByName`](#c_itemequipitembynameitem--dstslot) —
 itemID number, bare `"item:N"` string, full chat link, or a localized
 item name (matched case-insensitively against each candidate's
 *decorated* name, random suffix included). Unlike the by-name equip/use
@@ -6712,7 +9748,7 @@ the engine handles the round-trip; the data lands in the cache when the
 server responds.
 
 Fires `ITEM_DATA_LOAD_RESULT(itemID, success)` when the data lands in
-the cache, matching the modern API. Synchronously fired when the item
+the cache. Synchronously fired when the item
 was already cached (so polling code paths still work), asynchronously
 fired when the engine's SMSG response handler completes a network
 fetch.
@@ -6777,88 +9813,106 @@ C_Item.UnlockItem({bagID = 0, slotIndex = 1})
 
 Useful when a transaction packet was sent but the server's
 confirmation never arrived: the item stays visually greyed
-indefinitely (vanilla's only built-in trigger for the unlock-all
+indefinitely (the only built-in trigger for the unlock-all
 sweep is logout). This call gives you an in-session escape hatch.
 
 > **Cursor / server state isn't touched.** Unlocking doesn't tell the
 > server "cancel my transaction" — it only clears the local visual
 > lock. If the item is genuinely mid-flight, the server's next
 > update will set the lock right back. For cursor-cancel semantics,
-> pair with vanilla-native `ClearCursor()`.
+> pair with the engine's `ClearCursor()`.
 
-### `C_Item.UseAtCursor(itemInfo)`
+### `C_Item.UseAtCursor(item)`
 
-Uses `itemInfo` at the player's current cursor world position —
+Uses `item` at the player's current cursor world position —
 ClassicAPI's `[@cursor]` analog for ground-target on-use items
 (Iron Grenade, Bombling, demolition charges, etc.). Returns `true`
 when the cursor-placement leg landed (the item fires at terrain);
 `false` for items that aren't ground-target (the item still fires
-normally with no implicit target), unparseable input, items not in
-bags, cursor over UI / off-screen, etc.
+normally with no implicit target), unparseable input, items you do
+not have, cursor over UI / off-screen, etc.
 
-`itemInfo` accepts the same shapes as
-[`C_Item.UseItemByName`](#c_itemuseitembynameiteminfo--unit) — itemID,
-bare `"item:N"`, full chat link, or localized name.
+`item` takes either of two forms:
+
+- An item **reference**: an itemID, bare `"item:N"`, a full chat link, or a
+  localized name — the shapes
+  [`C_Item.UseItemByName`](#c_itemuseitembynameitem--unit) takes. The
+  first matching item in your bags is used.
+- An item **location**: `{bagID = B, slotIndex = S}`,
+  `{equipmentSlotIndex = N}`, or an item GUID string — the shapes
+  [`C_Item.GetItemID`](#c_itemgetitemiditemlocation) takes. A location names
+  one exact item, so use it when you hold two stacks of the same thing and
+  the one you mean matters.
 
 ```lua
 C_Item.UseAtCursor(4068)            -- Iron Grenade at cursor
 C_Item.UseAtCursor("Iron Grenade")
+C_Item.UseAtCursor({ bagID = 0, slotIndex = 1 })
 ```
 
-Implementation chains the existing item-use path
-(`Item::Location::FindByArgInBags` + `FUN_ITEM_USE`) with
-[`Spell::AtCursor::Resolve`](#c_spellcastatcursorspellidorname) — same
-cursor-resolution helper `C_Spell.CastAtCursor` uses. When the item
-fires a non-ground-target spell, the cursor leg no-ops and returns
-`false`; the item still uses normally (any implicit target — current
-selection, etc. — applies).
+When the item fires a non-ground-target spell, the cursor leg no-ops
+and returns `false`; the item still uses normally (any implicit
+target — current selection, etc. — applies).
 
 Cancels placement automatically when the cursor isn't on terrain —
 the item-use packet is never sent, so an off-screen click doesn't
 waste the grenade.
 
-### `C_Item.UseAtUnit(itemInfo, unit)`
+### `C_Item.UseAtUnit(item, unit)`
 
 Unit-position analog of
-[`C_Item.UseAtCursor`](#c_itemuseatcursoriteminfo): uses `itemInfo` at
+[`C_Item.UseAtCursor`](#c_itemuseatcursoritem): uses `item` at
 `unit`'s feet rather than the cursor. ClassicAPI's `[@unit]` for
-ground-target on-use items. `itemInfo` accepts the same forms as
-`UseAtCursor` (itemID, bare `"item:N"`, full chat link, localized
-name); `unit` is any unit token (`"player"`, `"target"`,
-`"mouseover"`, `"party1"`, …).
+ground-target on-use items. `item` accepts the same two forms as
+`UseAtCursor` — an item reference or an item location; `unit` is any
+unit token (`"player"`, `"target"`, `"mouseover"`, `"party1"`, …).
 
 ```lua
 C_Item.UseAtUnit(4068, "target")            -- Iron Grenade at the target's feet
 C_Item.UseAtUnit("Iron Grenade", "player")
+C_Item.UseAtUnit({ bagID = 0, slotIndex = 1 }, "player")
 ```
 
-Same chain as `UseAtCursor` (`Item::Location::FindByArgInBags` +
-`FUN_ITEM_USE`) but committing the placement at the unit's world
-position via
-[`Spell::AtCursor::CommitAtCoords`](#c_spellcastatunitspellidorname-unit)
-instead of the cursor raycast. Returns `true` when the placement
-landed at the unit; `false` for non-ground-target items (the item
-still fires with any implicit target), unparseable input,
-item-not-in-bags, or an unresolvable unit. The unit is resolved
-before the item fires, so an absent unit fails without consuming the
-item.
+Returns `true` when the placement landed at the unit. Returns `false` for
+unparseable input, an item you do not carry, or a unit that cannot be
+resolved. The unit is resolved before the item fires, so an absent unit
+fails without consuming the item.
 
-### `C_Item.UseItemByName(itemInfo [, unit])`
+An item with no ground effect also returns `false`, and is used **on the
+unit**: the item fires with that unit as its target rather than with
+whatever you have selected. So this covers both kinds of on-use item, the
+same way [`C_Spell.CastAtUnit`](#c_spellcastatunitspellidorname-unit--placegroundspell) covers
+both kinds of spell.
 
-Finds the first item in the player's bags matching `itemInfo` and
-uses it. Returns nothing; silently no-ops when:
+A unit token that names nothing right now, such as `"party3"` while solo,
+returns `false`. A string that is not a unit token at all raises the
+engine's standard "Unknown unit" error, as `UnitHealth("garbage")` does and
+as `C_Spell.CastAtUnit` does. That differs from
+[`C_Item.UseItemByName`](#c_itemuseitembynameitem--unit), whose contract
+is to no-op on anything it cannot use.
+
+### `C_Item.UseItemByName(item [, unit])`
+
+Uses `item`. Returns nothing; silently no-ops when:
 
 - the input is `nil`, an empty string, or otherwise unparseable
-- no matching item is in bags
+- the player does not have the item
 - the engine refuses the use — cooldown, locked item, level
   requirement, etc.
 
-`itemInfo` accepts the same shapes as
-[`C_Item.EquipItemByName`](#c_itemequipitembynameiteminfo--dstslot) —
-itemID number, bare `"item:N"` string, full chat link, or a localized
-item name. Name matching is case-insensitive against each candidate's
-*decorated* name (random suffix included), the same shared predicate
-`C_Item.IsEquippedItem` uses.
+`item` takes either of two forms:
+
+- An item **reference**: an itemID number, bare `"item:N"` string, a full
+  chat link, or a localized item name — the shapes
+  [`C_Item.EquipItemByName`](#c_itemequipitembynameitem--dstslot) takes.
+  The first matching item in your bags is used. Name matching is
+  case-insensitive against each candidate's *decorated* name (random suffix
+  included), the same shared predicate `C_Item.IsEquippedItem` uses.
+- An item **location**: `{bagID = B, slotIndex = S}`,
+  `{equipmentSlotIndex = N}`, or an item GUID string — the shapes
+  [`C_Item.GetItemID`](#c_itemgetitemiditemlocation) takes. A location names
+  one exact item, so use it when you hold two stacks of the same thing and
+  the one you mean matters.
 
 The optional `unit` argument is a unit token (`"player"`, `"target"`,
 `"focus"`, `"partyN"`, `"raidN"`, `"nameplateN"`, …) used as the cast
@@ -6867,18 +9921,18 @@ effects). For self-use items (hearthstone, potions, food) the engine
 overwrites the target with the item's own GUID before dispatch, so
 passing a `unit` to those is harmless and has no effect. Unrecognized
 strings are treated as "no target" rather than raising, matching the
-silently-no-op contract of `itemInfo`.
+silently-no-op contract of `item`.
 
 ```lua
 C_Item.UseItemByName("Hearthstone")                       -- hearth home
 C_Item.UseItemByName(6948)                                -- same thing, by ID
 C_Item.UseItemByName("Major Healing Potion")
 C_Item.UseItemByName("Scroll of Stamina IV", "target")    -- buff your tank
+C_Item.UseItemByName({ bagID = 0, slotIndex = 1 })        -- that exact slot
 ```
 
-Mirrors 3.3.5's `Script_UseItemByName` structure: locate the item
-directly, then hand the `CGItem *` to the engine's by-pointer use
-primitive at `0x005D8D00`. That primitive dispatches internally based
+Locates the item directly, then hands the `CGItem *` to the engine's
+by-pointer use primitive at `0x005D8D00`. That primitive dispatches internally based
 on item type (food, potion, on-use spell, scroll, quiver, ...) so a
 single call covers every item category. We skip
 `Script_UseContainerItem` entirely — its branches for repair vendor,
@@ -6887,20 +9941,17 @@ addon-issued call from a clean cursor.
 
 ### `Get*ItemID` — companions to the engine's `Get*ItemLink` family
 
-The 1.12 engine ships ~14 `Get*ItemLink` functions covering every
+The engine ships ~14 `Get*ItemLink` functions covering every
 frame that lets you mouse over an item (loot, merchant, quests,
 auction, trade, mail, tradeskill, craft). To get the itemID, the
 standard pattern is to call the `Link` function and scrape the
-number out of the returned string with `gsub` / `match`. Modern
-WoW only has direct-ID accessors for a handful of these
-(`GetLootSlotItemID`, `GetInboxItemID`, `GetQuestItemID`,
-`GetMerchantItemID`, …), and the rest of the addon ecosystem still
-scrapes the link.
+number out of the returned string with `gsub` / `match`. Direct-ID
+accessors exist for only a handful of these (`GetLootSlotItemID`,
+`GetInboxItemID`, `GetQuestItemID`, `GetMerchantItemID`, …).
 
-These backport the modern ones where they exist and fill in the
-gaps for the rest, so the whole `Get*ItemLink` family has a
-1-to-1 ID companion. Each reads the same itemID the engine reads
-when building the link, with no string parsing required.
+These add the missing ID companions, so the whole `Get*ItemLink`
+family has a 1-to-1 ID companion. Each reads the same itemID the
+engine reads when building the link, with no string parsing required.
 
 All return `nil` for an empty slot, an out-of-range index, or when
 the relevant UI frame isn't open.
@@ -6937,12 +9988,11 @@ end
 > **Quest UI distinction.** `GetQuestItemID` reads the *active quest
 > offer* (the QuestFrame you see when accepting/turning in a quest);
 > `GetQuestLogItemID` reads the currently-selected entry in the
-> *quest log*. The two cover different states intentionally — modern
-> WoW does the same split with `GetQuestItemLink` /
-> `GetQuestLogItemLink`.
+> *quest log*. The two cover different states intentionally — the same
+> split as `GetQuestItemLink` / `GetQuestLogItemLink`.
 
-> **`GetTradeSkillItemID` vs `GetCraftSpellID`.** Vanilla splits
-> recipes across two UI frames: TradeSkill (smithing / alchemy /
+> **`GetTradeSkillItemID` vs `GetCraftSpellID`.** Recipes are split
+> across two UI frames: TradeSkill (smithing / alchemy /
 > tailoring / etc., which always produce a finished item) and Craft
 > (enchanting formulas / beast-training tomes, where the spell IS
 > the deliverable). `GetTradeSkillItemID` returns the produced
@@ -6951,8 +10001,8 @@ end
 
 ### `GetAverageItemLevel()`
 
-Returns `(avgItemLevel, avgItemLevelEquipped)` — modern WoW's
-2-tuple shape. `avgItemLevelEquipped` is the arithmetic mean over
+Returns `(avgItemLevel, avgItemLevelEquipped)`.
+`avgItemLevelEquipped` is the arithmetic mean over
 the player's currently-worn equipment slots; `avgItemLevel` is the
 same metric but extended to include best-per-slot upgrades found
 anywhere in the player's bags and bank.
@@ -6969,18 +10019,16 @@ local overall, equipped = GetAverageItemLevel()
 
 **Fixed denominator.** Empty slots count toward the denominator
 (contributing 0 to the sum). Removing a piece of gear always
-lowers `avgItemLevelEquipped` — matches modern's behavior
-(verified against retail Wow.exe at `552.4375 × 16 = 8839`
-exactly). Vanilla addons of the GearScore era used populated-only
-count; this implementation deliberately differs.
+lowers `avgItemLevelEquipped`. (A populated-only count would keep the
+average up when a slot empties; this implementation deliberately
+differs.)
 
 **Max-of-two-divisors fairness.** A 2H weapon wielder has an
 intentionally empty offhand (slot 17) — counting it as 0 in a
 17-divisor sum would unfairly penalize them. We compute a second
 candidate excluding slot 17 from both numerator and denominator
 (16 slots), and return the max. Sword+shield characters typically
-win the all-17 path; 2H wielders win the no-OH path. Same trick
-the 4.3.4 client uses at `FUN_0097E0F0`'s tail.
+win the all-17 path; 2H wielders win the no-OH path.
 
 **No double-counting.** Each bag/bank item is assigned to **one**
 candidate slot via greedy fit — a trinket in your bag fills one
@@ -6998,9 +10046,9 @@ Limitations:
 - Items not yet in the ItemStats cache are skipped from the
   running totals and a warmup is queued; the next call after
   `ITEM_DATA_LOAD_RESULT` lands picks them up.
-- The full 4.3.4 weapon `qsort` dance — handling 2H-equipped vs.
-  1H + OH-in-bag comparisons — is not replicated. Edge case in
-  vanilla where you'd notice a difference is narrow.
+- A full weapon `qsort` dance — handling 2H-equipped vs.
+  1H + OH-in-bag comparisons — is not replicated. The edge case
+  where you'd notice a difference is narrow.
 
 ### `GetInventoryItemDurability(invSlot)`
 
@@ -7024,10 +10072,10 @@ local cur, max = GetInventoryItemDurability(INVSLOT_FINGER1)
 -- cur == nil, max == nil
 ```
 
-> **Player-only.** Matches modern API: 3.3.5+ `GetInventoryItemDurability`
-> takes only the slot, no unit token. Inspect targets / party members'
-> equipment durability isn't broadcast in 1.12, so we couldn't expose it
-> for other units even if we wanted to.
+> **Player-only.** `GetInventoryItemDurability` takes only the slot, no
+> unit token. Inspect targets / party members' equipment durability
+> isn't broadcast, so we couldn't expose it for other units even if we
+> wanted to.
 
 > **`(0, max)` vs nothing.** Items that have a durability concept but
 > are currently broken (`current == 0`, `max > 0`) still return
@@ -7121,9 +10169,9 @@ when applicable — stacks faction reputation with the merchant
 (Friendly+ unlocks a base 5%) and PvP rank (Sergeant Major+ adds
 another 5%, Knight-Lieutenant+ stacks one more).
 
-This is a ClassicAPI addition — modern WoW has no standalone Lua
-function for per-item repair cost; the only way to read it there is
-the tooltip's third return value. We expose it directly because the
+This is a ClassicAPI addition — there is no standalone Lua function for
+per-item repair cost otherwise; the only other way to read it is the
+tooltip's third return value. We expose it directly because the
 underlying calculation is already in the engine and a Lua function
 is the natural surface.
 
@@ -7157,28 +10205,26 @@ end
 | 19 TABARD | INVTYPE_TABARD (19) |
 
 Compatibility check is a single bitwise AND against a static
-`invType → slotMask` table — same shape and values as 3.3.5's table
-at `DAT_00A2D288` (used by `Script_GetInventoryItemsForSlot` via
-`FUN_007082B0`), with two adjustments for vanilla:
+`invType → slotMask` table, with two adjustments:
 
 - 2H weapons (`INVTYPE_2HWEAPON`) confined to the mainhand slot
-  only. 3.3.5 allowed offhand for the titanic-grip era; vanilla has
-  no such mechanic and the server would reject the equip anyway.
+  only. There is no titanic-grip mechanic, and the server would
+  reject an offhand equip anyway.
 - `INVTYPE_WEAPONMAINHAND` / `WEAPONOFFHAND` confined to their
-  literal slot rather than the looser "either hand" 3.3.5 allowed.
+  literal slot rather than "either hand".
 
-The `transmogrify` arg is accepted and ignored. Stock 1.12 has no
-transmog system to query against, and the modern flag's effect
+The `transmogrify` arg is accepted and ignored. There is no
+transmog system to query against, and the flag's effect
 (broader cross-eligibility for visual swaps) reduces to the
 regular equip check here. Private servers like Turtle WoW layer
-their own transmog systems on top of vanilla; this function
-doesn't currently plumb the flag through to any of them.
+their own transmog systems on top; this function doesn't
+currently plumb the flag through to any of them.
 
-> **Bank items aren't included.** Vanilla's `GetItemBySlot` gates
+> **Bank items aren't included.** The engine's `GetItemBySlot` gates
 > bank slots on a banker GUID that's only set while the bank window
-> is open; modern WoW behaves the same way (bank shows up only when
-> the bank UI is open). We don't walk bank slots — addons that want
-> bank inclusion need their own bank scan with the bank UI open.
+> is open (bank shows up only when the bank UI is open). We don't walk
+> bank slots — addons that want bank inclusion need their own bank scan
+> with the bank UI open.
 
 ### `GetItemIcon(itemID)` / `C_Item.GetItemIcon(itemLocation)` / `C_Item.GetItemIconByID(item)`
 
@@ -7202,22 +10248,20 @@ local path = C_Item.GetItemIcon({equipmentSlotIndex = INVSLOT_HEAD})
 local path = C_Item.GetItemIconByID("|cff...|Hitem:6948:0:0:0|h[Hearthstone]|h|r")
 ```
 
-> **`iconID`-vs-path deviation.** Modern WoW returns these as a
-> `fileID:number` (specifically `iconFileID` in Classic Era 1.15.x). 1.12
-> has no fileID system — same situation as
+> **`iconID`-vs-path deviation.** This value can be a `fileID:number`
+> elsewhere. There is no fileID system here — same situation as
 > [`C_Spell.GetSpellTexture`](#c_spellgetspelltexturespellid) and
 > [`C_Spell.GetSpellInfo`](#c_spellgetspellinfospellid)'s `iconID` field.
 > We surface the path string everywhere for consistency.
 
-Equivalent to the legacy global `GetItemIcon` (since 1.x) and the
-`C_Item.GetItemIcon` / `GetItemIconByID` family added in 10.x.
+Equivalent to the global `GetItemIcon` and the `C_Item.GetItemIcon` /
+`GetItemIconByID` family.
 
 ### `OffhandHasWeapon()`
 
 Returns `true` if the player has a one-handed weapon (or off-hand-only
 weapon) equipped in the off-hand slot, `false` otherwise. Used by
-dual-wield checks and any addon backporting modern weapon-equipment
-logic.
+dual-wield checks and weapon-equipment logic.
 
 Returns `false` for:
 
@@ -7238,14 +10282,95 @@ if OffhandHasWeapon() then
 end
 ```
 
+## Launch
+
+Options you add to the command line that starts the game, alongside
+`-console`. They are not Lua functions — put them on the launcher
+shortcut, or on whichever executable you start the client with:
+
+```
+VanillaFixes.exe -console -config Config2.wtf
+```
+
+An option name is matched without regard to case, and `-name value`,
+`-name=value` and `/name value` all work. Put double quotes around a
+value that contains spaces.
+
+### `-config <name>` (launch switch)
+
+Reads and writes `WTF\<name>` in place of `WTF\Config.wtf`, so one
+install can hold several settings profiles.
+
+```
+VanillaFixes.exe -console -config Config-raid.wtf
+```
+
+The name must be a plain filename with no folder in it. A name that
+contains `\`, `/` or `:` is refused, and the client uses `Config.wtf`
+instead. That way a setting is never written somewhere you cannot find
+it.
+
+The client both loads and saves through this one name. Everything the
+client keeps in that file follows the profile: video and sound settings,
+console variables, and the account name the login screen remembers. The
+addon enable list does not, because it lives in `WTF\Account\` instead.
+
+On first use the file does not exist yet. The client starts from its
+defaults and writes the file when you quit.
+
+### `-gluescript` / `-gluescriptFile` / `-gamescript` / `-gamescriptFile` (launch switches)
+
+Run Lua as the client starts. Four options, in two pairs: one pair for
+the login and character-select screens, one pair for in-game. In each
+pair, the plain option takes the code itself and the `File` option takes
+the path to a file that contains it.
+
+| Option | Runs |
+|---|---|
+| `-gluescript <code>` | at the login and character-select screens |
+| `-gluescriptFile <path>` | the file's contents, at those same screens |
+| `-gamescript <code>` | one time, in-game |
+| `-gamescriptFile <path>` | the file's contents, one time in-game |
+
+```
+VanillaFixes.exe -console -gamescript "print('hello from the command line')"
+VanillaFixes.exe -console -gamescriptFile C:\scripts\startup.lua
+```
+
+**When each one runs.** Every script runs after the interface for its
+screen has loaded. So it can call interface functions, read and change
+frames, and use anything an addon has set up.
+
+A glue script runs each time the login and character-select screens
+appear. That includes the first time and every return from the world when
+you log out. A script that logs in for you therefore keeps working after
+a logout.
+
+A game script runs one time only, on the first frame after you enter the
+world. It does not run again for `/reload`, and it does not run again if
+you log out and back in on another character.
+
+**Files.** A path may be absolute or relative to the folder the client
+runs in. The file is read at the moment the script runs, so you can edit
+it between launches without touching the shortcut. A file the client
+cannot read is reported in `Logs\classicapi_debug.log` and the rest of
+the launch continues.
+
+**Both at once.** If you pass both options of a pair, both run: the code
+first, then the file.
+
+**Errors.** A script that fails to compile, or that raises while it runs,
+is reported the same way any other script error is. It does not stop the
+client, and it does not stop the other scripts.
+
 ## Loot
 
-Programmatic loot operations that vanilla 1.12's Lua surface doesn't
+Programmatic loot operations that the stock Lua surface doesn't
 expose: enumerate nearby lootable corpses, open a loot session against
 one by GUID, take a specific item out of one without going through the
 visible `LootFrame`, and pre-scan every reachable corpse to build a
 picker table before any cursor work. Foundation for AoE-loot,
-auto-loot-by-filter, and similar addons that 1.12's stock
+auto-loot-by-filter, and similar addons that the stock
 `LootSlot` / `LootSlotInfo` flow can't drive.
 
 All `guid` args are hex-string GUIDs in the same form `UnitGUID`
@@ -7322,7 +10447,7 @@ Two paths, picked automatically:
 - The target GUID doesn't resolve to a visible unit.
 - (sync path only) No slot in the open window holds the itemID.
 
-The send bypasses vanilla's BoP-confirmation dialog. Server still
+The send bypasses the BoP-confirmation dialog. Server still
 enforces all real permissions (loot rights, distance, master-loot
 rules); the BoP prompt is purely a client-side courtesy that callers
 of a programmatic API have already opted out of.
@@ -7444,15 +10569,15 @@ display name + reset). Random-suffix items like "Stringy Wolf Meat
 of the Bear" survive round-trip — the link encodes the per-instance
 enchant / suffix / unique fields, not just the base itemID. For
 tooltip display, extract the payload form via
-`string.match(link, "|H(item:[^|]+)|h")` — vanilla's `SetHyperlink`
+`string.match(link, "|H(item:[^|]+)|h")` — `SetHyperlink`
 requires the literal `"item:"` prefix and rejects full `|cff...|Hitem...|h`
 input.
 
 ## LootHistory
 
-Backport of the MoP `C_LootHistory` namespace — group-loot roll history.
-Vanilla 1.12 has no loot-history store, but it does receive the live
-group-loot roll traffic (`SMSG_LOOT_ROLL` per player, `SMSG_LOOT_ROLL_WON`,
+The `C_LootHistory` namespace — group-loot roll history. There is no
+loot-history store, but the client does receive the live group-loot roll
+traffic (`SMSG_LOOT_ROLL` per player, `SMSG_LOOT_ROLL_WON`,
 `SMSG_LOOT_ALL_PASSED`) — which the stock UI only turns into chat lines. This
 reconstructs the history client-side: packet co-hooks accumulate a ring of
 rolled items with per-player Need/Greed/Pass results and the winner, exposed
@@ -7461,9 +10586,9 @@ NameCache** captured at roll time, so they resolve even for a player who has
 left the group by the time their roll arrives.
 
 History is in-memory (last 128 rolled items) and resets on `/reload` or logout.
-The MoP master-loot management functions (`SetExpiration` / `GiveMasterLoot` /
-`CanMasterLoot`) are intentionally omitted — they drive server support 1.12
-doesn't have.
+The master-loot management functions (`SetExpiration` / `GiveMasterLoot` /
+`CanMasterLoot`) are intentionally omitted — they drive server support this
+build doesn't have.
 
 Progress is signalled by the `LOOT_HISTORY_ROLL_CHANGED` /
 `LOOT_HISTORY_ROLL_COMPLETE` events — see the
@@ -7477,7 +10602,7 @@ Returns the number of rolled items currently in the history.
 ### `C_LootHistory.GetItem(itemIndex)`
 
 `1`-based. Returns `rollID, itemLink, numPlayers, isDone, winnerIdx, timestamp`
-(matches the MoP signature, with `timestamp` as a ClassicAPI extension):
+(`timestamp` is a ClassicAPI extension):
 - `rollID` — a **stable** monotonic ID for the roll. Unlike `itemIndex` (which
   shifts as the 128-item ring saturates), `rollID` never changes, so key
   "keep this row expanded" / "highlight this roll" state on it.
@@ -7491,8 +10616,8 @@ Returns the number of rolled items currently in the history.
   winning roll). `nil` if undecided / all passed. The winner is guaranteed to
   be in the player list even if their individual roll packet never arrived.
 - `timestamp` — the roll's creation time in seconds, directly comparable to
-  `GetTime()` (e.g. `GetTime() - timestamp` for "N seconds ago"). ClassicAPI
-  extension — no MoP equivalent.
+  `GetTime()` (e.g. `GetTime() - timestamp` for "N seconds ago"). A ClassicAPI
+  extension.
 
 Returns nothing for an out-of-range index.
 
@@ -7511,15 +10636,15 @@ Returns nothing for an out-of-range item or player index.
 
 ### `C_LootHistory.Clear()`
 
-Wipes the accumulated roll history (returns nothing). A ClassicAPI extension
-with no MoP equivalent, for a "clear history" button. Fires
-`LOOT_HISTORY_FULL_UPDATE` so any open display rebuilds empty.
+Wipes the accumulated roll history (returns nothing). A ClassicAPI extension,
+for a "clear history" button. Fires `LOOT_HISTORY_FULL_UPDATE` so any open
+display rebuilds empty.
 
 ## LossOfControl
 
-Backports `C_LossOfControl` — the active crowd-control / interrupt effects on
-the **local player**. Vanilla has no such aggregation layer (it's a Mists-era
-addition), so it's synthesized: CC types from the player's debuffs, and the
+`C_LossOfControl` — the active crowd-control / interrupt effects on
+the **local player**. There is no such aggregation layer, so it's
+synthesized: CC types from the player's debuffs, and the
 school-interrupt lockout from the `SMSG_SPELL_COOLDOWN` the server sends on a
 Counterspell / Kick.
 
@@ -7545,15 +10670,15 @@ end
 | `locType` | string | `"STUN"`, `"FEAR"`, `"ROOT"`, `"CONFUSE"`, `"CHARM"`, `"POSSESS"`, `"SILENCE"`, `"PACIFY"`, `"PACIFYSILENCE"`, `"DISARM"`, or `"SCHOOL_INTERRUPT"`. |
 | `spellID` | number | The spell causing the effect. `0` for `SCHOOL_INTERRUPT` (the interrupting spell isn't in the lockout packet). |
 | `displayText` | string | Effect name — the spell name for CC, `"Interrupted"` for `SCHOOL_INTERRUPT`. |
-| `iconTexture` | string | The spell's icon path (vanilla has no FileDataIDs; the path is the functional equivalent). `""` for `SCHOOL_INTERRUPT`. |
+| `iconTexture` | string | The spell's icon path (there are no FileDataIDs here; the path is the functional equivalent). `""` for `SCHOOL_INTERRUPT`. |
 | `startTime` | number? | `GetTime()`-epoch seconds. Present for `SCHOOL_INTERRUPT` and for CC whose applying cast ClassicAPI observed; `nil` otherwise. |
 | `timeRemaining` | number? | Seconds remaining. |
 | `duration` | number? | Effect duration, in seconds. |
 | `lockoutSchool` | number | The locked spell-school mask for `SCHOOL_INTERRUPT` (feed to `C_Spell.GetSchoolString` for the name); `0` for CC effects. |
-| `priority` | number | Always `0` — no vanilla equivalent. |
+| `priority` | number | Always `0` — no equivalent here. |
 | `displayType` | number | Always `2` (show for the effect's full duration). |
 
-Fidelity vs. retail:
+Fidelity notes:
 
 - **`SCHOOL_INTERRUPT`** is derived from the server's own lockout packet
   (`Player::ProhibitSpellSchool` sends a single `SMSG_SPELL_COOLDOWN` listing
@@ -7562,21 +10687,208 @@ Fidelity vs. retail:
   transmitted, hence `spellID = 0` and `displayText = "Interrupted"`.
 - **CC timing** is best-effort — `startTime` / `timeRemaining` / `duration` are
   filled when ClassicAPI observed the cast that applied the aura (the
-  `Aura::Source` cache) and are `nil` otherwise. The fields are nullable in the
-  modern contract.
-- **`auraInstanceID`** is omitted (`nil`) — a Dragonflight concept with no
-  vanilla equivalent.
+  `Aura::Source` cache) and are `nil` otherwise. These fields are nullable.
+- **`auraInstanceID`** is omitted (`nil`) — no equivalent here.
+
+### `C_LossOfControl.GetSchoolLockout([filterMask])`
+
+Returns `lockedMask, secondsRemaining` for the school-interrupt lockout — the
+`SCHOOL_INTERRUPT` slice of the list above, without building the list.
+
+```lua
+local mask, remaining = C_LossOfControl.GetSchoolLockout()
+if mask ~= 0 then
+    print(C_Spell.GetSchoolString(mask), "locked for", remaining)
+end
+
+-- One school's own remaining time. Masks are 1 << schoolIndex:
+-- physical 1, holy 2, fire 4, nature 8, frost 16, shadow 32, arcane 64.
+local locked, fireRemaining = C_LossOfControl.GetSchoolLockout(4)
+if locked ~= 0 and fireRemaining < 0.5 then
+    -- fire clears within half a second
+end
+```
+
+| Return | Type | Notes |
+|---|---|---|
+| `lockedMask` | number | Every currently locked school OR'd together, as `1 << schoolIndex` — the same shape as `lockoutSchool`. `0` when nothing is locked. |
+| `secondsRemaining` | number? | Until every school in `lockedMask` is clear, i.e. the lockout ending last. `nil` when `lockedMask` is `0`. |
+
+`filterMask` narrows the scan to those schools, so one school's own remaining
+time is `GetSchoolLockout(1 << schoolIndex)`. Omitted or `0` means all schools.
+
+Two schools can be locked at the same time — each `SMSG_SPELL_COOLDOWN` batch
+locks one, so being kicked on fire and then on frost leaves both active. That is
+why this returns a mask rather than a single school, and why walking the list
+above and stopping at the first `SCHOOL_INTERRUPT` entry is wrong.
+
+Prefer this over the list walk whenever only the school lockout matters: it
+reads the lockout state directly, allocating no table and skipping the
+debuff scan that every `GetActiveLossOfControlData` call performs. Cheap enough
+to call per frame from a macro conditional.
 
 The `LOSS_OF_CONTROL_ADDED` / `LOSS_OF_CONTROL_UPDATE` events fire as these
 effects change — see [Events](#loss_of_control_added--loss_of_control_update-events).
+Note that they are driven by a diff of *which* effects are active, so
+re-locking an already-locked school extends its lockout without firing either
+event. Read the remaining time when you need it rather than caching it on the
+events.
+
+For the effect that blocks one specific spell, shaped as a cooldown, see
+[`C_Spell.GetSpellLossOfControlCooldown`](#c_spellgetspelllossofcontrolcooldownspellidentifier)
+and its spellbook-slot variants.
 
 ## Lua
 
-Standard-library functions that later Lua versions (or Blizzard's FrameXML)
-added and that 1.12's Lua 5.0 is missing — restored by ClassicAPI so
-backported addons find them. Most are single-function additions (several are
+Standard-library functions that this Lua 5.0 is missing — restored by
+ClassicAPI so addons find them. Most are single-function additions (several are
 just the 5.0→5.1 renames — `string.gmatch`←`gfind`, `math.fmod`←`math.mod`);
 `coroutine.*` restores the whole stripped coroutine library.
+
+### Lua 5.1 syntax
+
+1.12 runs Lua 5.0. It cannot compile five pieces of Lua 5.1 syntax that
+many addons use. These are the length operator `#`, the modulo operator
+`%`, `...` used as an expression, `0x` hexadecimal number literals, and
+leveled long brackets (`[=[ ... ]=]`). ClassicAPI rewrites addon source to
+the 5.0 equivalent before it compiles, so all five work:
+
+```lua
+local n = #myTable          -- length operator
+local r = a % b             -- modulo operator
+local args = { ... }        -- ... as an expression, not only in a parameter list
+local mask = 0xFF00         -- hex number literal
+local doc = [=[ has ]] in it ]=]   -- leveled long bracket
+```
+
+The rewrite is transparent. You do not call anything. It runs on every
+chunk the client compiles — addon files, `loadstring`, and XML `<OnLoad>`
+handlers.
+
+What each form does:
+
+- `#x` gives the length of a string, or a border of a table (the value
+  Lua 5.1 `#` returns). It ignores `table.setn`.
+- `a % b` uses the Lua 5.1 result `a - floor(a/b)*b`, which takes the sign
+  of `b`. This differs from `math.mod` (C `fmod`, truncated toward zero):
+  `-1 % 3` is `2`, while `math.mod(-1, 3)` is `-1`.
+- `...` as an expression yields all the varargs. The `...` in a function
+  parameter list stays as the vararg declaration.
+- `0xFF00` becomes its decimal value (`65280`) — the same number Lua 5.1
+  produces. The 5.0 lexer rejects `0x` literals, so without this an addon
+  needs `tonumber("0xFF00", 16)`.
+- `[=[ ... ]=]` (a leveled long bracket, with any number of `=`) holds text
+  a plain `[[ ... ]]` cannot, such as text that contains `]]`. ClassicAPI
+  rewrites a leveled long string to a plain long string, or to a quoted
+  string when its body needs one. It removes a leveled long comment
+  (`--[=[ ... ]=]`).
+
+**Addon file arguments.** An addon can read its name and its private
+table from the file arguments:
+
+```lua
+local addonName, addonTable = ...
+```
+
+Stock 1.12 never passed these to an addon file. ClassicAPI supplies them to
+any file under `Interface\AddOns\` that reads `...`. `addonName` is the
+folder name. `addonTable` is one table shared by every file of that addon.
+To read another addon's table, use
+[`C_AddOns.GetAddOnLocalTable`](#c_addonsgetaddonlocaltablename), which
+needs that addon's opt-in.
+
+**Limits.**
+
+- The rewrite reads strings and comments correctly. A `%` in `"%d"` or a
+  `#` in `--[[ # ]]` is left alone.
+- A plain long string that contains `[[` nests and closes by depth, the
+  same as the 5.0 engine. Lua 5.1 does not nest. For text that contains
+  `[[` or `]]`, use a leveled bracket (`[=[ ... ]=]`).
+- ClassicAPI rewrites a leveled long string to a plain `[[ ... ]]` when it
+  can, which keeps the exact value. A body that contains `[[` or `]]`, or
+  ends with `]`, becomes a quoted string instead. A quoted string keeps a
+  leading newline in the value. Lua 5.1 drops that newline.
+- Only integer hex is converted. Hex *floats* (`0x1.8p3`) and literals
+  wider than 64 bits are left as-is. Both are almost nonexistent in addon
+  code.
+- Error line numbers stay correct. The rewrite adds no new lines.
+- The globals `__len` and `__mod` are the rewrite's helper functions.
+  Treat them as internal. Do not call them directly.
+- To turn a rewrite off for diagnosis, call
+  `_classicapi_SetTranspileOption(name, false)`, where `name` is
+  `"Length"`, `"Modulo"`, `"VarargExpansion"`, `"HexLiterals"`, or
+  `"LongBrackets"`. This
+  reverts affected chunks to the state that fails to compile, so use it
+  only to answer "is the rewrite breaking this addon?".
+- `_classicapi_TranspileStats()` returns five numbers: the chunks loaded,
+  their bytes, the chunks that needed a full token pass, those bytes, and
+  the milliseconds the rewrite has used since the client started.
+
+### Upvalue limit
+
+A function can use up to 60 upvalues — the outer locals it refers to.
+
+Lua 5.0 stops at 32 and rejects the whole file with `too many upvalues
+(limit=32)`. A large handler that reads many file-level locals can be
+valid Lua 5.1, which allows 60, and still fail to load here for that
+reason alone. ClassicAPI raises the limit to the same 60.
+
+Nothing changes for a function within the old limit. Past 60 the error is
+the same message with the new number: `too many upvalues (limit=60)`.
+
+### String methods (`s:upper()`, `s:format(...)`)
+
+In Lua 5.1, every string value accepts method calls: `s:method(...)`
+resolves through the `string` table. Lua 5.0 has no string methods — on
+stock 1.12, any `s:upper()` fails with `attempt to index a string value`.
+ClassicAPI restores the 5.1 behavior:
+
+```lua
+("asd"):upper()              -- "ASD"
+("%d gold"):format(price)    -- method call on a literal
+msg:match("^!(%w+)")         -- method call on a variable
+link:sub(1, 5)
+```
+
+- Both call forms work and give the same result: `s:upper()` and
+  `string.upper(s)`.
+- Every function in the `string` table is reachable as a method. That
+  includes the ClassicAPI additions ([`match` /
+  `gmatch`](#stringmatch--stringgmatch),
+  [`reverse`](#stringreverses--strrevs)) and any function an addon adds to
+  `string`.
+- Reading an unknown key gives `nil`, the Lua 5.1 result: `("x").nope` is
+  `nil`, and `("x"):nope()` fails with `attempt to call`, not `attempt to
+  index`.
+- Writing to a string (`("x").y = 1`) still fails, the same as Lua 5.1.
+- Works everywhere strings do: in the world, on the login screen, and
+  inside coroutines.
+- To turn method resolution off for diagnosis, call
+  `_classicapi_SetStringMethods(false)`. Strings then error on index, the
+  stock 1.12 behavior. Use it only to answer "is this backport breaking
+  this addon?".
+
+### `getfenv` / `setfenv` environment protection
+
+A sandbox can protect the environment table it gives to restricted code.
+Put a metatable on that table with an `__environment` field:
+
+```lua
+local view = setmetatable({}, { __environment = "protected" })
+setfenv(restrictedFn, view)
+```
+
+From then on, code inside the sandbox sees the protection:
+
+- `getfenv()` returns the `__environment` value, not the real table. The
+  restricted code cannot reach or change the true environment.
+- `setfenv()` on that environment raises `cannot change a protected
+  environment`.
+
+This is the Lua 5.1 form. 1.12 already protected environments, but it read
+a raw `__fenv` field on the table itself. ClassicAPI adds the 5.1
+metatable form and keeps `__fenv` as a fallback. The change is additive:
+an environment with neither marker behaves as before.
 
 ### `select(index, ...)`
 
@@ -7609,6 +10921,71 @@ Ported from Lua 5.1's `luaB_select` (lbaselib.c). The numeric form pushes
 nothing — the varargs are already on the stack, so it just returns the
 count of the slice from `n+1` onward.
 
+### `unpack(list [, i [, j]])`
+
+The Lua 5.1 range form. The stock 5.0 `unpack(list)` takes no range
+arguments and ignored extras **silently** — `unpack(t, 2)` returned the
+whole table: wrong values, no error. ClassicAPI replaces `unpack` with
+the 5.1 version (a port of `luaB_unpack`):
+
+```lua
+unpack({10, 20, 30})        -- 10, 20, 30
+unpack({10, 20, 30}, 2)     -- 20, 30
+unpack({10, 20, 30}, 2, 2)  -- 20
+```
+
+`i` defaults to `1` and `j` to the table length — the `table.getn`
+length, so a vararg `arg` table's `n` field is honored and embedded nils
+keep their slots. Errors on a non-table first argument, exactly like 5.1.
+
+### `xpcall(f, msgh [, arg1, ...])`
+
+Calls `f` under the message handler `msgh`, passing the trailing arguments
+to `f`. Returns `true` plus everything `f` returned, or `false` plus the
+handler's return.
+
+Stock `xpcall` takes only `(f, msgh)` and calls `f` with no arguments. It
+does not error on extra arguments — it discards them, so a function that
+reads its parameters receives nil. ClassicAPI forwards them instead:
+
+```lua
+local ok, sum = xpcall(function(a, b) return a + b end, geterrorhandler(), 2, 3)
+-- ok = true, sum = 5
+```
+
+A two-argument call behaves exactly as before, so the capturing-closure
+form stays correct and needs no change:
+
+```lua
+xpcall(function() return f(a, b) end, handler)
+```
+
+Available to in-game addons and glue-screen code alike.
+
+Note that `error("...")` does not reach the handler. WoW replaces Lua's
+`error` with one that reports through `geterrorhandler()` and then returns
+normally, so `f` looks like it finished and you get `true` with the message
+printed to chat. Real runtime errors — indexing or calling nil, arithmetic
+on a non-number — do reach the handler. To abort into it deliberately, cause
+one of those: `(nil)()` is the shortest.
+
+### `collectgarbage(opt [, arg])`
+
+Accepts Lua 5.1's string options. The stock 5.0 collector takes only an
+optional numeric threshold and errored on every string option
+(`bad argument #1 (number expected, got string)`).
+
+- `"count"` — returns the KB of Lua memory in use (the `gcinfo()` value).
+- `"collect"` — runs a full garbage-collection cycle. Returns `0`.
+- `"step"` — accepted no-op returning `true`. The 5.0 collector cannot
+  step incrementally; `true` means "cycle finished", so
+  `repeat until collectgarbage("step")` loops exit immediately.
+- `"stop"` / `"restart"` / `"setpause"` / `"setstepmul"` — accepted
+  no-ops returning `0`. The 5.0 collector has no toggle or tuning;
+  callers lose the optimization, nothing breaks.
+- A number (or no argument) keeps the stock threshold behavior
+  unchanged.
+
 ### `table.wipe(t)`
 
 Removes every key from `t`, leaving it empty but preserving its
@@ -7621,20 +10998,18 @@ table.wipe(cache)              -- cache is now {}
 local also_t = table.wipe(t2)  -- also_t === t2 after wipe
 ```
 
-Port of Blizzard's 3.3.5 implementation at VA `0x00852180` — same
-pattern, just using 1.12's Lua 5.0 entry points instead of 5.1's.
-Both Lua versions' `lua_next` walks the hash node array linearly,
-so the canonical `lua_next` + `rawset(k, nil)` "during-iteration
-removal" pattern works in practice even though it's technically
-undefined per the Lua reference manual.
+Uses Lua 5.0's `lua_next` entry points. `lua_next` walks the hash node
+array linearly, so the canonical `lua_next` + `rawset(k, nil)`
+"during-iteration removal" pattern works in practice even though it's
+technically undefined per the Lua reference manual.
 
 Errors on non-table input.
 
 ### `table.count(tbl)`
 
 Returns `(numTableNodes, numArrayNodes, maxArrayIndex)` describing how a table
-is populated (a modern WoW diagnostic, added retail 11.2.5). These are counts
-of live entries, **not** the table's allocated capacity:
+is populated (a diagnostic). These are counts of live entries, **not** the
+table's allocated capacity:
 
 - **`numTableNodes`** — total number of key/value pairs.
 - **`numArrayNodes`** — how many of those have an integer key in the range
@@ -7652,6 +11027,56 @@ table.count({ [-3] = "x" })           -- 1, 0, 0
 
 Pure iteration over the table (`lua_next`), so no dependency on Lua's internal
 storage layout. Errors on non-table input.
+
+### `table.maxn(t)`
+
+Returns the largest positive numeric key of `t`, or `0` when it has none
+(Lua 5.1, `luaB_maxn`). Unlike `table.getn` it scans every key, so it
+sees past nil holes in sparse arrays:
+
+```lua
+table.maxn({ 10, 20, 30 })          -- 3
+table.maxn({ [1] = "x", [9] = "y" }) -- 9  (getn would say 1)
+table.maxn({ a = 1 })               -- 0
+```
+
+Errors on non-table input.
+
+### Stale table lengths (5.1 healing)
+
+Lua 5.0 stores a table's `table.insert` / `table.getn` length **out of
+band**. Clearing a table's keys (`for k in pairs(t) do t[k] = nil end`)
+does not reset it — 5.0 code must also call `table.setn(t, 0)`. Lua 5.1
+removed `setn` entirely; lengths are computed from the table itself.
+
+ClassicAPI gives you the 5.1 behavior — code written for Lua 5.1 (or
+that detects it) can skip `setn` and still get correct lengths.
+
+When the stored length points past the last value, and the table has no
+explicit `n` field, `table.getn` — and everything built on it:
+`table.insert`, `table.remove`, `table.concat`, `table.sort`,
+`table.foreachi`, `unpack` — returns the true border, the same answer
+Lua 5.1 gives. This includes a table that is stale by exactly one slot
+(a one-element table that was cleared, or a recycled table whose
+previous use was one slot longer). Four things deliberately keep their
+old behavior:
+
+- A table with an explicit numeric `n` field (the vararg `arg` contract)
+  keeps its stored count, so trailing nils survive
+  (`unpack({10, nil, 30, n = 3})` still returns all three slots).
+- A trailing nil appended by `table.insert(t, nil)` is a valid empty
+  slot, not a stale length. ClassicAPI remembers the append itself, so
+  the stored length stays as it is and the next `table.insert` adds
+  after the nil rather than writing over it. This is the Lua 5.0
+  behavior that Ace2-era argument builders depend on. Only the two-arg
+  append form is remembered; `table.insert(t, pos, nil)` is not.
+- A table with weak values (`__mode = "v"` or `"kv"`) keeps its stored
+  length. The garbage collector clears those slots when nothing else
+  holds the value, so a nil slot does not show that the length is
+  stale. Table-recycling pools depend on this.
+- `table.setn` still works; the heal only changes the answer when the
+  stored length points past the last value and the nil was not put
+  there by `table.insert`.
 
 ### `Mixin(object, ...)` / `CreateFromMixins(...)`
 
@@ -7671,13 +11096,13 @@ obj.name = "Bob"
 obj:Hello()   -- "hi, Bob"
 ```
 
-Modern WoW provides these as C functions in `TableUtil`; ClassicAPI does the
-same (rather than leaving them in the `!!!ClassicAPI` addon) so they exist
+ClassicAPI provides these as C functions (rather than leaving them in the
+`!!!ClassicAPI` addon) so they exist
 whenever the DLL is injected — even if the addon is disabled. The composite
 `CreateAndInitFromMixin(mixin, ...)` (which calls a `:Init` method) remains a
-Lua helper in the addon, mirroring retail's `Mixin.lua`. The taint-based
-`SecureMixin` family is intentionally omitted — vanilla 1.12 has no execution
-taint system, so there is nothing for it to guard.
+Lua helper in the addon. The taint-based `SecureMixin` family is intentionally
+omitted — there is no execution taint system, so there is nothing for it to
+guard.
 
 ### `string.match` / `string.gmatch`
 
@@ -7700,17 +11125,34 @@ string.match("no digits", "%d+")                                  -- nil
 for word in string.gmatch("a,bb,ccc", "[^,]+") do print(word) end -- a / bb / ccc
 ```
 
-> **Only the `string.foo(s, ...)` call form works — not the `("x"):foo(...)`
-> method sugar.** WoW's Lua VM strips type-metatables for every value except
-> tables and userdata (both `lua_setmetatable` and the VM's own
-> `luaT_gettmbyobj` hard-return "no metamethod" for strings), so string values
-> have no `__index` and there's no client-side way to add one short of hooking
-> a hot VM-core function. This is the long-standing vanilla 1.12 constraint —
-> always write `string.match(s, p)`, never `s:match(p)`.
+Both call forms work: `string.match(s, p)` and `s:match(p)`. See
+[String methods](#string-methods-supper-sformat).
+
+### `string.gsub` table replacement
+
+Lua 5.1 allows a **table** as `gsub`'s replacement: every match looks up
+the first capture (the whole match when the pattern declares no
+captures) as a key and substitutes the value. A `nil` or `false` value
+keeps the original match. The stock 5.0 `gsub` accepts only a string or
+function replacement and errors on a table
+(`string or function expected`).
+
+```lua
+("$name the $class"):gsub("%$(%w+)", { name = "Bob", class = "Druid" })
+-- "Bob the Druid", 2
+
+("$name and $unknown"):gsub("%$(%w+)", { name = "Bob" })
+-- "Bob and $unknown", 2   (a missing key keeps the match, as in 5.1)
+```
+
+Both `string.gsub` and the bare `gsub` global have the upgrade; string
+and function replacements behave exactly as before. One residual: when
+the pattern itself contains a `%1`..`%9` back-reference, a missing table
+key removes the match instead of keeping it.
 
 ### `strsplit(sep, str [, pieces])`
 
-The WoW global (backported from 3.3.5), splits `str` on **any** character in
+The WoW global; splits `str` on **any** character in
 `sep` and returns the pieces as multiple values.
 
 - `sep` — a set of delimiter *characters* (not a pattern); each character is
@@ -7719,7 +11161,7 @@ The WoW global (backported from 3.3.5), splits `str` on **any** character in
   splits the rest of the string (delimiters and all) is returned as the final
   piece. `0` or omitted = unlimited. `1` returns the whole string unsplit.
 
-Consecutive/trailing delimiters produce empty pieces, matching retail.
+Consecutive/trailing delimiters produce empty pieces.
 
 ```lua
 strsplit(",", "a,b,c")        -- "a", "b", "c"
@@ -7730,8 +11172,7 @@ local zone, x, y = strsplit(":", "Durotar:52:38")
 ```
 
 Errors `strsplit(): Stack overflow` if a string splits into more pieces than
-the Lua stack can grow to hold (`lua_checkstack` guards every push) — the
-same guard and message 3.3.5 uses.
+the Lua stack can grow to hold (`lua_checkstack` guards every push).
 
 ### `strjoin(delimiter, ...)`
 
@@ -7827,9 +11268,9 @@ Restores Lua 5.0's stripped `coroutine.*` library. The C-level
 coroutine machinery (`lua_resume`, `lua_yield`, `lua_newthread`,
 and the `thread` type at tag 8) is linked into the engine, but
 the script-facing library was never registered as a global table.
-ClassicAPI rewires the standard five entries on `coroutine`,
-matching Lua 5.0 semantics with two WoW-specific quirks called
-out below.
+ClassicAPI rewires the standard five entries on `coroutine`, plus
+Lua 5.1's `coroutine.running`, matching Lua 5.0 semantics with two
+WoW-specific quirks called out below.
 
 #### `coroutine.create(fn)`
 
@@ -7927,6 +11368,19 @@ end
 for n in range(1, 5) do print(n) end
 ```
 
+#### `coroutine.running()`
+
+Returns the coroutine that is currently running, or `nil` when called
+from the main thread (Lua 5.1's contract — the 5.2 second return,
+`ismain`, is not provided).
+
+```lua
+coroutine.running()   -- nil (main thread)
+coroutine.wrap(function()
+    print(coroutine.status(coroutine.running()))   -- "running"
+end)()
+```
+
 #### Async pattern (`RunAsync` + `C_Timer.After`)
 
 Coroutines pair naturally with `C_Timer.After` for chunked
@@ -7963,17 +11417,332 @@ wraps the same primitive for the non-coroutine case.
 
 ## Macros
 
-Engine-level extensions to how macros are parsed and dispatched. These
-don't add new Lua functions — they teach the engine to recognize input
-forms it didn't accept in stock 1.12. Macro authors get them for free
-once `ClassicAPI.dll` is loaded.
+Macro features: the `/cast` and `/use` commands with `[conditions]`, the
+`#showtooltip` and `#show` directives, and extensions to how the engine
+reads cast lines. Macro authors get them once `ClassicAPI.dll` is loaded.
 
-Vanilla 1.12 doesn't support `[target=...]`-style macro conditionals
-natively; we don't add those. If you have a separate DLL/addon that
-does (nampower's conditional macros, SuperWoWhook, etc.), the
-extensions below compose with it — that layer strips the bracket
-clause and forwards the cleaned tail to `CastSpellByName`, which then
-flows through our additions.
+### `/cast` and `/use`
+
+Both commands accept `[conditions]` and a `@unit` target. The first clause
+that matches gives the value. See
+[`SecureCmdOptionParse`](#securecmdoptionparseoptions--quiet) for the syntax and
+the list of conditions.
+
+```
+/cast Frostbolt
+/cast [mod:shift] Frostbolt; Fireball
+/cast [@player] Renew
+/cast [@mouseover,help] Flash Heal; Flash Heal
+/use Healthstone
+/use 13
+/use 0 1
+```
+
+The value is read in this order:
+
+- `bag slot` (for example `0 1`) uses the item in that bag slot.
+- A number from 1 to 19 uses the item equipped in that inventory slot.
+- `item:N`, or a pasted item link, uses that item by ID.
+- The name of an item that you carry uses that item. An item name wins
+  over a spell name.
+- Every other value is cast as a spell. A number is a spellID
+  (`/cast 5019`), see
+  [Numeric spellIDs](#numeric-spellids-in-cast-and-castspellbyname).
+
+A `!` in front of a spell name starts the spell but never turns it off. Use
+it for the abilities that toggle: auto-repeat shots (Shoot, Auto Shot) and
+the self-buffs (stance, aspect, seal, form, tracking). If the ability is
+already on, the line does nothing, so you can press the button again without
+stopping it.
+
+```
+/cast !Shoot
+/cast !Auto Shot
+/cast [@focus] !Auto Shot
+/cast !Battle Stance
+```
+
+With a `@unit` target other than `target`, a spell is cast on that unit
+through [`C_Spell.CastAtUnit`](#c_spellcastatunitspellidorname-unit--placegroundspell), and the
+item is used on that unit. `[@player]` uses the item on yourself. This works
+for an item named by `bag slot` or by inventory slot as well as by name.
+
+`/use` always uses the item. Clicking a bag slot sells the item while a
+merchant window is open, and repairs it under the repair cursor, but the
+command does neither.
+
+`[@cursor]` places a ground-target spell or item at the position under your
+mouse, through
+[`C_Spell.CastAtCursor`](#c_spellcastatcursorspellidorname) and
+[`C_Item.UseAtCursor`](#c_itemuseatcursoritem). A spell or item with no
+ground effect is cast or used normally.
+
+`[@player]` drops a ground-target spell or item at your own feet. A spell or
+item with no ground effect is cast or used on you.
+
+Your own feet and the cursor are the only two positions a ground-target
+spell or item can be aimed at this way. `[@target]` and the other units cast
+the spell on that unit when it takes a unit, and otherwise bring up the
+reticle for you to click, which is aim you already had.
+
+```
+/cast [@cursor] Blizzard
+/use [@cursor] item:4390
+/use [@player] item:4390
+```
+
+`/use` is `/cast` under a second name. Each client language has its own
+command names next to the English ones (for example `/benutzen` on a German
+client).
+
+If SuperCleveRoidMacros is loaded, it handles `/cast` lines that contain
+conditions and all `/use` lines. Plain `/cast Name` lines still go through
+ClassicAPI.
+
+### `/castsequence`
+
+Casts one action from a list, and moves to the next one each time a cast
+succeeds. The list is separated by commas and takes the same
+`[conditions]` and `@unit` syntax as `/cast`.
+
+```
+/castsequence Insect Swarm, Moonfire, Wrath
+/castsequence [@focus] Insect Swarm, Moonfire, Wrath
+/castsequence reset=combat Immolate, Corruption, Shadow Bolt
+```
+
+Each step is read the same way a `/cast` value is, so a step can name a
+spell, an item you carry, a `bag slot`, or an inventory slot. A step that
+names an item you can equip, and are not wearing, equips it instead of
+using it.
+
+The sequence moves on only when a cast succeeds. A cast that fails or is
+interrupted leaves the sequence where it is, so the next press tries the
+same step again. A step that names nothing castable is stepped past.
+
+`reset=` restarts the sequence. It takes one or more of these, joined by
+`/`:
+
+| Value | Restarts when |
+|---|---|
+| `target` | Your target changes. |
+| `combat` | You leave combat. |
+| `shift`, `ctrl`, `alt` | You press the button with that key held. |
+| A number | That many seconds pass without a press. |
+
+```
+/castsequence reset=target/3 Rend, Thunder Clap
+```
+
+The sequence is keyed by its text. Two macros with the same list share one
+position and advance together, and the same list in one macro on two action
+bars is one sequence.
+
+With [`#showtooltip`](#showtooltip-and-show), the action button follows the
+step the sequence is on.
+
+### `/castrandom` and `/userandom`
+
+Casts one action picked at random from a comma-separated list. Both names
+are the same command, the way `/use` is `/cast` under a second name, so
+either one casts a spell or uses an item.
+
+```
+/castrandom Moonfire, Starfire, Wrath
+/userandom [@player] Healing Potion, Rejuvenation Potion
+```
+
+The pick is held until a cast succeeds. A cast that fails or is interrupted
+keeps the same pick, so the next press tries that action again rather than
+picking another one.
+
+A list names no single action, so these commands give the action button
+nothing to show. The button has no tooltip, no cooldown and no usable state
+from the list. Name a value on the
+[`#showtooltip`](#showtooltip-and-show) line to give it one:
+
+```
+#showtooltip Moonfire
+/castrandom Moonfire, Starfire, Wrath
+```
+
+A `/castrandom` line above a `/cast` line also takes the icon from it. Put
+the `/cast` line first, or name the value on the `#showtooltip` line.
+
+### More commands with `[conditions]`
+
+These commands take the same `[conditions]` and `@unit` syntax as `/cast`.
+Each client language has its own command names next to the English ones.
+
+**Targeting.** `@unit` sets what is acted on. A value that is not a unit
+token is matched against character names, nearest first, by the start of
+the name.
+
+| Command | Does |
+|---|---|
+| `/target` | Targets a unit or a name. |
+| `/targetexact` | Targets only a full name match. |
+| `/cleartarget` | Drops the target. |
+| `/targetlasttarget` | Targets your previous target. |
+| `/targetlastenemy` | Targets your previous enemy. |
+| `/targetenemy` | Steps through nearby enemies. |
+| `/targetfriend` | Steps through nearby friendly units. |
+| `/targetenemyplayer` | Steps through nearby hostile players. |
+| `/targetfriendplayer` | Steps through nearby friendly players. |
+| `/targetparty` | Steps through your party. |
+| `/targetraid` | Steps through your raid. |
+| `/assist` | Targets what another unit has targeted. |
+| `/follow` | Follows a unit. |
+
+The stepping commands treat their value as a reverse flag, so
+`/targetenemy [mod:shift] 1` steps backwards while shift is held.
+
+```
+/target [@mouseover,harm] [] Bob
+/targetexact Bobby
+/assist [@focus]
+/cleartarget [dead]
+```
+
+**Casting and player state.**
+
+| Command | Does |
+|---|---|
+| `/stopcasting` | Stops the current cast. |
+| `/stopmacro` | Stops the rest of the macro. |
+| `/cancelaura` | Removes one of your buffs by name. |
+| `/cancelform` | Leaves your current shapeshift form. |
+| `/dismount` | Dismounts you. |
+
+```
+/cancelaura Power Word: Shield
+/cancelform [stance:1]
+/stopcasting [mod:alt]
+```
+
+`/stopmacro` stops the macro that is running it. The lines after it do not
+run. A line that runs a second macro is not affected: a `/stopmacro` in that
+second macro stops the second one, and the first one goes on.
+
+```
+/cast Moonfire
+/stopmacro [mod:shift]
+/cast Wrath
+```
+
+**Equipment.** `/equip` takes an item name, and `/equipslot` takes an
+inventory slot number from 1 to 19 followed by an item name.
+
+```
+/equip Thunderfury
+/equipslot 16 Thunderfury
+```
+
+**Action bars.** `/changeactionbar` takes a page from 1 to 6.
+`/swapactionbar` takes two pages and moves to whichever one you are not on.
+
+```
+/changeactionbar 2
+/swapactionbar 1 2
+```
+
+**Pet.** `/petattack`, `/petfollow`, `/petstay`, `/petpassive`,
+`/petdefensive` and `/petaggressive` take conditions only.
+`/petautocaston`, `/petautocastoff` and `/petautocasttoggle` take a pet
+spell name.
+
+```
+/petattack [harm]
+/petautocaston Growl
+/petfollow [@player,noharm]
+```
+
+`/petattack` always sends the pet at your current target. Conditions still
+decide whether it runs, so `/petattack [@mouseover]` cannot aim at your
+mouseover.
+
+### `#showtooltip` and `#show`
+
+Put `#showtooltip` on the first line of a macro. The action button then shows
+the spell or item that the macro is about: its tooltip, cooldown, usable
+state, count, range, and auto-repeat highlight. If the macro icon is the
+question mark, the button, the macro window, and the cursor while you drag
+the macro also show the icon of that spell or item. The icon selector still
+shows the question mark, because that is the icon the macro keeps. `#show`
+does the same, but keeps the macro name as the tooltip.
+
+```
+#showtooltip
+/cast Frostbolt
+
+#showtooltip [mod:shift] Frostbolt; Fireball
+/cast [mod:shift] Frostbolt; Fireball
+
+#showtooltip Healthstone
+/use Healthstone
+
+#showtooltip spell:1539
+/cast 1539
+
+#showtooltip
+/cast !Shoot
+
+#show 13
+/use 13
+```
+
+- `#showtooltip <value>` shows that value. The value takes the same forms
+  as `/cast`: a spell name, a spellID, an item name, `item:N`, an item
+  link, an inventory slot, or `bag slot`. It also takes `spell:N`, which
+  names a spell by ID and nothing else. It accepts the same
+  `[conditions]`. An item that you carry wins over a spell of the same
+  name, as in `/cast`. A spell name can carry the `!` prefix, and the
+  button shows that spell.
+- A spell you name by ID shows even when you have not learned it. The icon
+  and the tooltip come from the spell itself, so `#showtooltip spell:1539`
+  and `#showtooltip 1539` both show spell 1539. The button is still greyed
+  out, because you cannot cast it. This applies to a value the directive
+  names itself. The bare form below reads your `/cast` lines, and a spell
+  there resolves only as far as the cast does.
+- An item named by ID shows even when you carry none of it, since the icon
+  and tooltip come from the item itself. An item named by name has to be on
+  you or equipped for the button to find it.
+- `#showtooltip` with no value reads the `/cast` and `/use` lines of the
+  macro, in order, up to the first line without conditions. It shows the
+  first line whose clause matches. The line without conditions is the
+  default.
+- Conditions are evaluated again when a modifier key, your target, your
+  mouseover unit, or your combat state changes, and about five times per
+  second otherwise. So the button follows `[mod:...]`, `[combat]`,
+  `[@target,harm]` and the other conditions.
+- If no clause matches, the button shows the macro's own icon and name. A
+  group that only names a unit (`[@mouseover]`) matches only while that unit
+  exists, so `[@mouseover] Rejuvenation` alone shows `?` with nothing under
+  the cursor, and `[@mouseover][] Rejuvenation` shows the spell and casts on
+  your target instead. If the value names a spell by name that you do not
+  know, nothing shows. Name it by ID to show it anyway.
+
+Lines that start with `#` are comments. They never run, and they never
+reach chat.
+
+[`GetMacroSpell`](#getmacrospellmacroslot) and
+[`GetMacroItem`](#getmacroitemmacroslot) return what the directive resolved
+to.
+
+If SuperCleveRoidMacros is loaded, it controls macro display, and ClassicAPI
+does not evaluate `#showtooltip`. A build that hands its own results over
+through
+[`C_Macro.SetMacroDisplay`](#c_macrosetmacrodisplaymacroslot-value) keeps
+`#showtooltip` working for the macros it does not claim.
+
+A macro that names a condition
+[`SecureCmdOptionParse`](#securecmdoptionparseoptions--quiet) does not know
+belongs to another macro addon. Its conditions decide what the macro does,
+and ClassicAPI cannot evaluate them, so the button stays as the engine left
+it. The addon that owns those conditions can still drive the button through
+`C_Macro.SetMacroDisplay`. Nothing is printed about the condition: the macro
+works, and the player has nothing to correct. An edit to the macro tests the
+conditions again.
 
 ### Numeric spellIDs in `/cast` and `CastSpellByName`
 
@@ -7996,7 +11765,7 @@ and `IsAutoRepeatAction(slot)` work for the macro slot).
 |--------------|--------------------------------------------------------|
 | `/cast 5019` | Casts Shoot if you know it (any rank, highest known)   |
 | `/cast 1234` | Falls through as "unknown spell," same as `/cast Foo`  |
-| `/cast Shoot`| Unchanged from vanilla — names still work              |
+| `/cast Shoot`| Unchanged — names still work                           |
 | `/cast 5019(Rank 1)` | Falls through — rank suffix with a numeric stem isn't supported (use the name form if you need a specific rank) |
 
 Implemented as a single hook on the engine's name → spellbook-slot
@@ -8010,7 +11779,7 @@ trailing characters falls through unchanged.
 Putting `CastSpellNoToggle("Shoot")` in a macro body now tags the
 macro with Shoot's spellID the same way `/cast Shoot` or
 `CastSpellByName("Shoot")` would. Without this, the macro casts
-correctly but vanilla's macro parser doesn't know to associate the
+correctly but the macro parser doesn't know to associate the
 slot with any spell — so action-bar UIs that call
 `IsCurrentAction(slot)` / `IsAutoRepeatAction(slot)` (pfUI's
 actionbar, ShaguTweaks, etc.) never light up the slot.
@@ -8043,12 +11812,30 @@ Macro tagging happens at macro edit/save time. Existing macros need
 to be opened in the Macro UI and re-saved once after dropping in the
 new DLL to pick up the new parser behavior.
 
+### `StopMacro()`
+
+Stops the macro body that is running right now. The lines after the call do
+not run. This is what [`/stopmacro`](#more-commands-with-conditions) calls
+once its conditions pass.
+
+```lua
+StopMacro()
+```
+
+The call applies to the macro that is running it. If a macro line runs a
+second macro, a `StopMacro` in that second macro stops the second one only,
+and the first one goes on. A call made while no macro is running does
+nothing, and leaves nothing behind for the next macro you press.
+
 ### `GetMacroSpell(macroSlot)`
 
-Returns `(name, rank, spellID)` for the spell a macro's first `/cast`
-/ `/castsequence` / `CastSpellByName(...)` directive resolves to, or
-nothing when the macro slot is empty, contains no cast directive, or
-the directive's name doesn't resolve to a spell the player knows.
+Returns `(name, rank, spellID)` for the spell that a macro shows. When the
+macro has a [`#showtooltip` or `#show`](#showtooltip-and-show) directive,
+this is the spell that the directive resolved to. Otherwise it is the spell
+that the first `/cast` / `/castsequence` / `CastSpellByName(...)` line
+resolves to. Returns nothing when the macro slot is empty, the macro has
+no cast, the shown value is an item, or the name does not resolve to a
+spell that the player knows.
 
 ```lua
 -- macro slot 1's body: "/cast Fireball(Rank 5)"
@@ -8064,11 +11851,6 @@ GetMacroSpell(3)
 -- (no returns)
 ```
 
-No body parsing happens at call time — the vanilla engine already
-walks every macro body at create / edit / refresh and caches the
-resolved spellID on the macro struct. We just read the cache and
-look the name + rank up in `Spell.dbc`. Result: O(1) per call.
-
 `CastSpellNoToggle("<name>")` macros are also recognized — the
 parser hook from the [`CastSpellNoToggle`](#castspellnotoggle-as-a-macro-cast-line)
 section tags them with the same spellID a `/cast` line would, so
@@ -8081,9 +11863,23 @@ section tags them with the same spellID a `/cast` line would, so
 > opening them in the Macro UI and clicking Okay re-runs the parser
 > and the new behavior takes effect.
 
+### `GetMacroItem(macroSlot)`
+
+Returns `(name, link)` for the item that a macro's
+[`#showtooltip` or `#show`](#showtooltip-and-show) directive resolved to.
+Returns nothing when the macro has no directive, or when the directive
+resolved to a spell. If you carry the item, the name and the link are those
+of your item, with its suffix and enchant.
+
+```lua
+-- macro slot 4's body: "#showtooltip Healthstone" then "/use Healthstone"
+local name, link = GetMacroItem(4)
+-- name = "Major Healthstone", link = "|cffffffff|Hitem:9421:0:0:0|h[Major Healthstone]|h|r"
+```
+
 ### `GetMacroIcons` / `GetMacroItemIcons` / `GetLooseMacroIcons` / `GetLooseMacroItemIcons`
 
-Modern Classic Era's 4-function append-to-table icon enumeration
+A 4-function append-to-table icon enumeration
 surface. Each takes a Lua table as its only argument and appends icon
 basenames; returns nothing (mutation is the contract).
 
@@ -8100,22 +11896,22 @@ GetMacroItemIcons(itemList)
 -- itemList now has `INV_*` basenames.
 ```
 
-The split is `loose` (icons the user dropped into `Interface\Icons\`
-on disk) vs `mpq` (icons baked into the game's MPQ archives), crossed
-with `Spell` (basenames starting with `Ability_` / `Spell_`) vs
-`Item` (basenames starting with `INV_`). Modern engines maintain four
-parallel arrays in their loader; we replicate the scheme by hooking
-vanilla's three scan callbacks
-(`FUN_MACRO_ICON_CB_DISK` / `*_USER_MPQ` / `*_INSTALL_MPQ`) and tagging
-each captured filename by source + prefix.
+The split is `loose` (icons you dropped into `Interface\Icons\` on
+disk) vs `mpq` (icons that ship inside the game's MPQ archives),
+crossed with `Spell` (basenames that start with `Ability_` or
+`Spell_`) vs `Item` (basenames that start with `INV_`).
 
-**Vanilla quirk worth noting**: the engine's main icon DB (what
-`GetMacroIconInfo(i)` returns) is filtered down to `Ability_*` /
-`Spell_*` only — `INV_*` filenames flow through the scan callbacks
-(~2,500+ per session in the Octo client) but never land in the DB
-because something downstream of the callbacks rejects them. We
-capture before that rejection, so `GetMacroItemIcons` works even
-though no engine-level `GetMacroItemIconInfo(i)` exists.
+**Quirk worth noting**: `GetMacroIconInfo(i)` lists only the
+`Ability_*` and `Spell_*` icons, plus the question-mark icon
+(`INV_Misc_QuestionMark`), which is always entry 1. A macro needs that
+icon for `#showtooltip` to show the spell or item icon. The archives hold thousands of
+`INV_*` icons that it never shows. These four functions do return
+them, so `GetMacroItemIcons` gives you the item icons that
+`GetMacroIconInfo` cannot reach.
+
+An `INV_*` file that you put in `Interface\Icons\` yourself is
+different: `GetMacroIconInfo` does list it, after a restart of the
+client.
 
 Each appended entry is the uppercase basename stripped of the
 `Interface\Icons\` prefix and any `.blp`/`.tga` extension (e.g.
@@ -8126,11 +11922,10 @@ sorted within each function (sorted lazily on first read).
 Capture-time dedup ensures each unique basename only appears once
 per source/prefix combination even though most files flow through
 multiple scan callbacks. There is **no cross-dedup** between loose
-and mpq, or between spell and item — matches modern engine
-behavior (a file that exists both as a loose drop-in and inside an
-MPQ will appear in both the loose and mpq lists).
+and mpq, or between spell and item (a file that exists both as a loose
+drop-in and inside an MPQ will appear in both the loose and mpq lists).
 
-The vanilla legacy globals `GetNumMacroIcons` / `GetMacroIconInfo`
+The legacy globals `GetNumMacroIcons` / `GetMacroIconInfo`
 remain available unchanged.
 
 ### `C_Macro.CreateMacro` / `C_Macro.EditMacro`
@@ -8144,7 +11939,7 @@ C_Macro.CreateMacro(name, iconTexture, body, isCharacterMacro) -> index
 C_Macro.EditMacro(index, name, iconTexture, body) -> index
 ```
 
-Why this exists: the vanilla `CreateMacro` / `EditMacro` globals take an
+Why this exists: the stock `CreateMacro` / `EditMacro` globals take an
 icon index into the `GetMacroIconInfo` list. That list does not include
 `INV_*` item icons. As a result, the stock API cannot set an item icon,
 even though the engine stores and shows it correctly. These two functions
@@ -8187,18 +11982,85 @@ The legacy `CreateMacro` / `EditMacro` globals do not change. They stay
 index-only. String-icon callers use the `C_Macro` namespace instead.
 Edits persist across sessions, the same as edits in the Macro UI.
 
+### `C_Macro.GetMacroIcon(macroSlot)`
+
+Returns the icon the macro currently shows, as `Interface\Icons\<name>`.
+Returns nothing when the slot is empty.
+
+```lua
+C_Macro.GetMacroIcon(1)   -- "Interface\\Icons\\Spell_Nature_Rejuvenation"
+```
+
+This is the icon on the action button: the spell's or item's when a
+[`#showtooltip`](#showtooltip-and-show) resolved and the macro's own icon is
+the question mark, and the macro's own icon otherwise.
+
+`GetMacroInfo` returns the icon the macro stores, which is the icon its icon
+selector edits. Use this function when you want the icon a macro shows, and
+`GetMacroInfo` when you want the one the player picked.
+
+### `C_Macro.SetMacroDisplay(macroSlot, value)`
+
+Tells the client what a macro is about, so the action button shows it. For
+an addon that parses macros itself and wants the button to follow, instead
+of replacing `GetActionTexture`, `GetActionCooldown`, `IsUsableAction` and
+the rest in Lua.
+
+```lua
+C_Macro.SetMacroDisplay(1, "Frostbolt")   -- show this
+C_Macro.SetMacroDisplay(1, false)         -- mine, nothing matched, show ?
+C_Macro.SetMacroDisplay(1, nil)           -- released, `#showtooltip` resumes
+```
+
+`macroSlot` is the macro index, the same one
+`GetMacroInfo` and
+[`GetMacroSpell`](#getmacrospellmacroslot) take. `value` takes every form a
+[`#showtooltip`](#showtooltip-and-show) value takes: a spell name or ID,
+`spell:N`, an item name, `item:N`, an item link, an inventory slot, or
+`bag slot`. An item you carry wins over a spell of the same name, as in
+`/cast`. A spell you name by ID shows even when the player has not learned
+it, the same as a directive that names its own value.
+
+Returns `true` when the value named a spell or an item.
+
+**What the button picks up.** The spell is written where the client keeps
+each macro's spell, which is the field its own buttons read. So cooldown,
+range, usable, out-of-mana greying, the current-cast highlight and
+auto-repeat all follow, with no function replaced. The count, cooldown and
+consumable state for an item follow too. The tooltip follows only when the
+first line of the macro is `#showtooltip`. A macro with `#show`, or with no
+directive, keeps its own name as the tooltip. The icon appears on the action
+button, on the cursor while you drag the macro, and in the macro window.
+[`C_Macro.GetMacroIcon`](#c_macrogetmacroiconmacroslot) reads it back.
+
+The icon replaces the macro's own only when that is the question mark, which
+is the same rule `#showtooltip` follows. A macro with a chosen icon keeps it.
+
+**Call it whenever your answer changes.** Nothing is re-evaluated for you.
+The value stands until you publish another, and it survives the client
+re-reading the macro, so an edit elsewhere cannot quietly replace it.
+
+Publishing takes the macro over: `#showtooltip` is not parsed for it while
+you hold it, and `nil` gives it back.
+
+> **For macro addons that currently take over the action bar.** ClassicAPI
+> stands down from macro display entirely when SuperCleveRoidMacros is
+> loaded, since it owns the bar with its own conditionals. A build that
+> drives this instead sets `CleveRoids.ClassicAPIMacroDisplay = true`, which
+> lifts that. Ownership is then per macro: published ones show what you
+> published, and ones you do not claim fall back to `#showtooltip`. Forks
+> that do not set the flag keep the old all-or-nothing behavior, so an
+> older one cannot end up fighting for the same buttons.
+
 ## Mail
 
-Backports of modern WoW's mail-attachment link getters. Both follow
-the modern signature including the optional `attachmentIndex` arg
-(added with TBC's multi-attachment mail), even though vanilla 1.12
-only supports one attachment per message — pass-through compatibility
-for addons originally written against later API versions. Any
-`attachmentIndex` other than `1` is treated as no-op.
+Mail-attachment link getters. Both accept the optional `attachmentIndex`
+arg, even though only one attachment per message is supported here —
+pass-through compatibility. Any `attachmentIndex` other than `1` is
+treated as no-op.
 
-Both functions return `(link, itemID)` — modern returns just `link`,
-but `itemID` is cheap to surface at the same lookup site and saves
-callers a `string.match` on the link.
+Both functions return `(link, itemID)`. `itemID` is cheap to surface at
+the same lookup site and saves callers a `string.match` on the link.
 
 ### `GetSendMailItemLink([attachmentIndex])`
 
@@ -8229,13 +12091,12 @@ Returns the **basic itemID-only** hyperlink (`|cff…|Hitem:N:0:0:0|h[Name]|h|r`
 for the item attached to inbox message `messageIndex` (1-based),
 plus the `itemID`.
 
-**Why basic-link instead of per-instance:** vanilla inbox entries do
+**Why basic-link instead of per-instance:** inbox entries do
 store per-instance modifiers inline (enchant at `+0x12C`, suffix
 factor at `+0x134`, random property at `+0x138` — the same fields
 `GameTooltip:SetInboxItem` copies onto the tooltip to render a fully-
-decorated preview). We intentionally ignore them in the link to match
-modern 3.3.5's behavior — its `GetInboxItemLink` calls the
-itemID-only link builder (`FUN_0061E290(itemID)`) and ignores the
+decorated preview). We intentionally ignore them in the link: the
+itemID-only link builder (`FUN_0061E290(itemID)`) ignores the
 per-instance fields. Per-instance data only fully manifests on the
 client side once the player takes the item out of the mail and the
 engine spawns a real CGItem; the inbox-entry fields are display-only
@@ -8259,7 +12120,7 @@ end
 
 ### `C_Map.GetAreaInfo(areaID)`
 
-Backport of the retail `C_Map.GetAreaInfo`. Returns the localized
+Returns the localized
 `AreaTable.dbc` name for an area id — zones and subzones alike — or `nil`
 for non-numeric / non-positive input or an id with no row. `AreaTable.dbc`
 is a client DBC (always loaded, synchronous, localized), so the name is
@@ -8278,8 +12139,7 @@ game displays everywhere.
 
 ClassicAPI extension. Returns `{ [areaID] = name, … }` — every
 `AreaTable.dbc` row with a non-empty localized name, as an id→name map.
-No retail equivalent (modern WoW enumerates the `uiMapID` tree, not raw
-`AreaTable`); same "surface the hidden DBC" pattern as
+Same "surface the hidden DBC" pattern as
 [`C_Map.GetAreaTriggers`](#c_mapgetareatriggerinfotriggerid--c_mapgetareatriggersmapid).
 
 The enumeration — not the per-id `GetAreaInfo` — is what name databases
@@ -8305,11 +12165,11 @@ active locale — no locale/rename drift vs a scraped table.
 ### `C_Map.GetBestMapForUnit(unitToken)`
 
 Returns the `AreaTable.dbc` area ID the given unit is currently in,
-or `nil` if the unit isn't trackable. Vanilla 1.12 has no UiMap.db2
-concept, so the closest equivalent to modern WoW's "best map" is the
-zone-level AreaTable ID — exactly what the engine itself tracks for
-the local player (`GetRealZoneText` reads it) and what gets broadcast
-for party/raid members via `SMSG_PARTY_MEMBER_STATS_FULL`.
+or `nil` if the unit isn't trackable. There is no UiMap.db2 concept
+here, so the closest equivalent to a "best map" is the zone-level
+AreaTable ID — exactly what the engine itself tracks for the local
+player (`GetRealZoneText` reads it) and what gets broadcast for
+party/raid members via `SMSG_PARTY_MEMBER_STATS_FULL`.
 
 Coverage:
 
@@ -8331,10 +12191,10 @@ Coverage:
 -- nil                                             (target is an NPC)
 ```
 
-**The returned ID is a vanilla `AreaTable.dbc` area ID, not a modern
-UI map ID.** Stormwind City in this backport is `1519`, not retail's
-`84`. Addons that hardcode modern UI map IDs need a translation table
-(or, simpler: compare against IDs this same function produces).
+**The returned ID is an `AreaTable.dbc` area ID, not a UI map ID.**
+Stormwind City here is `1519`. Addons that hardcode UI map IDs need a
+translation table (or, simpler: compare against IDs this same function
+produces).
 
 ### `C_Map.GetMapAreaIDs()`
 
@@ -8342,8 +12202,8 @@ ClassicAPI extension. Returns `{ [mapName] = areaID, … }` — each
 `WorldMapArea.dbc` map's name (the dir the engine uses for its map
 textures) mapped to its `AreaTable` areaID.
 
-Vanilla has no `GetCurrentMapAreaID`, and `GetMapZones()` enumerates only a
-continent's *outdoor* zones — so a browsed **city or instance map**
+The stock client has no `GetCurrentMapAreaID`, and `GetMapZones()` enumerates
+only a continent's *outdoor* zones — so a browsed **city or instance map**
 (Orgrimmar, Undercity, Alterac Valley) can't be resolved to a zone id, which
 means addons can't match zone-keyed content (a flight master, a POI) to it.
 This maps those names to their zone ids:
@@ -8394,7 +12254,7 @@ Each overlay table:
 | `hitRectTop` / `hitRectLeft` / `hitRectBottom` / `hitRectRight` | hit rectangle in world-map canvas px (≈1002×668); the tight clickable bounds of the landmass |
 | `tileCols` / `tileRows` / `upscaled` | the **resolved** tile grid |
 | `tiles` | ready-to-draw tile array (below) |
-| `fileDataIDs` | ordered tile texture paths (retail's field name; redundant with `tiles[].file`) |
+| `fileDataIDs` | ordered tile texture paths (redundant with `tiles[].file`) |
 
 The `hitRect*` fields are the source addons use to place a **subzone
 center** (the texture rect includes transparent padding, so its center is
@@ -8411,7 +12271,7 @@ local h  = (ov.hitRectBottom - ov.hitRectTop)  /  668 * 100      -- height %
 Overlays with `areaID > 0` cover the [subzone → parent-zone + center/size]
 mapping that map addons hand-scrape (pfQuest's `pfDB["zones"]["data"]`).
 Reading it live matches *this* client's maps — on a modified client
-(Turtle) those differ from the scraped vanilla numbers, which is the point.
+(Turtle) those differ from the scraped numbers, which is the point.
 
 A row may be **texture-less** — a clickable subzone region with no distinct
 art. It still appears, with `textureName == ""`, zero `textureWidth`/
@@ -8464,7 +12324,7 @@ map represents, read straight from the `WorldMapArea.dbc` placement rect.
 Addons use it to turn map-relative percents into yard distances (range
 rings, "N yards away" readouts, proximity checks).
 
-Retail takes a `uiMapID`; here it's an `areaID` (`AreaTable.dbc` id — the
+Takes an `areaID` (`AreaTable.dbc` id — the
 same identity
 [`C_Map.GetBestMapForUnit`](#c_mapgetbestmapforunitunittoken) returns and
 [`C_Map.GetMapOverlays`](#c_mapgetmapoverlaysareaid) accepts), returns that
@@ -8482,11 +12342,348 @@ point's offset in yards within the zone.
 local w, h = C_Map.GetMapWorldSize(85)   -- Tirisfal: ~4518.7, 3012.5
 ```
 
+### `C_Map.GetMapInfo(uiMapID)`
+
+Returns a map's details table, or `nil` for an id that names no map:
+
+| field | meaning |
+|---|---|
+| `mapID` | the id you passed |
+| `name` | localized map name |
+| `mapType` | `Enum.UIMapType`: `1` world, `2` continent, `3` zone, `4` dungeon |
+| `parentMapID` | the map one level up, or `0` at the top |
+| `flags` | always `0` |
+
+**What a `uiMapID` is.** Maps form a three-level tree:
+
+```
+World
+ +-- Continent (Kalimdor, Eastern Kingdoms)
+      +-- Zone (Durotar, Elwynn Forest, ...)
+```
+
+A **zone** is named by its positive `AreaTable.dbc` area id — the same
+identity [`C_Map.GetBestMapForUnit`](#c_mapgetbestmapforunitunittoken)
+returns. The **world and continent** levels have no area id, so they use
+**negative** ids: Kalimdor is `-13`, Eastern Kingdoms is `-14`, and the world
+map is `-694`. Instance maps (dungeons, raids, battlegrounds) are addressed
+the same negative way. The two ranges never overlap, so every function in
+this section accepts either kind.
+
+Read the ids from `GetMapChildrenInfo`, `GetFallbackWorldMapID`, or
+`GetBestMapForUnit` rather than writing them in by hand.
+
+```lua
+/dump C_Map.GetMapInfo(14)
+-- mapID=14, name="Durotar", mapType=3, parentMapID=-13
+/dump C_Map.GetMapInfo(-13)
+-- mapID=-13, name="Kalimdor", mapType=2, parentMapID=-694
+```
+
+The world map names the whole world but carries no coordinate rect, so the
+coordinate functions return `nil` for it.
+
+### `C_Map.GetMapChildrenInfo(uiMapID)`
+
+Returns an array of [`C_Map.GetMapInfo`](#c_mapgetmapinfouimapid) tables for
+the maps one level below `uiMapID` — the continents of the world map, or the
+zones of a continent. A zone has no children, so it gives an empty table.
+Always returns a table.
+
+```lua
+local continents = C_Map.GetMapChildrenInfo(C_Map.GetFallbackWorldMapID())
+-- 2 entries: Kalimdor (-13), Eastern Kingdoms (-14)
+
+local zones = C_Map.GetMapChildrenInfo(-13)
+-- 35 entries: Durotar (14), Mulgore (215), ...
+```
+
+The zone list covers every map a continent has a world map for, city maps
+included.
+
+### `C_Map.GetMapInfoAtPosition(uiMapID, x, y)`
+
+Returns the [`C_Map.GetMapInfo`](#c_mapgetmapinfouimapid) table for the zone
+at a position on `uiMapID`, or `nil` when the point is on no zone. `x` and
+`y` are map-relative, each `0..1`.
+
+Pass a continent id to answer "which zone sits under this point on the
+continent map" — the hit test behind clicking a continent.
+
+```lua
+/dump C_Map.GetMapInfoAtPosition(-13, 0.589, 0.52)
+-- Durotar
+```
+
+### `C_Map.GetFallbackWorldMapID()`
+
+Returns the uiMapID of the whole-world map — the safe default to show when
+no specific map is known. Returns `0` if the client has no world map.
+
+```lua
+local worldID = C_Map.GetFallbackWorldMapID()   -- -694
+```
+
+### `C_Map.MapHasArt(uiMapID)`
+
+Returns whether the map has a drawable background — that is, whether the
+client ships the map's tile art.
+
+This is independent of whether a map has coordinates. The whole-world map
+has art but no coordinate rect, while an instance map can have a rect and
+no art.
+
+```lua
+C_Map.MapHasArt(14)     -- true   (Durotar)
+C_Map.MapHasArt(-13)    -- true   (Kalimdor)
+C_Map.MapHasArt(-600)   -- false  (an instance map with no art)
+```
+
+### `C_Map.GetMapArtLayers(uiMapID)`
+
+Returns the map's art layers, as an array of layer descriptions. Always
+returns a table; a map with no art gives an empty one.
+
+This client draws a map's background as one fixed layer, so there is at
+most a single entry, and it reads the same for every map that has art:
+
+| Field | Value |
+|---|---|
+| `layerWidth` / `layerHeight` | `1002`, `668` — the map canvas in pixels |
+| `tileWidth` / `tileHeight` | `256`, `256` |
+| `minScale` / `maxScale` | `1`, `1` |
+| `additionalZoomSteps` | `0` |
+
+Dividing the canvas by the tile size gives the grid the background is cut
+into — four tiles wide by three tall, the twelve
+[`GetMapArtLayerTextures`](#c_mapgetmapartlayertexturesuimapid-layerindex)
+returns:
+
+```lua
+local layer = C_Map.GetMapArtLayers(14)[1]
+local cols = math.ceil(layer.layerWidth / layer.tileWidth)    -- 4
+local rows = math.ceil(layer.layerHeight / layer.tileHeight)  -- 3
+```
+
+The scale range is `1` to `1` with no extra zoom steps because a map does
+not zoom here — changing zoom switches between the continent and zone
+maps instead of scaling one.
+
+### `C_Map.GetMapArtLayerTextures(uiMapID, layerIndex)`
+
+Returns the background tile textures for one of a map's art layers, in
+draw order — left to right, then top to bottom. Always returns a table.
+
+A map here has a single art layer, so `layerIndex` `1` gives the
+background and any other index gives an empty table. A map with no art
+gives an empty table too.
+
+```lua
+local tiles = C_Map.GetMapArtLayerTextures(14, 1)
+-- 12 entries, "Interface\WorldMap\Durotar\Durotar1" through "...Durotar12"
+
+for i, path in ipairs(tiles) do
+    _G["MyMapTile" .. i]:SetTexture(path)
+end
+```
+
+The tiles form a grid four wide and three tall of 256-pixel squares —
+the layout the world map itself draws.
+
+Entries are texture paths, ready to pass to `SetTexture`, in place of the
+numeric file ids: a texture is named by its path here. The same
+substitution appears in
+[`C_Map.GetMapOverlays`](#c_mapgetmapoverlaysareaid) for its
+`fileDataIDs`.
+
+### `C_Map.GetPlayerMapPosition(uiMapID, unitToken)`
+
+Returns a unit's position inside a zone as a `Vector2DMixin`. Call
+`:GetXY()` for the two map-relative coordinates (each `0..1`), or read
+`.x` / `.y`. Returns `nil` when the unit's world position is outside that
+zone — a different zone, or a map with no world rect.
+
+`uiMapID` is a zone or continent id (see
+[`C_Map.GetMapInfo`](#c_mapgetmapinfouimapid)) — pass a continent to get the
+unit's position on the continent map. The result comes from the unit's live
+world coordinates, so it is current the moment you call it and does not
+depend on which map the world map frame shows.
+
+```lua
+local uiMapID = C_Map.GetBestMapForUnit("player")
+local pos = C_Map.GetPlayerMapPosition(uiMapID, "player")
+local x, y = pos:GetXY()   -- e.g. 0.595, 0.600
+```
+
+Works for the player and any unit whose object is loaded (in range or
+targeted). Other units return `nil`. An unknown unit token raises an
+error, the same as `UnitHealth` and the other unit functions. In a city or
+subzone, `GetBestMapForUnit` can return a subzone id that has no world
+rect — pass a zone-level id for those.
+
+### `C_Map.GetWorldPosFromMapPos(uiMapID, mapPosition)`
+
+Converts a map-relative position on a zone to absolute world coordinates.
+Returns `continentID, worldPosition`:
+
+- `continentID` — the `Map.dbc` map the zone sits on (`0` Eastern
+  Kingdoms, `1` Kalimdor, or an instance map).
+- `worldPosition` — a `Vector2DMixin` of the world coordinates (`.x`
+  north, `.y` west).
+
+`uiMapID` is a zone or continent id (see
+[`C_Map.GetMapInfo`](#c_mapgetmapinfouimapid)). `mapPosition` is any table
+with `.x` / `.y` in `0..1` (a `Vector2DMixin`, or the result of
+[`C_Map.GetPlayerMapPosition`](#c_mapgetplayermappositionuimapid-unittoken)).
+Returns `nil` when the zone has no world rect. This is the inverse of
+[`C_Map.GetMapPosFromWorldPos`](#c_mapgetmapposfromworldposcontinentid-worldposition-overrideuimapid).
+
+```lua
+local uiMapID = C_Map.GetBestMapForUnit("player")
+local pos = C_Map.GetPlayerMapPosition(uiMapID, "player")
+local continentID, world = C_Map.GetWorldPosFromMapPos(uiMapID, pos)
+```
+
+### `C_Map.GetMapPosFromWorldPos(continentID, worldPosition[, overrideUiMapID])`
+
+Converts absolute world coordinates to a map-relative position. Returns
+`uiMapID, mapPosition`:
+
+- `uiMapID` — the `AreaTable.dbc` zone the point falls in.
+- `mapPosition` — a `Vector2DMixin` with `.x` / `.y` in `0..1`.
+
+`continentID` is a `Map.dbc` map id. `worldPosition` is a table with `.x` /
+`.y` world coordinates. Without `overrideUiMapID`, the result is the zone
+the point falls in. Pass `overrideUiMapID` (a zone or continent id) to force
+the result into that specific map. The call then returns `nil` when the
+point lies outside it. This is the inverse of
+[`C_Map.GetWorldPosFromMapPos`](#c_mapgetworldposfrommapposuimapid-mapposition).
+
+```lua
+local uiMapID, pos = C_Map.GetMapPosFromWorldPos(continentID, world)
+```
+
+### `C_Map.GetMapRectOnMap(uiMapID, topUiMapID)`
+
+Returns where a zone sits on its continent map, as four numbers:
+`minX, maxX, minY, maxY` — the zone's bounding rectangle in `0..1`
+continent coordinates. Returns nothing (`nil`) when the zone has no world
+rect.
+
+`uiMapID` is the zone. `topUiMapID` is the map to measure against, normally
+the zone's continent (see [`C_Map.GetMapInfo`](#c_mapgetmapinfouimapid)).
+When `topUiMapID` names no usable map, the zone's own continent is used.
+
+```lua
+local minX, maxX, minY, maxY = C_Map.GetMapRectOnMap(14, 1)  -- Durotar on Kalimdor
+```
+
+A zone placed off the edge of the standard continent map can return values
+outside `0..1`.
+
+### `C_Map.SetUserWaypoint(uiMapPoint)`
+
+Places the user waypoint — the single player-set map pin — and returns whether
+it was set. Fires `USER_WAYPOINT_UPDATED`.
+
+`uiMapPoint` is a table with these fields:
+
+| field | meaning |
+|---|---|
+| `uiMapID` | the map the pin sits on |
+| `position` | a `vector2` with `.x` / `.y` in `0..1` |
+| `z` | optional height |
+
+Build one with `UiMapPoint.CreateFromCoordinates(uiMapID, x, y[, z])` or
+`UiMapPoint.CreateFromVector2D(uiMapID, position[, z])`.
+
+```lua
+C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(14, 0.5, 0.6))
+```
+
+Returns `false` for a malformed point, or for a map that cannot hold a pin
+(see [`C_Map.CanSetUserWaypointOnMap`](#c_mapcansetuserwaypointonmapuimapid)).
+The pin lasts for the session and survives a UI reload.
+
+### `C_Map.GetUserWaypoint()` / `C_Map.HasUserWaypoint()` / `C_Map.ClearUserWaypoint()`
+
+`GetUserWaypoint` returns the pin as a UiMapPoint table, or `nil` when none is
+set. `HasUserWaypoint` returns whether one is set. `ClearUserWaypoint` removes
+it and fires `USER_WAYPOINT_UPDATED`.
+
+```lua
+local point = C_Map.GetUserWaypoint()
+if point then
+    local x, y = point.position:GetXY()
+end
+```
+
+### `C_Map.GetUserWaypointPositionForMap(uiMapID)`
+
+Returns the pin's position on `uiMapID` as a `vector2`, or `nil` when the pin
+does not fall on that map.
+
+The pin is stored against one map, so this converts it to whichever map you
+are drawing. A pin dropped on a zone resolves on that zone's continent, and
+the reverse.
+
+```lua
+-- pin at (0.5, 0.6) on Durotar (14)
+local pos = C_Map.GetUserWaypointPositionForMap(-13)   -- on Kalimdor
+-- 0.589, 0.534
+```
+
+### `C_Map.GetUserWaypointHyperlink()` / `C_Map.GetUserWaypointFromHyperlink(hyperlink)`
+
+`GetUserWaypointHyperlink` returns a link describing the pin, or `nil` when
+none is set. `GetUserWaypointFromHyperlink` reads such a link back into a
+UiMapPoint, or `nil` when the string is not one.
+
+The payload is `worldmap:uiMapID:x:y`, with both coordinates multiplied by
+10000.
+
+```lua
+/dump C_Map.GetUserWaypointHyperlink()
+-- "|cffffff00|Hworldmap:14:5000:6000|h[Map Pin Location]|h|r"
+```
+
+`GetUserWaypointFromHyperlink` takes either a whole link or the bare
+`worldmap:` payload, so it can read a link out of chat text.
+
+### `C_Map.CanSetUserWaypointOnMap(uiMapID)`
+
+Returns whether a pin can be placed on the given map. A map needs a coordinate
+rect to hold one, so zones, continents, and instance maps accept a pin while
+the whole-world map does not.
+
+```lua
+C_Map.CanSetUserWaypointOnMap(14)    -- true  (Durotar)
+C_Map.CanSetUserWaypointOnMap(-694)  -- false (the world map)
+```
+
+### `USER_WAYPOINT_UPDATED` event
+
+Fires (with no payload) whenever the user waypoint changes — when
+[`C_Map.SetUserWaypoint`](#c_mapsetuserwaypointuimappoint) places one, and
+when [`C_Map.ClearUserWaypoint`](#c_mapgetuserwaypoint--c_maphasuserwaypoint--c_mapclearuserwaypoint)
+removes one. Re-read the pin with `C_Map.GetUserWaypoint` when it fires.
+
+Clearing while no pin is set changes nothing, so it fires nothing.
+
+```lua
+local f = CreateFrame("Frame")
+f:RegisterEvent("USER_WAYPOINT_UPDATED")
+f:SetScript("OnEvent", function()
+    local point = C_Map.GetUserWaypoint()
+    -- redraw the pin, or hide it when point is nil
+end)
+```
+
 ### `C_Map.GetAreaTriggerInfo(triggerID)` / `C_Map.GetAreaTriggers([mapID])`
 
 ClassicAPI extension. Exposes `AreaTrigger.dbc` — the client's 517
 static trigger volumes (subzone-entry, exploration, and teleport
-triggers). Vanilla loads the DBC but exposes **none** of its geometry
+triggers). The engine loads the DBC but exposes **none** of its geometry
 to Lua, which is why map addons (pfQuest et al.) ship hand-scraped
 trigger tables; this is a live DBC read, same "surface the hidden data"
 pattern as [`C_Map.GetMapOverlays`](#c_mapgetmapoverlaysareaid).
@@ -8557,7 +12754,9 @@ end
 > lookup). An addon can drop `GetAreaTriggers()` straight in place of a
 > shipped table.
 
-Backports the six `C_MerchantFrame.*` calls retail addons use when
+## MerchantFrame
+
+The six `C_MerchantFrame.*` calls addons use when
 interacting with a vendor. All entry points read the engine's
 merchant/buyback storage directly — no Lua-roundtrip through
 `GetMerchantItemInfo` / `GetBuybackItemLink` etc. — and the
@@ -8565,7 +12764,7 @@ merchant/buyback storage directly — no Lua-roundtrip through
 by calling the engine's internal `MerchantSellItem` packet builder.
 
 A "merchant frame is currently open" gate (`VAR_MERCHANT_NPC_GUID_*`
-non-zero) applies to every function — the same gate retail enforces.
+non-zero) applies to every function.
 `GetNumJunkItems` returns `0` away from a vendor and the sell
 functions are no-ops; the per-slot getters return `nil`.
 
@@ -8582,9 +12781,9 @@ Table fields:
 | `price`           | number  | Copper cost per stack (multiply by `stackCount` for unit price). |
 | `stackCount`      | number  | Units delivered per purchase (1 for most equipment, e.g. 5 for stacks of cloth). |
 | `numAvailable`    | number  | Limited-supply count, or `-1` for unlimited stock. |
-| `isPurchasable`   | boolean | Always `true` in this build — vanilla has no "blocked from buying" flag. |
-| `isThrottled`     | boolean | Always `false` — modern's anti-spam concept doesn't apply in vanilla. |
-| `hasExtendedCost` | boolean | Always `false` — currency/honor-cost merchants don't exist in vanilla. |
+| `isPurchasable`   | boolean | Always `true` in this build — there is no "blocked from buying" flag. |
+| `isThrottled`     | boolean | Always `false` — there's no anti-spam concept here. |
+| `hasExtendedCost` | boolean | Always `false` — currency/honor-cost merchants don't exist here. |
 
 ```lua
 local info = C_MerchantFrame.GetItemInfo(1)
@@ -8597,7 +12796,7 @@ Reads directly from the 28-byte merchant entry at
 `VAR_MERCHANT_ITEMS + (slot-1) * MERCHANT_STRIDE` (the same flat
 array `Script_GetMerchantItemInfo` walks). Compared to the existing
 [`GetMerchantItemID`](#getitemid--companions-to-the-engines-getitemlink-family),
-this returns the wider modern struct shape in one call.
+this returns the wider struct shape in one call.
 
 ### `C_MerchantFrame.GetBuybackItemID(slot)`
 
@@ -8631,10 +12830,9 @@ roundtrip):
 
 Returns the count of grey-quality (`LE_ITEM_QUALITY_POOR`) items in
 the player's bags 0..4 that `SellAllJunkItems` would sell. Returns
-`0` when no merchant frame is open — matching retail's behavior of
-gating the count on merchant context, since the count is meant as
-a "what would the sell-junk button do right now" signal rather than
-a passive inventory query.
+`0` when no merchant frame is open — the count is gated on merchant
+context, since it's meant as a "what would the sell-junk button do
+right now" signal rather than a passive inventory query.
 
 ```lua
 -- Inside a MERCHANT_SHOW handler:
@@ -8657,7 +12855,7 @@ merchant. No-op when no merchant frame is open.
 
 Sells are dispatched **one per frame** via the shared
 `WorldTick` subscriber, not in a tight loop within the call —
-vanilla's network path drops packets when CMSG_SELL_ITEM is
+the network path drops packets when CMSG_SELL_ITEM is
 flooded (a 10-item burst consistently lost the 2nd-to-last sell
 in testing). Calling pace matches click-by-click selling. For
 10 junk items, expect the queue to drain in ~10 frames (~150ms
@@ -8681,10 +12879,9 @@ state changes mid-loop.
 
 ### `C_MerchantFrame.IsMerchantItemRefundable(slot)`
 
-Always returns `false`. Vanilla 1.12 has no refund mechanic
-(retail's 2-hour buy-back-for-full-price system was introduced
-post-vanilla); the function exists for API parity so retail
-addons that gate behavior on refundability don't break.
+Always returns `false`. There is no refund mechanic here; the function
+exists for API parity so addons that gate behavior on refundability
+don't break.
 
 ```lua
 if not C_MerchantFrame.IsMerchantItemRefundable(slot) then
@@ -8694,14 +12891,13 @@ end
 
 ### `C_MerchantFrame.IsSellAllJunkEnabled()`
 
-Always returns `true`. Retail exposes an optional client setting to
-disable the sell-all-junk button; vanilla has no such setting, so
-the feature is always on. Function exists so retail addons that
-gate `SellAllJunkItems` on this don't no-op silently.
+Always returns `true`. There is no client setting to disable the
+sell-all-junk button, so the feature is always on. The function exists
+so addons that gate `SellAllJunkItems` on this don't no-op silently.
 
 ## MapExplorationInfo
 
-`C_MapExplorationInfo.GetExploredMapTextures` (retail backport) and
+`C_MapExplorationInfo.GetExploredMapTextures` and
 `GetUnexploredMapTextures` (ClassicAPI extension) are the
 exploration-filtered views of a zone's `WorldMapOverlay.dbc` overlays.
 Together with [`C_Map.GetMapOverlays`](#c_mapgetmapoverlaysareaid) (which
@@ -8722,11 +12918,11 @@ world map. With no argument, both default to the current map view.
 
 ### `C_MapExplorationInfo.GetExploredMapTextures([areaID])`
 
-Backport of the retail call (retail added it in 8.0). Returns an array of
+Returns an array of
 the overlay tables for overlays the local player **has discovered** in the
 zone — same shape as [`C_Map.GetMapOverlays`](#c_mapgetmapoverlaysareaid),
-including `fileDataIDs` (retail's field name for the tile list; here it
-holds `SetTexture`-ready texture *paths*, since vanilla has no numeric
+including `fileDataIDs` (here it
+holds `SetTexture`-ready texture *paths*, since there are no numeric
 fileDataIDs). Empty before the player is resident (character select).
 
 ```lua
@@ -8739,9 +12935,81 @@ end
 
 ClassicAPI extension — the complement: overlays the player has **not**
 discovered, the pieces a map-reveal addon draws over the fogged base map.
-No retail equivalent (retail ships only the explored getter; its inverse,
-`C_Map.GetMapOverlays`, returns *everything*). Same table shape and
+The related [`C_Map.GetMapOverlays`](#c_mapgetmapoverlaysareaid) returns
+*everything*. Same table shape and
 `areaID` semantics as the explored getter.
+
+## Model
+
+### `model:SetDisplayInfo(creatureDisplayID)`
+
+Points a Model frame at a creature by its display ID. This is the
+alternative to `Model:SetModel(path)`, which needs a raw model file path.
+
+The engine resolves the display ID to a model file through two DBC tables:
+`CreatureDisplayInfo`, then `CreatureModelData`. It loads the model the same
+way `SetModel` does, then applies the creature's skin textures. So the model
+shows the correct look for that display, not an untextured base.
+
+A Model frame provides no light of its own. Call `SetLight` after
+`SetDisplayInfo`, or the model renders as a black silhouette. Call
+`SetCamera(0)` to frame it.
+
+An unknown or missing display ID falls back to the engine's placeholder
+model.
+
+A character-based display (an NPC on the shared `Character\<Race>\<Sex>`
+base model) is dressed the same way a spawned NPC is: baked body texture,
+hair, face, facial hair, and equipment, including the attached helm and
+shoulder models. The dressing runs when the model file finishes loading,
+a moment after the call. Weapons do not show: the server sends NPC
+weapons only for spawned units, and no client table carries them.
+
+This is the single-creature form. An optional second argument
+`mountDisplayID` that shows the creature on a mount is not supported
+here: a mount needs a second, attached model, and the Model frame holds
+one model.
+
+```lua
+local m = CreateFrame("Model", "PreviewModel", UIParent)
+m:SetSize(200, 260)
+m:SetPoint("CENTER")
+m:SetDisplayInfo(330)   -- a human NPC
+m:SetCamera(0)
+m:SetLight(1, 0, 0, -1, -1, 1, 1, 1, 1)  -- else it is a black silhouette
+```
+
+### `model:SetCreature(creatureID)`
+
+Points a Model frame at a creature by its **entry ID** — the creature's
+database ID, not a display ID. This is the companion to `SetDisplayInfo`.
+
+The engine looks the entry ID up in the client creature cache, reads the display
+ID, then loads the model exactly like `SetDisplayInfo`. The same light and camera
+notes apply.
+
+**Limitation.** The lookup only works for a creature the client has cached. A
+creature caches after you see it, target it, or mouse over it, or from
+`creaturecache.wdb` at login. There is no client-side entry-to-display table,
+so an uncached creature ID is a no-op — the frame keeps its previous model.
+
+For an uncached creature, request its data first, then set it when the data
+arrives:
+
+```lua
+local creatureID = 448  -- the creature's entry (database) ID
+C_CreatureInfo.RequestLoadCreatureByID(creatureID)
+
+local f = CreateFrame("Frame")
+f:RegisterEvent("CREATURE_DATA_LOAD_RESULT")
+f:SetScript("OnEvent", function()
+    if arg1 == creatureID and arg2 then   -- (creatureID, success)
+        model:SetCreature(creatureID)
+        model:SetCamera(0)
+        model:SetLight(1, 0, 0, -1, -1, 1, 1, 1, 1)
+    end
+end)
+```
 
 ## ChatBubbles
 
@@ -8749,9 +13017,8 @@ No retail equivalent (retail ships only the explored getter; its inverse,
 
 Returns a 1-based table of the currently-active chat-bubble `Frame`
 objects (the speech bubbles above characters who `/say` or `/yell`).
-Modern WoW added this in 7.2.5 to replace the old "iterate over
-`WorldFrame` children and guess which are bubbles" idiom — we hand you
-the exact set instead.
+This replaces the old "iterate over `WorldFrame` children and guess
+which are bubbles" idiom — we hand you the exact set instead.
 
 ```lua
 for _, bubble in ipairs(C_ChatBubbles.GetAllChatBubbles()) do
@@ -8764,7 +13031,7 @@ for _, bubble in ipairs(C_ChatBubbles.GetAllChatBubbles()) do
 end
 ```
 
-Vanilla 1.12 chat bubbles are `CGChatBubbleFrame`s — full frames the
+Chat bubbles are `CGChatBubbleFrame`s — full frames the
 engine creates in C++ without ever calling `CreateFrame` (same as
 default nameplates). The returned frames are the engine's **canonical
 wrappers**: real, method-capable (`:GetRegions()`, `:IsShown()`,
@@ -8774,20 +13041,20 @@ FontString is parented to the bubble, so it shows up in
 `:GetRegions()`.
 
 `includeForbidden` is accepted for signature parity and ignored —
-vanilla has no forbidden frames, so every active bubble is returned
+there are no forbidden frames here, so every active bubble is returned
 regardless. Returns an empty table when no bubbles are showing. A
 bubble whose owner just despawned can linger for one frame before the
 engine prunes it; filter on `bubble:IsShown()` if that matters.
 
 ## NamePlate
 
-Modern `C_NamePlate.*` returns nameplate `Frame` objects keyed off
-unit data. Vanilla 1.12 doesn't ship the API at all — but the
-underlying data (per-unit nameplate pointer at `CGUnit + 0xE60`)
-exists. We enumerate visible units via the local-player-anchored
-object hash table, filter by `TYPEMASK_UNIT`, and return matches.
+`C_NamePlate.*` returns nameplate `Frame` objects keyed off unit data.
+The engine doesn't ship the API, but the underlying data (per-unit
+nameplate pointer at `CGUnit + 0xE60`) exists. We enumerate visible
+units via the local-player-anchored object hash table, filter by
+`TYPEMASK_UNIT`, and return matches.
 
-Modern's `"nameplateN"` unit-token family is also supported — see
+The `"nameplateN"` unit-token family is also supported — see
 [Unit tokens](#unit-tokens-nameplaten) below. `NAME_PLATE_UNIT_ADDED`
 / `_REMOVED` / `_CREATED` events fire via a per-tick visible-plate
 diff (see [the events section](#name_plate_created--name_plate_unit_added--name_plate_unit_removed-events)).
@@ -8807,27 +13074,28 @@ for i, plate in ipairs(plates) do
 end
 ```
 
-Two kinds of plates can show up:
+Two kinds of plates can show up. Both give you the same frame object
+that every other path gives you for that plate:
 
-- **Addon-created plates** (pfUI, TidyPlates, NamePlateMod, etc.):
-  registered with Lua via `CreateFrame`, so each has a real
-  registry ref. We push `registry[plate + 0x08]`. Identity is
-  stable across calls — caching is safe while the frame is alive.
+- **Addon-created plates** (pfUI, TidyPlates, NamePlateMod, and
+  others): built with `CreateFrame`. The addon puts its own fields
+  and methods on that frame, and you see them here.
 
-- **Default vanilla plates**: created internally by the engine
-  without ever calling `CreateFrame`. Their `+0x08` field holds the
-  sentinel `LUA_NOREF` (`-2`), not a real registry key. We build a
-  fresh wrapper table per call (`{[0] = lightuserdata(plate)}` with
-  the global `__framescript_meta` metatable) so addons get the
-  same method surface. The wrapper isn't cached engine-side, so
-  identity isn't stable across calls — don't compare wrappers, and
-  don't store them across the unit going out of range (the
-  underlying frame may be freed). Call `GetNamePlates()` fresh
-  each time you need plates.
+- **Default engine plates**: built by the engine without
+  `CreateFrame`. The first call registers the frame with Lua. Every
+  later call gives you that same object.
+
+Identity is stable across calls for both kinds. Two calls give you the
+same table for one plate, so you can compare frames with `==`. Fields
+that you set on a frame stay on it.
+
+A plate frame comes from a pool. When the unit goes out of range, the
+engine can give that frame to a different unit. Do not store a frame
+across that point. When you need plates, call `GetNamePlates()` again.
 
 ### Reading region content from a default nameplate
 
-Vanilla plates have six child regions in stable positions. Walk them
+Default plates have six child regions in stable positions. Walk them
 with `:GetRegions()`:
 
 ```lua
@@ -8860,10 +13128,9 @@ if plate then
 end
 ```
 
-Same registered-vs-fresh-wrapper behavior as `GetNamePlates()` —
-addon-created plates return their cached wrapper, default vanilla
-plates get a fresh per-call wrapper. Don't cache the result across
-the unit going out of range.
+The frame object is the same one that `GetNamePlates()` gives you for
+that plate. Do not store the result across the unit going out of
+range. The engine can give that frame to a different unit.
 
 ### `C_NamePlate.GetNamePlateForGUID(guidString)`
 
@@ -8890,10 +13157,10 @@ visible CGUnit, or the unit has no allocated nameplate.
 
 ### `C_NamePlate.GetNamePlateGUIDs()`
 
-Returns a 1-based table of GUID strings (modern
-`"0xHHHHHHHHHHHHHHHH"` format) — one per CGUnit with an allocated
+Returns a 1-based table of GUID strings
+(`"0xHHHHHHHHHHHHHHHH"` format) — one per CGUnit with an allocated
 nameplate, **regardless** of whether the frame has been registered
-with Lua. Catches default vanilla nameplates that
+with Lua. Catches default engine nameplates that
 [`GetNamePlates`](#c_nameplategetnameplates) can't surface as
 frames.
 
@@ -8917,15 +13184,18 @@ hash-bucket iteration and isn't stable across calls.
 ~30 functions for free.
 
 ```lua
+-- A slot can be vacant, so skip gaps. Do not stop at the first one.
 for i = 1, 40 do
-    if not UnitExists("nameplate" .. i) then break end
-    print(i, UnitName("nameplate" .. i), UnitClass("nameplate" .. i))
+    local token = "nameplate" .. i
+    if UnitExists(token) then
+        print(i, UnitName(token), UnitClass(token))
+    end
 end
 ```
 
-Indices are **assigned slots**, matching modern WoW exactly: a plate keeps
-its slot for its entire lifetime, so surviving plates are **never
-renumbered** when another plate is removed. A removed plate frees its slot,
+Indices are **assigned slots**: a plate keeps its slot for its entire
+lifetime, so surviving plates are **never renumbered** when another plate
+is removed. A removed plate frees its slot,
 and the next new plate reuses the lowest free slot. So a middle plate
 vanishing leaves the others' `nameplateN` tokens unchanged (that slot simply
 becomes vacant until a new plate reuses it) — `UnitExists("nameplateN")`
@@ -8935,7 +13205,7 @@ single plate; no reordering, ever.
 Token chains work too — `"nameplate1target"`, `"nameplate1targettarget"`,
 etc. — by mirroring the engine's own `targettarget`-style suffix
 walker (read `UNIT_FIELD_TARGET` off `m_objectFields`, loop). Other
-suffixes (`pet`, `master`) aren't supported by the vanilla engine's
+suffixes (`pet`, `master`) aren't supported by the engine's
 own walker either, so they don't compose.
 
 Out-of-range indices return `nil` cleanly without raising "Unknown
@@ -8944,7 +13214,7 @@ unit name" — `UnitExists("nameplate99")` just returns `false`.
 **Unit events fire for `"nameplateN"`.** Like party/raid tokens,
 `UNIT_HEALTH` / `UNIT_AURA` / `UNIT_LEVEL` / … fire with
 `arg1 == "nameplateN"` when a nameplated unit's descriptor field changes
-(vanilla only watched its own target/party/raid units). Backed by
+(the engine only watched its own target/party/raid units). Backed by
 `Unit::TokenObserver` — observers are registered per plate on
 `NAME_PLATE_UNIT_ADDED` and torn down on `_REMOVED`; the changed GUID is
 resolved to its *current* index at fire time, since indices shift as
@@ -8980,7 +13250,7 @@ other families.
 
 **Unit events fire for `"markN"`.** `UNIT_HEALTH` / `UNIT_MANA` /
 `UNIT_AURA` / `UNIT_LEVEL` / … fire with `arg1 == "markN"` when the marked
-unit's descriptor field changes — vanilla only watched its own
+unit's descriptor field changes — the engine only watched its own
 target/party/raid units, so a marked mob that isn't otherwise one of those
 fired nothing:
 
@@ -9027,11 +13297,43 @@ so when it's loaded we detect it and defer to its resolver (no double
 handling); when it isn't, this fills the gap. Either way GUID-token input
 behaves identically, so addons needn't care whether SuperWoW is present.
 
+### `IsUnitToken(value)`
+
+Returns `true` when `value` is a unit token, and `false` when it is anything
+else, such as a character name.
+
+Several functions come in pairs, one that takes a token and one that takes a
+name, and each raises an error on the other kind. Use this to pick between
+them:
+
+```lua
+if IsUnitToken(x) then TargetUnit(x) else TargetByName(x) end
+if IsUnitToken(x) then FollowUnit(x) else FollowByName(x) end
+```
+
+That is the common case for conditional slash commands, because
+`SecureCmdOptionParse` returns either kind from the same expression.
+`/target [@focus]` gives the token `focus`, and `/target Bob` gives the name
+`Bob`.
+
+The answer covers every token family the client accepts, including
+`nameplateN`, `markN`, `focus`, GUID literals, and suffix chains such as
+`focustarget`.
+
+The question is whether the text names a token, not whether a unit is there.
+So `"target"` with nothing targeted, and `"party3"` while solo, are both
+`true`. A missing or non-string argument is `false`.
+
+A name that reads like a token is treated as the token. Call the by-name
+function directly to reach a player named `Target`.
+
+*ClassicAPI extension.*
+
 ## NameCache
 
 GUID-keyed cache of player names and classes. The engine itself
 maintains an in-memory `NameCache` at `0x00C0E228`, populated by
-`SMSG_NAME_QUERY_RESPONSE` — but vanilla doesn't expose it to Lua,
+`SMSG_NAME_QUERY_RESPONSE` — but it isn't exposed to Lua,
 and it doesn't survive `/reload`. This module surfaces it as
 `GetPlayerInfoByGUID`, adds an opt-in **persistent** layer that
 survives `/reload` and full client restarts, and (separately
@@ -9098,12 +13400,12 @@ Bare 8-hex `"0xLLLLLLLL"` (hi-dword zero) is also accepted.
 Returns:
 
 | 1 `localizedClass` | `"Warrior"` / `"Krieger"` etc. — from `ChrClasses.dbc` indexed by locale. |
-| 2 `englishClass`   | `"WARRIOR"` (uppercase tag, same value `UnitClass` returns as 2nd return on modern clients) — `ChrClasses.dbc` filename field. |
+| 2 `englishClass`   | `"WARRIOR"` (uppercase tag, the same value `UnitClass` returns as its 2nd return) — `ChrClasses.dbc` filename field. |
 | 3 `localizedRace`  | `"Human"` / `"Mensch"` / `"Humain"` etc. — from `ChrRaces.dbc` indexed by locale. |
-| 4 `englishRace`    | `"Human"`, `"Orc"`, `"Dwarf"`, `"NightElf"`, `"Scourge"` (vanilla's filename for what addons call Undead), `"Tauren"`, `"Gnome"`, `"Troll"` — from `ChrRaces.dbc` filename field. |
+| 4 `englishRace`    | `"Human"`, `"Orc"`, `"Dwarf"`, `"NightElf"`, `"Scourge"` (the filename for what addons call Undead), `"Tauren"`, `"Gnome"`, `"Troll"` — from `ChrRaces.dbc` filename field. |
 | 5 `sex`            | `2` = male, `3` = female. Matches `UnitSex` convention (the cache stores `0`/`1`; we add `2`). |
 | 6 `name`           | Character name. |
-| 7 `realm`          | Realm name. Single-realm in vanilla, so usually the local realm. |
+| 7 `realm`          | Realm name. Single-realm, so usually the local realm. |
 
 **Cache coverage**: the engine populates entries from
 `SMSG_NAME_QUERY_RESPONSE`. Anything the client has already seen
@@ -9121,8 +13423,8 @@ explicitly and fire a load-result event.
 has been opted into, a per-realm on-disk cache extends coverage
 across sessions. On engine cache miss, `GetPlayerInfoByGUID` falls
 back to the persistent cache and returns `name`, `class`, `race`,
-and `sex` from storage (`realm` comes back as `""` since vanilla
-is single-realm and we don't carry per-player realm names).
+and `sex` from storage (`realm` comes back as `""` since this is
+single-realm and we don't carry per-player realm names).
 Returns `nil` only when both the engine and persistent caches miss.
 
 **Implementation**: calls the engine's get-or-fetch primitive at
@@ -9134,10 +13436,16 @@ sex, class) was reverse-engineered from the
 ### `UnitNameFromGUID(guid)`
 
 Returns `name, realm` for the player identified by `guid`, or `nil`
-if no player with that GUID has been encountered yet. Same lookup
-chain as [`GetPlayerInfoByGUID`](#getplayerinfobyguidguid) (engine
-NameCache, persistent on-disk fallback when enabled) — just narrower
-return shape for callers that only need the name.
+if no player with that GUID has been encountered yet.
+
+It tries three sources in order:
+
+1. The object manager — any currently-synced unit (a player you can
+   see, your target, a party or raid member, an NPC in range).
+2. Your friends list — it keeps name and GUID for online and offline
+   friends, so a friend resolves even when not synced and never seen
+   in chat. Always on.
+3. The persistent on-disk name cache, when you have enabled it.
 
 ```lua
 local name, realm = UnitNameFromGUID(UnitGUID("target"))
@@ -9149,8 +13457,8 @@ end
 local name, realm = UnitNameFromGUID("0x0000000000000777")
 ```
 
-`realm` is always `""` in vanilla — the engine doesn't populate
-per-player realm names and 1.12 has no cross-realm interaction.
+`realm` is always `""` — the engine doesn't populate
+per-player realm names and there is no cross-realm interaction.
 We push the empty string rather than `nil` to match the convention
 of the other player-info accessors; addons can gate on `realm == ""`.
 
@@ -9178,7 +13486,7 @@ local _, class, _, race, _, _, _, guid = C_PlayerCache.GetPlayerInfoByName("Gedw
 C_PlayerCache.GetPlayerInfoByName("NeverSeen")  -- nil (not cached)
 ```
 
-Match is **case-sensitive, exact** — vanilla server-stored names
+Match is **case-sensitive, exact** — server-stored names
 are case-stable (`"Gedwyr"` won't match `"gedwyr"`).
 
 Returns (vs. `GetPlayerInfoByGUID`):
@@ -9221,19 +13529,19 @@ enabled or the required args are malformed.
 
 - `guid` — `"0xHHHHHHHHLLLLLLLL"` string (same format `UnitGUID`
   returns). 8-hex `"0xLLLLLLLL"` is also accepted (hi-dword zero).
-- `name` — 1–12 ASCII chars (vanilla character-name range). Tabs,
+- `name` — 1–12 ASCII chars (the character-name range). Tabs,
   newlines, and high bytes are stripped.
 - `classToken` — uppercase token like `"WARRIOR"`, `"MAGE"`. Looked
   up against `ChrClasses.dbc` filename field, case-insensitive.
   Passing an unknown token keeps the entry's prior class (so a
   name-only sighting doesn't erase good class data).
 - `raceToken` *(optional)* — uppercase token like `"NIGHTELF"`,
-  `"SCOURGE"` (vanilla's filename for Undead). Same resolution as
+  `"SCOURGE"` (the filename for Undead). Same resolution as
   classToken, against `ChrRaces.dbc`. Omitted/unknown → leaves
   prior race alone.
 - `sex` *(optional)* — `0` (male) or `1` (female), matching the
-  wire-format convention the engine cache stores. Modern WoW's
-  `UnitSex` uses `2`/`3`; pass `UnitSex - 2` if you're forwarding
+  wire-format convention the engine cache stores. `UnitSex`
+  uses `2`/`3`; pass `UnitSex - 2` if you're forwarding
   that value. Omitted/`0` → leaves prior sex alone (so this call
   can't be used to flip a stored value back to male; the
   `SMSG_NAME_QUERY_RESPONSE` hook handles direct assignment).
@@ -9258,7 +13566,7 @@ name without erasing class.
 
 The "deleted character recreated with same name, different class"
 collision case that name-keyed caches suffer from doesn't apply
-here: GUIDs are permanent for the life of a vanilla character, so
+here: GUIDs are permanent for the life of a character, so
 the new character has a different GUID and gets a different cache
 entry.
 
@@ -9359,19 +13667,18 @@ end
 
 ## NewItems
 
-Backports the modern "new item glow" bookkeeping — the sparkle the retail
-bag UI shows on items you've just picked up but haven't looked at yet.
-Vanilla 1.12 never had this feature (no DBC, no server data, no engine
-bit); it's pure client-side tracking over your bag contents, so ClassicAPI
-adds it.
+The "new item glow" bookkeeping — the sparkle a bag UI shows on items
+you've just picked up but haven't looked at yet. There is no DBC, server
+data, or engine bit for it; it's pure client-side tracking over your bag
+contents, so ClassicAPI adds it.
 
 Newness is keyed on each item's **instance GUID** (read off the CGItem),
 not on `(bagID, slotIndex)`. A flag therefore survives the player
-rearranging a bag — exactly like retail, and impossible for a pure-Lua
-addon (vanilla exposes no per-instance GUID to Lua). Only **bag** items are
-tracked (bags 0–4); equipment and bank are out of scope, matching retail.
+rearranging a bag, and is impossible for a pure-Lua
+addon (no per-instance GUID is exposed to Lua). Only **bag** items are
+tracked (bags 0–4); equipment and bank are out of scope.
 
-The feed is entirely client-side C++, the same as retail (no addon Lua), and
+The feed is entirely client-side C++ (no addon Lua), and
 event-driven rather than polled: it hangs off the engine's own `BAG_UPDATE`
 fire sites, so a bag rescan runs only on frames where a bag actually
 changed. Each rescan diffs the resident item GUIDs against the previous one,
@@ -9456,7 +13763,7 @@ C_PlayerInfo.CanUseItem(12717)  -- Plans: Lionheart Helm → false without the A
 
 ### `C_PlayerInfo.GUIDIsPlayer(guid)` / `GUIDIsCreature` / `GUIDIsPet` / `GUIDIsGameObject`
 
-Type checks on the raw 1.12 GUID format. Vanilla GUIDs encode the
+Type checks on the raw 1.12 GUID format. GUIDs encode the
 entity type in the high 16 bits of the qword — players have
 `0x0000` (low dword = player ID), creatures `0xF130xxxx`, pets
 `0xF140xxxx`, game objects (herbs / chests / etc.) `0xF110xxxx`,
@@ -9477,16 +13784,16 @@ local function OnCombatLogEvent(_, _, eventType, srcGUID, ...)
 end
 ```
 
-`GUIDIsPlayer` matches modern WoW's signature exactly; the other
-three are companions for the most common type-distinction needs.
+`GUIDIsPlayer` takes a single GUID argument; the other three are
+companions for the most common type-distinction needs.
 For other types (corpse, dynamic object, transport, item) the
 underlying classifier exists internally — let us know if you need
 one exposed.
 
 Accepts either the 16-digit `"0xHHHHHHHHLLLLLLLL"` form or the
 8-digit `"0xLLLLLLLL"` shortcut (high dword implicitly zero).
-Malformed input returns `false` rather than raising — matching
-modern's tolerance for stale GUIDs from addon-side caches.
+Malformed input returns `false` rather than raising — tolerant of
+stale GUIDs from addon-side caches.
 
 ### `C_PlayerInfo.GetName / GetClass / GetRace / GetSex / IsConnected(playerLocation)`
 
@@ -9522,7 +13829,7 @@ local sex = C_PlayerInfo.GetSex(loc)
   currently-synced object as online and otherwise consults the group-member
   roster's online bit, exactly as `UnitIsConnected` does. `IsConnected` with
   no argument defaults to the local player.
-- **`GetRace` / `GetClass`** return the numeric ids that vanilla's
+- **`GetRace` / `GetClass`** return the numeric ids that
   `UnitRace` / `UnitClass` don't (those give only names). `classID` round-trips
   with [`C_CreatureInfo.GetClassInfo`](#c_creatureinfogetclassinfoclassid) and
   `raceID` with [`C_CreatureInfo.GetRaceInfo`](#c_creatureinfogetraceinforaceid);
@@ -9534,11 +13841,66 @@ local sex = C_PlayerInfo.GetSex(loc)
 
 ## Quest
 
+### `C_QuestLog.GetInfo(questLogIndex)`
+
+Returns a `QuestInfo` table for one row of the quest log, or `nil` if the
+index is not a row of the log. The index counts headers, the same as
+`GetQuestLogTitle(index)`.
+
+| Field | Value |
+|-------|-------|
+| `title` | Quest name. For a header row, the header text. |
+| `questLogIndex` | The index you gave. |
+| `questID` | The quest ID. `0` for a header row. |
+| `level`, `difficultyLevel` | Quest level. |
+| `suggestedGroup` | Always `0`. The server does not send it. |
+| `frequency` | Always `Enum.QuestFrequency.Default`. |
+| `isHeader` | `true` for a header row. |
+| `isCollapsed` | `true` for a collapsed header row. |
+| `questClassification` | Always `Enum.QuestClassification.Normal`. |
+| `readyForTranslation` | Always `true`. |
+| all other boolean fields | Always `false`. |
+| `campaignID`, `headerSortKey` | Always `nil`. |
+
+The table does not show if the quest is complete. Use
+`C_QuestLog.GetQuestLogTitle` for that.
+
+```lua
+for i = 1, GetNumQuestLogEntries() do
+    local info = C_QuestLog.GetInfo(i)
+    if info and not info.isHeader then
+        print(info.questID, info.title, info.level)
+    end
+end
+```
+
+### `C_QuestLog.GetQuestLogTitle(questLogIndex)`
+
+```lua
+title, level, suggestedGroup, isHeader, isCollapsed, isComplete, frequency,
+questID, startEvent, displayQuestID, isOnMap, hasLocalPOI, isTask, isBounty,
+isStory, isHidden, isScaling = C_QuestLog.GetQuestLogTitle(questLogIndex)
+```
+
+Returns the same row data as `C_QuestLog.GetInfo`, as a list of values.
+Returns nothing if the index is not a row of the log.
+
+- `isHeader` and `isCollapsed` are `true` or `false`.
+- `isComplete` is `1` when the objectives are done, `-1` when the quest
+  failed, and `nil` for all other cases.
+- `suggestedGroup` is always `0`. `frequency` is always
+  `Enum.QuestFrequency.Default`. `questID` is `0` for a header row.
+- `startEvent` and all values after `questID` are always `false`.
+
+The third value is `suggestedGroup`, not the quest tag. The global
+`GetQuestLogTitle(index)` still returns the tag (`"Elite"`, `"Dungeon"`, …)
+in its third value.
+
 ### `C_QuestLog.GetQuestIDForLogIndex(index)`
 
 Returns the questID (Quest.dbc row ID) for the entry at the given 1-based
-quest log index. In 3.3.5 this came as the 9th return of `GetQuestLogTitle`;
-in 1.12 it isn't returned at all, even though the engine has it internally.
+quest log index. The stock `GetQuestLogTitle` doesn't return it, even
+though the engine has it internally.
 
 - Returns the questID for real quests.
 - Returns `0` for header rows (zone / category dividers).
@@ -9588,7 +13950,7 @@ end
 
 Asks the engine to fetch the static data for `questID` (title, description,
 objectives, reward text) from the server if not already cached. Returns no
-values — fire-and-forget, matching modern WoW's signature.
+values — fire-and-forget.
 
 Fires `QUEST_DATA_LOAD_RESULT(questID, success)` when the data lands in the
 cache. Synchronously fired when the data was already cached
@@ -9602,13 +13964,11 @@ server.
 > (`nil` falsy, `1` truthy). Same encoding as `ITEM_DATA_LOAD_RESULT`
 > and `GET_ITEM_INFO_RECEIVED`.
 
-> **Vanilla limitation:** for *invalid* questIDs (ones the server doesn't
-> have), the 1.12 server silently drops the query — it doesn't send a
+> **Server limitation:** for *invalid* questIDs (ones the server doesn't
+> have), the server silently drops the query — it doesn't send a
 > "not found" response packet. The engine's pending callback never
 > resolves, so `QUEST_DATA_LOAD_RESULT` doesn't fire with `success=0`
-> either. Modern Classic Era servers explicitly respond with an error
-> for invalid IDs, which is why modern `RequestLoadQuestByID` reliably
-> fires `success=false`; vanilla doesn't. Addons that need to handle
+> either. Addons that need to handle
 > "request timed out" should use their own timer (the Lua polyfill at
 > `!!!ClassicAPI/Util/QuestUtil.lua` uses a 180-second wait).
 
@@ -9639,7 +13999,7 @@ end
 ```
 
 Walks the same `VAR_QUEST_LOG_ENTRIES` array
-[`C_QuestLog.GetQuestIDForLogIndex`](#c_questlogGetQuestIDForLogIndexindex)
+[`C_QuestLog.GetQuestIDForLogIndex`](#c_questloggetquestidforlogindexindex)
 reads and matches against each real entry's questID, skipping the
 zone/category header rows.
 
@@ -9650,9 +14010,9 @@ player. Same answer in a single call.
 
 ### `C_QuestLog.IsUnitOnQuest(unit, questID)`
 
-Returns `true` if the unit has `questID` in their quest list. Modern
-arg order — `unit` first, `questID` second — and questID-keyed rather
-than log-index-keyed like vanilla's `IsUnitOnQuest(logIndex, unit)`.
+Returns `true` if the unit has `questID` in their quest list. Arg order
+is `unit` first, `questID` second — and questID-keyed rather
+than log-index-keyed like the stock `IsUnitOnQuest(logIndex, unit)`.
 
 ```lua
 if C_QuestLog.IsUnitOnQuest("party1", 215) then
@@ -9724,24 +14084,24 @@ Like `GetTitleForQuestID`, this is a pure cache probe — pair it with
 | `questType` | string \| absent | Localized tag string — `"Elite"`, `"Group"`, `"PvP"`, `"Dungeon"`, `"Raid"` — sourced from `QuestInfo.dbc`. Field is omitted for plain quests with no tag. |
 | `rewardMoney` | number | Reward copper. `0` if the quest *requires* money instead. |
 | `requiredMoney` | number | Copper the player must hand in to complete (e.g. quartermaster contributions). `0` for quests with no money requirement. |
-| `rewardMoneyAtMaxLevel` | number | Vanilla's level-60 reward bonus. Added to `rewardMoney` when the player is level 60; populated even on low-level quests. |
+| `rewardMoneyAtMaxLevel` | number | The level-60 reward bonus. Added to `rewardMoney` when the player is level 60; populated even on low-level quests. |
 | `rewardSpellID` | number | `spellID` of a spell *taught* on completion (e.g. profession recipes), or `0` for no learned spell reward. |
 | `srcItemID` | number | `itemID` the questgiver hands the player on accept (e.g. the sigil in *"Verdant Sigil"* — given on accept, read by the player, then turned back in). `0` = no source item. Same as the quest's `requirements[].id` for "give-then-return" quests. |
-| `questFlags` | number | Raw `QUEST_FLAGS_*` bitfield — only bit `0x08` (sharable) is positively confirmed-tested by the vanilla engine; other bits are presumed-stored but unverified. |
+| `questFlags` | number | Raw `QUEST_FLAGS_*` bitfield — only bit `0x08` (sharable) is positively confirmed-tested by the engine; other bits are presumed-stored but unverified. |
 | `isSharable` | boolean | Convenience extraction of bit `0x08` from `questFlags`. |
 | `description` | string | The questgiver's narrative text. Raw — printf-style `$N` (player name), `$C` (class), `$R` (race) tokens are **not** substituted; use `string.gsub` if you need runtime values. |
 | `objectives` | string | The "what you must do" summary text, same raw / un-substituted format as `description`. |
-| `completionText` | string | The "now turn it in" text shown on the reward UI panel after objectives are met. Often empty for simple quests; populated for narrative-heavy ones. Modern API name: `GetQuestLogCompletionText`. |
+| `completionText` | string | The "now turn it in" text shown on the reward UI panel after objectives are met. Often empty for simple quests; populated for narrative-heavy ones. Also exposed as `GetQuestLogCompletionText`. |
 | `poi` | table \| absent | Point-of-interest marker (`{mapID, x, y, opt}`). Set on quests with a server-supplied "go here" location; omitted when `mapID == 0`. |
 | `rewardItems` | array of `{id, count}` | Items the quest gives unconditionally on turn-in. Empty when there are no fixed rewards. |
 | `choiceItems` | array of `{id, count}` | "Pick one" reward items. Empty when none. |
 | `requirements` | array of `{kind, id, count, text}` | Objectives. `kind` is `"monster"` (creature), `"object"` (gameobject), or `"item"` (collect / interact). `text` is the questgiver's per-objective override (e.g. `"Investigate the cave"` instead of the auto-generated `"Mor'shan Bear: 0/8"`); empty string means use the auto-format. Order: NPC/GO objectives first, then item objectives, both 1-indexed. Only non-empty slots included. |
 
-> **Not included** — race, class, skill, time limit, and suggested-player count. Vanilla 1.12's `SMSG_QUEST_QUERY_RESPONSE` doesn't ship those fields; the server enforces them and filters quests *before* broadcasting, so the client only ever sees quests it could accept and never receives the static restriction values. Verified empirically: a race-restricted starter (`3120` Verdant Sigil — Night Elf Druid only), a dungeon quest (`914`), and a timed delivery (`3364` Scalding Mornbrew — 5-min authored timer) all have those cache slots zero-filled in memory. **Addons that need that data must source it from an external scraped database** like pfQuest's.
+> **Not included** — race, class, skill, time limit, and suggested-player count. The `SMSG_QUEST_QUERY_RESPONSE` packet doesn't ship those fields; the server enforces them and filters quests *before* broadcasting, so the client only ever sees quests it could accept and never receives the static restriction values. Verified empirically: a race-restricted starter (`3120` Verdant Sigil — Night Elf Druid only), a dungeon quest (`914`), and a timed delivery (`3364` Scalding Mornbrew — 5-min authored timer) all have those cache slots zero-filled in memory. **Addons that need that data must source it from an external scraped database** like pfQuest's.
 >
 > **Field reliability:** everything currently returned is either confirmed-correct via the engine's own `Script_GetQuestLog*` accessors or empirically verified against in-game quest semantics. The `poi` field is the only remaining hypothesis — its offsets are confirmed but no test quest has yet exercised it.
 
-XP rewards aren't exposed — vanilla 1.12 has no `GetQuestLogRewardXP`,
+XP rewards aren't exposed — there is no `GetQuestLogRewardXP`,
 and per emulator-decoded packet structure, the server doesn't include
 an XP field in `SMSG_QUEST_QUERY_RESPONSE`. XP is computed
 server-side at turn-in from level-scaling tables.
@@ -9791,7 +14151,7 @@ e.g. bounds-checking authored objective indices across every step of a
 guide at load time. `GetQuestDetails` copies the quest's description /
 objectives / completion text into Lua strings and builds ~20 table
 fields per call; harmless one at a time, but a login-path loop over
-hundreds of cached quests can put real pressure on vanilla's
+hundreds of cached quests can put real pressure on the
 fixed-size Lua memory pool. This accessor costs a few dozen byte reads
 regardless of cache temperature.
 
@@ -9816,7 +14176,7 @@ end
 
 ### `GetQuestLogLeaderBoardID(objectiveIndex [, questIndex])`
 
-Companion to vanilla's `GetQuestLogLeaderBoard` — returns `(id, kind)`
+Companion to the stock `GetQuestLogLeaderBoard` — returns `(id, kind)`
 for the same objective the existing call formats text for. `id` is
 always positive (the raw `RequiredNPCOrGo` field is signed, but the
 sign is folded into `kind` instead); `kind` is one of `"monster"`,
@@ -9867,6 +14227,210 @@ A separate function keeps the existing call wire-compatible.
 > first, skip zero slots, then the item array. 1-based `objectiveIndex`
 > counts only non-empty slots.
 
+## Sound
+
+Every sound the client plays comes from one table of sound entries. Each
+entry has an id — a **SoundKitID** — and one or more audio files. The same
+ids the modern client uses are the ids here, so `8959` is the raid warning
+in both.
+
+To see the file paths, extract them with the
+[`ExportSoundFiles`](#exportsoundfiles-subpath-console-command) console
+command.
+
+### `PlaySound(soundKitID)` / `PlaySound(soundName)`
+
+Plays a sound.
+
+- Give a **number** and it plays that SoundKitID. It returns
+  `willPlay, soundHandle`.
+- Give a **string** and it plays the sound entry with that name, exactly as
+  before. It returns nothing.
+
+```lua
+PlaySound(8959)                  -- true, 394043692
+PlaySound("igMainMenuOpen")      -- plays, returns nothing
+```
+
+The id is the only thing added here. For a channel, or to be told when the
+sound ends, use `C_Sound.PlaySound` below.
+
+### `C_Sound.PlaySound(soundKitID [, channel, forceNoDuplicates, runFinishCallback])`
+
+Plays a SoundKitID, and takes only a number. Returns
+`willPlay, soundHandle`.
+
+```lua
+local willPlay, handle = C_Sound.PlaySound(8959)
+```
+
+`willPlay` is `false` when the sound cannot start. That happens when the
+file is muted, when the id names no entry, or when the category already
+has as many sounds as it allows.
+
+An entry can hold several files. The client picks one of them, with the
+same weighting it uses for its own sounds.
+
+| Argument | Meaning |
+|---|---|
+| `channel` | The sound category, `0` to `12`. Leave it out for `0`, which is what the client uses for interface sounds and music. A channel **name** such as `"SFX"` is accepted and ignored: the categories here do not match those names. |
+| `forceNoDuplicates` | Accepted and ignored. |
+| `runFinishCallback` | Pass `true` to get the [`SOUNDKIT_FINISHED`](#soundkit_finished-event) event when this sound ends. |
+
+### `C_Sound.PlaySoundWithOptions(params)`
+
+The same as `C_Sound.PlaySound`, with the arguments in a table. Returns
+`success, soundHandle`.
+
+```lua
+local ok, handle = C_Sound.PlaySoundWithOptions({
+    soundKitID = 8959,
+    volumeOverride = 0.4,
+    runFinishCallback = true,
+})
+```
+
+| Field | Meaning |
+|---|---|
+| `soundKitID` | The sound to play. |
+| `volumeOverride` | Scales the sound's volume. `1` leaves it alone, `0` is silent. Leave it out to play at the sound's own volume. |
+| `runFinishCallback` | Pass `true` to get the [`SOUNDKIT_FINISHED`](#soundkit_finished-event) event when this sound ends. |
+| `uiSoundSubType` | Accepted and ignored. |
+| `forceNoDuplicates` | Accepted and ignored. |
+| `overridePriority` | Accepted and ignored. |
+
+### `C_Sound.GetSoundScaledVolume(soundHandle)`
+
+Returns the volume a sound is playing at — its own volume after any
+scaling. Returns `nil` once the sound has ended.
+
+```lua
+local _, handle = C_Sound.PlaySoundWithOptions({ soundKitID = 8959, volumeOverride = 0.4 })
+C_Sound.GetSoundScaledVolume(handle)
+```
+
+### `C_Sound.IsPlaying(soundHandle)`
+
+Returns `true` while the sound for that handle is still playing.
+
+```lua
+local _, handle = C_Sound.PlaySound(8959)
+C_Sound.IsPlaying(handle)   -- true, until the sound ends
+```
+
+A handle is only meaningful while its sound plays. After the sound ends
+the client can give the same handle value to a later sound, so a handle
+you have held for a while can report `true` for a different sound. Read it
+soon after you get it.
+
+### `C_Sound.PlayItemSound(soundType, item)`
+
+Plays the noise an item makes when you handle it, without doing the action.
+
+```lua
+C_Sound.PlayItemSound(Enum.ItemSoundType.Pickup, { bagID = 0, slotIndex = 1 })
+C_Sound.PlayItemSound(Enum.ItemSoundType.Drop, { equipmentSlotIndex = 1 })
+```
+
+`soundType` is an `Enum.ItemSoundType` value:
+
+| Value | Field |
+|---|---|
+| 0 | `Pickup` |
+| 1 | `Drop` |
+| 2 | `Use` |
+| 3 | `Close` |
+
+`item` is an item location — `{ bagID = B, slotIndex = S }` or
+`{ equipmentSlotIndex = N }`. It also takes the other forms this
+documentation's item functions accept: an item GUID string, an itemID, an
+item link, or the name of an item you carry.
+
+All four types are passed through to the client, which looks the sound up
+in its own item-sound data. With the data a stock client ships, only
+`Pickup` and `Drop` produce a sound: items are grouped into sound groups,
+and every group a real item belongs to fills in those two while leaving
+`Use` and `Close` empty. Those two are accepted and play nothing.
+
+A server that fills in the missing entries gets them for free — nothing
+here limits the type, so `Use` and `Close` start playing as soon as the
+data defines them.
+
+The sound comes from the item's **display**, so items that look alike
+sound alike. A sword sounds like metal and a robe sounds like cloth,
+whatever else differs between them.
+
+Nothing plays, and nothing is raised, when the item cannot be found or
+its data has not arrived yet.
+
+### `C_Sound.PlayVocalErrorSound(vocalErrorSoundID)`
+
+Plays your character's spoken complaint for an error — "my bags are full",
+"I have no ammo" — in the voice of their race and sex.
+
+```lua
+C_Sound.PlayVocalErrorSound(Enum.Vocalerrorsounds.Inventoryfull)
+C_Sound.PlayVocalErrorSound(Enum.Vocalerrorsounds.Outofammo)
+```
+
+`Enum.Vocalerrorsounds` holds all 68 values, from `Inventoryfull` (0) to
+`ExhaustedObsolete` (67). Every one of them has recordings for the
+playable races.
+
+Some combinations have no recording for one sex, and a few have none at
+all. Those play nothing, and raise nothing.
+
+### `MuteSoundFile(file)` / `UnmuteSoundFile(file)`
+
+Stops a sound file from playing, and lets it play again.
+
+```lua
+MuteSoundFile("Sound\\Interface\\RaidWarning.wav")
+PlaySound(8959)      -- false: silent
+UnmuteSoundFile("Sound\\Interface\\RaidWarning.wav")
+PlaySound(8959)      -- true: plays again
+```
+
+`file` is the path of the audio file, such as
+`"Sound\\Creature\\Ragnaros\\RagnarosAggro01.wav"`. Upper and lower case
+do not matter, and you can use `/` in place of `\\`.
+
+A mute applies to the file, so it covers every sound that uses it, whoever
+starts it. `MuteSoundFile` returns `true` when the path is now muted.
+`UnmuteSoundFile` returns `true` when the path had been muted.
+
+Mutes last until you log out or reload. To keep them, save your list and
+apply it again on login.
+
+### `C_Sound.GetRecentSoundFiles()`
+
+Returns the files that played most recently, newest first. Use it to find
+the path of a sound you just heard.
+
+```lua
+local recent = C_Sound.GetRecentSoundFiles()
+-- recent[1] = { file = "Sound\\interface\\RaidWarning.wav",
+--               time = 96036833, muted = false }
+```
+
+Each entry has three fields:
+
+| Field | Meaning |
+|---|---|
+| `file` | The path of the audio file. Pass it to `MuteSoundFile`. |
+| `time` | When it played, in milliseconds on `GetTime()`'s scale. `GetTime() * 1000 - time` is how long ago. |
+| `muted` | `true` when the file is muted. |
+
+The list holds the last 64 **different** files. A file that plays again
+moves to the front instead of taking a second place, so a repeating
+footstep cannot push the rest out.
+
+Muted files stay in the list, marked `muted = true`, so you can still find
+one to un-mute.
+
+The list covers every sound the client plays, not only the ones you start.
+Opening a bag or taking a step puts a file in it.
+
 ## Spell
 
 > **All `C_Spell.*` functions in this section accept any spell
@@ -9883,8 +14447,8 @@ A separate function keeps the existing call wire-compatible.
 >   spellbook** — not arbitrary Spell.dbc rows.
 >
 > Unrecognized identifiers (garbage strings, nil, tables, etc.) return
-> `nil` rather than raising a Lua usage error — matches modern WoW's
-> permissive `C_Spell.*` convention. Function entries below write
+> `nil` rather than raising a Lua usage error — the permissive `C_Spell.*`
+> convention. Function entries below write
 > `(spellID)` in the signature for brevity but the broader shape is
 > accepted everywhere.
 >
@@ -9918,10 +14482,9 @@ C_Spell.GetSchoolString(4)    -- "Fire"
 C_Spell.GetSchoolString(32)   -- "Shadow"
 ```
 
-Vanilla spells are single-school — the multi-school combos
-("Frostfire", "Shadowflame", "Spellstorm", etc.) were TBC-and-later
-additions. Any multi-bit mask returns `"Unknown"`, matching the
-modern API's documented fallback for unnamed combinations.
+Spells here are single-school — there are no multi-school combos
+("Frostfire", "Shadowflame", "Spellstorm", etc.). Any multi-bit mask
+returns `"Unknown"`, the documented fallback for unnamed combinations.
 
 > Lua 5.0 doesn't support hex literals (`0x04` is a syntax error);
 > pass mask values as decimals, or via `tonumber("0x04", 16)` if you
@@ -9939,29 +14502,42 @@ modern API's documented fallback for unnamed combinations.
 
 ### `GetSpellInfo(spellID)` / `GetSpellInfo(slot, bookType)`
 
-Returns the same nine values as 3.3.5's `GetSpellInfo`, **plus a 10th
-value: `spellID`**, for **any** spell ID — including spells the player
-has not learned. Stock 1.12 has no `GetSpellInfo` Lua function at all
-(only `GetSpellName`/`GetSpellTexture`, both of which take a spellbook
-*slot* rather than an ID), so addons that need spell metadata for
-arbitrary IDs (raid frames, debuff trackers, aura libraries) currently
-can't get it.
+Returns nine values, **plus a 10th value: `spellID`**, for **any** spell
+ID — including spells the player has not learned. The stock client has no
+`GetSpellInfo` Lua function at all (only `GetSpellName`/`GetSpellTexture`,
+both of which take a spellbook *slot* rather than an ID), so addons that
+need spell metadata for arbitrary IDs (raid frames, debuff trackers, aura
+libraries) currently can't get it.
 
 Returns `name, rank, icon, cost, isFunnel, powerType, castTime,
 minRange, maxRange, spellID`. All read directly from `Spell.dbc` (with
 `SpellIcon.dbc`, `SpellCastTimes.dbc`, and `SpellRange.dbc` for the
 indirected fields). Cast time is in milliseconds; ranges are floats in
-yards. `isFunnel` is a real boolean (`true`/`false`), matching 3.3.5's
-behavior. Returns `nil` if the spell ID is out of range.
+yards. `isFunnel` is a real boolean (`true`/`false`). Returns `nil` if
+the spell ID is out of range.
 
-Two input forms are accepted:
+Four input forms are accepted:
 
 - **`GetSpellInfo(spellID)`** — direct DBC lookup by ID.
-- **`GetSpellInfo(slot, bookType)`** — same shape as 1.12's
+- **`GetSpellInfo(slot, bookType)`** — same shape as the stock
   `GetSpellName(slot, bookType)`. `slot` is 1-based, `bookType` is
   `"spell"` (player) or `"pet"`. The slot is resolved to a spellID via
   the engine's spellbook array, then the same DBC reads run. Returns
   `nil` for empty / out-of-range slots.
+- **`GetSpellInfo("name")`** — looks the name up in the player's, then
+  the pet's, spellbook and returns the highest rank you know. The match
+  is exact and case-sensitive. The name must be a spell you have. A name
+  you do not know returns `nil` (it does not
+  raise an error). It is not a database-wide search — a name shared by
+  many ranks or by NPC spells has no single answer, so only your own
+  spellbook is used.
+- **`GetSpellInfo("name(Rank N)")`** — a rank in parentheses pins that
+  exact rank instead of the highest, the same `SpellName(Rank N)` form
+  `CastSpellByName` accepts. A space before the parenthesis is allowed
+  (`"Mind Blast (Rank 8)"`). A rank you do not know returns `nil`.
+- **`GetSpellInfo("|Hspell:ID|h[Name]|h")`** — a spell hyperlink. The
+  `spellID` inside the link is used directly, so this works for any
+  spell, learned or not.
 
 ```lua
 local name, rank, icon, _, _, _, _, _, _, spellID = GetSpellInfo(133)
@@ -9970,16 +14546,23 @@ local name, rank, icon, _, _, _, _, _, _, spellID = GetSpellInfo(133)
 -- spellbook overload
 local _, _, _, _, _, _, _, _, _, id = GetSpellInfo(1, "spell")
 -- id is the spellID at player spellbook slot 1
+
+-- by name (highest rank you know), a specific rank, and a link
+local name = GetSpellInfo("Fireball")
+local _, rank = GetSpellInfo("Mind Blast (Rank 8)")  -- rank="Rank 8"
+local _, _, _, _, _, _, _, _, _, id = GetSpellInfo(GetSpellLink(133))
 ```
 
-> **Note on the 10th return.** Modern WoW (5.0+) added the spellID as
-> the 14th return of its slimmer signature. We kept the existing 9
+The same name and link forms work for `GetSpellLink`, `IsPassiveSpell`,
+`IsHarmfulSpell`, and `IsHelpfulSpell`, which share this resolver.
+
+> **Note on the 10th return.** We kept the existing 9
 > returns (so addons that worked against the previous signature still
 > work) and just appended `spellID` at position 10.
 
 ### `C_Spell.GetSpellInfo(spellID)`
 
-Modern table-style accessor for the same data. Returns a Lua table of
+Table-style accessor for the same data. Returns a Lua table of
 the spell's metadata, or `nil` if the spell ID is out of range.
 
 Table fields:
@@ -9992,10 +14575,10 @@ Table fields:
 | `minRange`   | number  | Yards, or 0 if not applicable |
 | `maxRange`   | number  | Yards, or 0 if not applicable |
 | `spellID`    | number  | Echo of the input |
-| `rank`       | string  | Localized rank (e.g. `"Rank 1"`) — vanilla extra, not in modern's spec |
-| `cost`       | number  | Base ManaCost — vanilla extra |
-| `isFunnel`   | boolean | True for funnel-channeled spells — vanilla extra |
-| `powerType`  | number  | 0=mana, 1=rage, 2=focus, 3=energy, 4=happiness — vanilla extra |
+| `rank`       | string  | Localized rank (e.g. `"Rank 1"`) — an extra field |
+| `cost`       | number  | Base ManaCost — an extra field |
+| `isFunnel`   | boolean | True for funnel-channeled spells — an extra field |
+| `powerType`  | number  | 0=mana, 1=rage, 2=focus, 3=energy, 4=happiness — an extra field |
 
 ```lua
 local info = C_Spell.GetSpellInfo(133)
@@ -10007,17 +14590,15 @@ local info = C_Spell.GetSpellInfo(133)
 -- ... etc.
 ```
 
-> **Deviation from modern.** Modern WoW returns `iconID` as a
-> `fileID:number`. Vanilla 1.12 has no fileID system — assets are
-> referenced by path strings. We surface the icon path here so it's
-> directly usable with `texture:SetTexture(info.iconID)`. If you're
-> backporting code that expects a number, this is the field to adjust.
+> **`iconID` is a path string.** This value can be a `fileID:number`
+> elsewhere. There is no fileID system here — assets are referenced by
+> path strings. We surface the icon path so it's directly usable with
+> `texture:SetTexture(info.iconID)`. If you're backporting code that
+> expects a number, this is the field to adjust.
 
-> **Vanilla extras.** The four fields beyond the modern spec
-> (`rank`/`cost`/`isFunnel`/`powerType`) are present because 1.12 has
-> them in `Spell.dbc` and the previous-generation `GetSpellInfo` exposed
-> them. Including them costs nothing and helps addons backporting from
-> 3.3.5 where the same data was returned positionally.
+> **Extra fields.** The four fields beyond the base spec
+> (`rank`/`cost`/`isFunnel`/`powerType`) are present because they're in
+> `Spell.dbc`. Including them costs nothing.
 
 ### `C_Spell.GetSpellName(spellID)`
 
@@ -10037,8 +14618,8 @@ Returns the icon path string for `spellID` (read from `SpellIcon.dbc`
 via the spell's `SpellIconID` field), or `nil` if the spell ID is out
 of range or the icon record is empty.
 
-> **Path string, not fileID.** Modern WoW returns this as a
-> `fileID:number`. Vanilla 1.12 has no fileID system — see the same
+> **Path string, not fileID.** This value can be a `fileID:number`
+> elsewhere. There is no fileID system here — see the same
 > note on [`C_Spell.GetSpellInfo`](#c_spellgetspellinfospellid)'s
 > `iconID` field. Pass directly to `texture:SetTexture(...)`.
 
@@ -10057,9 +14638,9 @@ link, spellID = GetSpellLink(spellID)
 ```
 
 Format is `|cff71d5ff|Hspell:ID:0|h[Name]|h|r` — the standard 1.12
-spell-link wrapper. The trailing `:0` after the spellID matches modern
-WoW's hyperlink shape (where the field is a sub-data slot for
-pet-spellbook flags etc.); 1.12 ignores it during link parsing, but
+spell-link wrapper. The trailing `:0` after the spellID matches the
+extended hyperlink shape (where the field is a sub-data slot for
+pet-spellbook flags etc.); the engine ignores it during link parsing, but
 addons grepping with `|Hspell:(%d+):` patterns will pick it up
 correctly.
 
@@ -10087,7 +14668,7 @@ end
 
 ### `C_Spell.GetSpellLink(spellID)`
 
-Modern table-namespace variant. Same link string as
+Table-namespace variant. Same link string as
 [`GetSpellLink(spellID)`](#getspelllinkspellid--getspelllinkslot-booktype),
 but returns only the link — no spellID echo since the caller already
 had it on hand to make the call.
@@ -10119,8 +14700,8 @@ local desc = C_Spell.GetSpellDescription(133)  -- Fireball Rank 1
 ```
 
 > **No caster scaling.** Values reflect the spell's base rank — caster
-> level / spell power / talents are not applied. Modern WoW behaves the
-> same way when called outside a unit context. If you need the
+> level / spell power / talents are not applied, the same as calling it
+> outside a unit context. If you need the
 > "currently displayed" tooltip text with caster scaling, use
 > `GameTooltip:SetSpellByID` and read line strings from there.
 
@@ -10152,7 +14733,7 @@ This reads `Spell.dbc`'s `Mechanic` field and resolves the name from
 `SpellMechanic.dbc` directly — both DBCs are resident from boot, so the
 call is synchronous with no caching or network round-trip (unlike item
 data). It replaces hand-maintained `spellID → mechanic` lookup tables that
-addons otherwise keep because vanilla exposes no Lua reader for the field
+addons otherwise keep because there is no Lua reader for the field
 — e.g. crowd-control macro conditionals (`[cc:stun]`, `[cc:fear]`) that
 need to know which mechanic a debuff applies.
 
@@ -10172,8 +14753,71 @@ column is exactly what this function returns):
 | 9 | `silenced` | 18 | `banished` | 27 | `dazed` |
 
 > **No mechanic `30`.** The table tops out at `27`. Sap and Gouge report
-> `14` (incapacitated) in 1.12 — the `30` ("sapped") value used by some
-> addon tables is a later-expansion addition and has no row here.
+> `14` (incapacitated) — the `30` ("sapped") value used by some
+> addon tables has no row here.
+
+### `C_Spell.GetSpellEffectInfo(spellID)`
+
+Returns one table per spell effect, holding that effect's raw
+`Spell.dbc` fields, as a 1-based array of three. `nil` for an invalid or
+out-of-range spell ID.
+
+```
+effects = C_Spell.GetSpellEffectInfo(spellID)
+```
+
+Each entry holds:
+
+| Field | Meaning |
+|-------|---------|
+| `effect` | The `SPELL_EFFECT_*` code. `0` when the slot is unused. |
+| `auraName` | Which aura the effect applies. `0` when it applies none. |
+| `basePoints` | The effect's stored magnitude. |
+| `baseDice` | Added to `basePoints` for the fixed magnitude. |
+| `dieSides` | Size of the magnitude's random range. |
+| `pointsPerLevel` | Magnitude gained per level. Fractional. |
+| `dicePerLevel` | Random range gained per level. Fractional. |
+| `miscValue` | The effect's parameter, such as which stat a stat-modifying aura applies to. |
+
+All three entries are always present. An unused effect slot has every
+field `0`.
+
+```lua
+local fx = C_Spell.GetSpellEffectInfo(1243)  -- Power Word: Fortitude
+-- fx[1].auraName == 29, fx[1].basePoints == 2, fx[1].baseDice == 1
+-- so the effect grants 3 -- the +3 Stamina the tooltip shows
+```
+
+**Working out an effect's magnitude.** For most auras `dieSides` is `1`
+or `0` and `pointsPerLevel` is `0`, and then the magnitude is simply
+`basePoints + baseDice`. The general form also scales with the caster's
+level, which needs the spell's level fields from
+[`GetSpellLevelInfo`](#c_spellgetspelllevelinfospellid):
+
+```lua
+local spellLevel, _, maxLevel = C_Spell.GetSpellLevelInfo(spellID)
+local cap = maxLevel > 0 and maxLevel or UnitLevel("player")
+local level = math.max(spellLevel, math.min(UnitLevel("player"), cap)) - spellLevel
+
+local points = fx.basePoints + level * fx.pointsPerLevel
+local random = fx.dieSides + level * fx.dicePerLevel
+local value = points + fx.baseDice   -- only valid while random <= 1
+```
+
+> **A `dieSides` above `1` means the magnitude is rolled.** The value is
+> picked when the spell is cast and is not available here, so treat such
+> an effect as having no single magnitude rather than reporting the low
+> end of its range.
+
+The fields are the stored ones, so a magnitude worked out from them also
+leaves out what the caster brings to a cast: combo points, talent and
+gear modifiers, and the extra level scaling some spells are flagged for.
+Expect it to match a tooltip for a plain aura and to fall short for a
+damage or healing figure.
+
+Reads `Spell.dbc` directly, so it covers every spell the client knows,
+not just the player's spellbook, with no caching or waiting on the
+server.
 
 ### `C_Spell.GetSpellEffectMechanics(spellID)`
 
@@ -10190,8 +14834,8 @@ C_Spell.GetSpellEffectMechanics(133)   -- Fireball → { 0, 0, 0 }
 ```
 
 Complements [`GetSpellMechanicByID`](#c_spellgetspellmechanicbyidspellid),
-which reads only the **spell-level** `Mechanic` field (`+0x14`). Vanilla
-frequently stores a spell's mechanic on an **effect** instead — periodic
+which reads only the **spell-level** `Mechanic` field (`+0x14`). A spell's
+mechanic is frequently stored on an **effect** instead — periodic
 damage such as bleeds is the common case. Garrote/Rupture/Rend/Rip tag
 `bleeding` (15) at the spell level, but **Rake** has spell-level `0` and
 `EffectMechanic[2] = 15`, so effect-mechanic-aware callers (e.g. bleed
@@ -10209,6 +14853,21 @@ end
 Reads `Spell.dbc` directly (`EffectMechanic[3]` at `+0x13C`), so it covers
 every spell the client knows — not just the player's spellbook — with no
 caching or network round-trip.
+
+### `C_Spell.GetSpellDispelType(spellID)`
+
+Returns the spell's dispel type from `Spell.dbc`: `1` = Magic,
+`2` = Curse, `3` = Disease, `4` = Poison. Returns `0` for a spell
+that nothing can dispel, and for an unknown spell.
+
+```lua
+C_Spell.GetSpellDispelType(118)   -- Polymorph → 1 (Magic)
+C_Spell.GetSpellDispelType(980)   -- Curse of Agony → 2 (Curse)
+C_Spell.GetSpellDispelType(133)   -- Fireball → 0 (none)
+```
+
+Use the number to show what removes an effect, or to filter auras by
+dispel type. The values match the `DISPEL_*` set the server uses.
 
 ### `C_Spell.GetSpellRadius(spellID)` / `GetSpellRadius(slot, bookType)`
 
@@ -10231,8 +14890,8 @@ GetSpellRadius(10, "spell")    -- 10th player-book slot, by spellbook position
 
 Two signatures matching the dual-signature shape used elsewhere in this
 backport (`GetSpellInfo`, `SpellHasRange`, …): the namespaced form takes
-a modern spell *identifier* (numeric ID or name); the bare global takes
-the vanilla `(slot, bookType)` spellbook position, where `bookType`
+a spell *identifier* (numeric ID or name); the bare global takes
+the `(slot, bookType)` spellbook position, where `bookType`
 follows the `GetSpellName` convention — `"pet"` → pet book, `"spell"`
 (or any non-pet / omitted value) → player book.
 
@@ -10243,7 +14902,7 @@ across the three effects is returned.
 
 > **No caster-level scaling.** The engine's internal radius helper also
 > adds `radiusPerLevel * casterLevel`, but that needs a unit context;
-> like modern `GetSpellRadius` this reports the base value. Talent/item
+> this reports the base value. Talent/item
 > modifiers (the `modifiedRadius` return) **are** applied, via the
 > engine's SpellMod system — but only the **local player's**, since the
 > client tracks spell mods for the player alone (there's no way to know
@@ -10253,7 +14912,7 @@ across the three effects is returned.
 ### `C_Spell.GetSpellPowerCost(spellIdentifier)`
 
 Returns an array of `SpellPowerCostInfo` tables, or `nil` if the spell
-isn't found or has no resource cost. Vanilla spells have exactly one
+isn't found or has no resource cost. Spells have exactly one
 power cost, so the array holds at most one entry.
 
 ```lua
@@ -10269,10 +14928,10 @@ C_Spell.GetSpellPowerCost(10187)   -- Blizzard, Mage with 3/3 Frost Channeling
 | `type` | `Enum.PowerType` — `0` mana, `1` rage, `2` focus, `3` energy, `4` happiness (the spell's `PowerType`) |
 | `name` | power token (`"MANA"`, `"RAGE"`, …) |
 | `cost` | **effective** cost for the local player |
-| `minCost` | `== cost` (vanilla has no optional-cost component) |
+| `minCost` | `== cost` (no optional-cost component) |
 | `costPercent` | the spell's `%`-of-base-resource cost, or `0` for a flat cost |
-| `costPerSec` | `0` (vanilla doesn't expose a per-second channel cost in these terms) |
-| `requiredAuraID` | `0` (no form/aura-conditional costs in 1.12) |
+| `costPerSec` | `0` (no per-second channel cost in these terms) |
+| `requiredAuraID` | `0` (no form/aura-conditional costs) |
 | `hasRequiredAura` | `false` |
 
 `cost` is the value the engine actually charges — base + level scaling +
@@ -10310,6 +14969,24 @@ documented in some emulator sources places these at `+0x110` /
 `+0x130`, which is wrong for 1.12.1). Iteration stops at the first
 empty slot, matching how the engine walks its own reagent loop.
 
+### `C_Spell.GetSpellCastCount(spellIdentifier)`
+
+Returns how many times the player can cast the spell with the reagents
+they carry. Returns `0` for a spell without reagents, and for an unknown
+spell.
+
+```lua
+C_Spell.GetSpellCastCount(23028)  -- Arcane Brilliance: your Arcane Powder count
+C_Spell.GetSpellCastCount(133)    -- Fireball: 0 (no reagents)
+```
+
+The count is the smallest `floor(carried / required)` over the spell's
+reagents. "Carried" means equipped items and bags 0 to 4. Reagents in the
+bank do not count, because a cast cannot use them.
+
+`spellIdentifier` accepts a spellID, a spell name, or a spell link, like
+[`C_Spell.GetSpellCooldown`](#c_spellgetspellcooldownspellidentifier).
+
 ### `C_Spell.GetSpellSubtext(spellIdentifier)`
 
 Returns the localized "Rank N" / "Passive" / "Racial Passive" /
@@ -10317,7 +14994,7 @@ similar string that appears below the spell's name in the
 spellbook. Read directly from `Spell.dbc.Rank[9]` at record `+0x204`
 (same locale array shape as `Name[9]` two fields prior).
 
-Accepts the modern `SpellIdentifier` shape — `spellID`, name, name
+Accepts the full `SpellIdentifier` shape — `spellID`, name, name
 with rank (`"Fireball(Rank 3)"`), or `|Hspell:N|h` hyperlink. Returns
 `nil` for unrecognized input or spells with no rank text.
 
@@ -10347,7 +15024,7 @@ IsPassiveSpell(1, "spell")   -- true/false depending on slot 1
 
 ### `C_Spell.IsSpellPassive(spellID)`
 
-Modern table-namespace form of [`IsPassiveSpell`](#ispassivespellspellid--ispassivespellslot-booktype).
+Table-namespace form of [`IsPassiveSpell`](#ispassivespellspellid--ispassivespellslot-booktype).
 Same return semantics; doesn't accept the legacy
 `(slot, bookType)` shape.
 
@@ -10376,9 +15053,9 @@ IsPlayerSpell(2963)    -- true for a tailor who knows Bolt of Linen
 > **Only the current rank counts.** For ranked spells (passives,
 > trained ranks), only the spellID of the **player's current rank**
 > returns `true` — lower-rank IDs return `false` even though the player
-> conceptually "has" them. Matches the same semantic Classic Era 1.15.x
-> uses: a player with 5/5 Unbreakable Will sees `IsPlayerSpell(14791)`
-> (rank 5) as true but rank 4 / rank 3 / etc. as false.
+> conceptually "has" them: a player with 5/5 Unbreakable Will sees
+> `IsPlayerSpell(14791)` (rank 5) as true but rank 4 / rank 3 / etc. as
+> false.
 >
 > This is by design — the engine's spell-knowledge bitmap stores one
 > bit per spellID, and the highest-rank spellID is the one set when
@@ -10420,8 +15097,8 @@ IsSpellKnown(2649, true)   -- true if your hunter pet has Growl
 IsSpellKnown(133)          -- false on a Priest (Fireball is a Mage spell)
 ```
 
-> **Not the same as `IsPlayerSpell`.** Modern WoW deliberately splits
-> these two: `IsSpellKnown` is the strict "in the spellbook UI" check,
+> **Not the same as `IsPlayerSpell`.** These two are deliberately split:
+> `IsSpellKnown` is the strict "in the spellbook UI" check,
 > `IsPlayerSpell` is the broad "any kind of known" query. The split
 > matters because:
 >
@@ -10437,11 +15114,8 @@ IsSpellKnown(133)          -- false on a Priest (Fireball is a Mage spell)
 > an action bar".
 
 Implementation walks `VAR_PLAYER_SPELLBOOK` (`0x00B700F0`) when
-`isPet=false` or `VAR_PET_SPELLBOOK` (`0x00B6F098`) when `isPet=true`.
-Verified to match 3.3.5's `Script_IsSpellKnown` semantics — that
-function does the same spellbook walk in its inner helper at
-`0x0053B4E0` (player array `[0x00BE6D88]`, pet array `[0x00BE7D98]`,
-same shape just different addresses).
+`isPet=false` or `VAR_PET_SPELLBOOK` (`0x00B6F098`) when `isPet=true` —
+a direct spellbook walk.
 
 ### `GetSpellBonusDamage(school)`
 
@@ -10469,12 +15143,12 @@ GetSpellBonusHealing()   -- your +Healing
 > `GetSpellBonusDamage` reads the client's fully-computed value directly
 > from the CGPlayer sub-struct (`PLAYER_FIELD_MOD_DAMAGE_DONE_POS − _NEG`
 > per school). That field isn't in the *broadcast* descriptor — the
-> vanilla server never sends it there, which is why it looks absent — but
+> server never sends it there, which is why it looks absent — but
 > the client keeps a computed copy for its own use, with gear, enchants,
 > buffs, talents, and set bonuses all baked in. So the value is exact and
 > complete. (Same source nampower's `GetSpellPower` reads.)
 >
-> `GetSpellBonusHealing` has no such field — vanilla 1.12 never had a
+> `GetSpellBonusHealing` has no such field — there is no
 > healing-done field at all (confirmed in-game: toggling a pure +healing
 > item moved no field in the player struct) — so it's **derived** in two
 > parts, both from `Spell.dbc`: (1) flat healing = the sum of every
@@ -10493,68 +15167,77 @@ GetSpellBonusHealing()   -- your +Healing
 
 ### `IsUsableSpell(spell)` / `IsUsableSpell(slot, bookType)`
 
-Returns `(usable, noMana)` for a spell, matching the modern
-3.0+ signature. Returns `(1, nil)` when the spell is castable,
-`(nil, 1)` when only mana is preventing it, `(nil, nil)` for any
-other reason (unknown spell, dead, etc.). Matches the `1`/`nil`
-return convention of the existing `Script_IsUsableAction`.
+Returns `(usable, noMana)` for a spell. The result is the same verdict
+that `IsUsableAction` gives for an action slot that holds this spell,
+read live. Returns `(1, nil)` when you can cast the spell now,
+`(nil, 1)` when only power stops you, and `(nil, nil)` for any other
+block. The `1`/`nil` pairs match `IsUsableAction`.
 
-Two arg shapes accepted:
+Two argument shapes:
 
-- **`IsUsableSpell(spellID)`** — direct spellID lookup.
-- **`IsUsableSpell(slot, bookType)`** — `bookType` is `"spell"`
-  (player) or `"pet"`. Resolves to a spellID via the same engine
-  spellbook arrays `GetSpellInfo`/`GetSpellLink` walk.
+- **`IsUsableSpell(spellID)`** — a spellID. A spell that you do not
+  know returns `(nil, nil)`. A pet spell given by ID (Growl, Cower) is
+  tested for the pet.
+- **`IsUsableSpell(slot, bookType)`** — a spellbook slot. `bookType`
+  is `"spell"` for the player book or `"pet"` for the pet book.
 
 ```lua
-IsUsableSpell(133)           -- Fireball: 1, nil if you have mana, nil, 1 if not
+IsUsableSpell(133)           -- Fireball: 1, nil with mana; nil, 1 without
 IsUsableSpell(1, "spell")    -- player spellbook slot 1
+IsUsableSpell(1, "pet")      -- pet spellbook slot 1
 ```
 
-> **What this function checks:**
+> **What the result includes.** Every condition that greys an action
+> button:
 >
-> 1. Player knows the spell (engine's spell-knowledge bitmap —
->    covers trained class abilities, talent passives, racials,
->    profession recipes).
-> 2. Player is alive (HEALTH > 0).
-> 3. Spell is not on cooldown (engine's per-spell cooldown helper).
-> 4. Player has enough of the spell's power type for the base cost
->    (mana / rage / focus / energy / happiness) — *only* this
->    failure sets `noMana=true`.
-> 5. Player has all required reagents in bags (Spell.dbc
->    Reagent[8] / ReagentCount[8]).
+> - The player is alive, unless the spell is castable while dead.
+> - The player has control. When control is lost (fear, charm), only
+>   spells that work in that state pass.
+> - The required stance or form. Whirlwind in Battle Stance is not
+>   usable.
+> - Reagents and totems in the bags.
+> - An equipped weapon of the required type, and ammo for ranged
+>   spells.
+> - Combo points for finishers.
+> - Stealth-only and out-of-combat-only spells.
+> - Aura states on the player and on the current target.
+> - A toggle spell that is already active (Stealth while stealthed) is
+>   not usable.
+> - Power. The cost of the spell, with your talents applied, against
+>   your current power. This is the only test that sets `noMana`.
 >
-> **What this function doesn't check** (different concerns or
-> post-vanilla concepts): silence, GCD, stance/form, range, target
-> type, line-of-sight, casting state.
+> **What the result does not include.** Cooldown, silence, and school
+> lockouts. An action button greys for usability and swipes for
+> cooldown as two separate states. This function keeps that split.
+> Read cooldown with
+> [`C_Spell.GetSpellCooldown`](#c_spellgetspellcooldownspellidentifier)
+> and lockouts with
+> [`C_LossOfControl.GetActiveLossOfControlData`](#c_lossofcontrolgetactivelossofcontroldataindex).
 >
-> Verified empirically on Turtle WoW for the mana branch: Renew rank
-> 3 (cost 105) is reported usable at 144 mana and unusable at 39
-> mana, transitioning at exactly the cost boundary. Cooldown and
-> reagent checks ship in the same implementation but haven't been
-> exercised in-game; if you find an inconsistency, the reagent
-> offsets (+0x110 / +0x130) and cooldown helper (`0x006E2EA0`) are
-> the components to verify.
+> For a pet spell, the test is the current power of the pet against
+> the spell cost, after the pet can act (not stunned, feared, or
+> confused).
 
 ### `C_Spell.IsSpellUsable(spellID)`
 
-Modern table-namespace form. Same logic as
-[`IsUsableSpell(spellID)`](#isusablespellspell--isusablespellslot-booktype)
-but returns proper booleans (`isUsable`, `insufficientPower`) per
-the `C_Spell.*` convention rather than `1`/`nil` pairs.
+Table-namespace form. Same result as
+[`IsUsableSpell(spellID)`](#isusablespellspell--isusablespellslot-booktype),
+but returns booleans (`isUsable`, `insufficientPower`) per the
+`C_Spell.*` convention. Accepts a spellID, a spell link, or a spell
+name.
 
 ```lua
 local usable, noMana = C_Spell.IsSpellUsable(133)
 -- usable=true, noMana=false  → cast it
 -- usable=false, noMana=true  → drink up
--- usable=false, noMana=false → unknown spell, dead, or other block
+-- usable=false, noMana=false → unknown spell, wrong stance, dead, or another block
 ```
 
 ### `C_Spell.GetSpellCooldown(spellIdentifier)`
 
 Returns a `SpellCooldownInfo` table for the given spell, or `nil` if
-the identifier doesn't resolve to a `Spell.dbc` row. Modern
-table-shape variant of vanilla's `GetSpellCooldown(slot, bookType)` —
+the identifier doesn't resolve to a `Spell.dbc` row. Table-shape
+variant of the stock `GetSpellCooldown(slot, bookType)` —
 accepts a spellID directly without forcing the caller to resolve a
 spellbook slot first.
 
@@ -10569,13 +15252,46 @@ local info = C_Spell.GetSpellCooldown(1953)   -- Blink
 | `startTime` | number | Engine tick count (seconds) when the cooldown began. Same epoch as `GetTime()`, so `info.startTime + info.duration` is the absolute time the cooldown ends. `0` when no cooldown active. |
 | `duration` | number | Cooldown length in seconds; `0` when no cooldown active. |
 | `isEnabled` | boolean | `false` when the cooldown is "on hold" (e.g. some channeled abilities). `true` for normal cooldowns. |
-| `modRate` | number | Always `1.0` — vanilla has no haste-on-cooldown mechanic. |
+| `modRate` | number | Always `1.0` — there is no haste-on-cooldown mechanic. |
 
-Modern-only fields (`activeCategory`, `timeUntilEndOfStartRecovery`,
-`isOnGCD`) read as `nil` since they have no vanilla source.
+The `activeCategory`, `timeUntilEndOfStartRecovery`, and
+`isOnGCD` fields read as `nil` since they have no source here.
 
 Returns `nil` if the resolved spellID is `0` or doesn't have a
 `Spell.dbc` row.
+
+### `C_Spell.GetSpellLossOfControlCooldown(spellIdentifier)`
+
+Returns `startTime, duration` for the loss-of-control effect that stops
+the player from casting this spell right now. Both values are seconds on
+the `GetTime()` clock, like
+[`C_Spell.GetSpellCooldown`](#c_spellgetspellcooldownspellidentifier).
+Both are `0` when nothing blocks the spell. Returns `nil` for an unknown
+spell.
+
+```lua
+local start, duration = C_Spell.GetSpellLossOfControlCooldown(133)  -- Fireball
+if duration > 0 then
+    cooldownFrame:SetCooldown(start, duration)  -- the loss-of-control swipe
+end
+```
+
+Which effects block which spells:
+
+| Effect | Blocks |
+|---|---|
+| School lockout (Counterspell, Kick, ...) | Spells of the locked school. |
+| Stun, fear, confuse, charm, possess | Every spell. |
+| Silence | Spells that a silence prevents (most casts). |
+| Pacify | Abilities that a pacify prevents (most melee and ranged abilities). |
+| Root, disarm | Nothing. |
+
+The function reports only effects with a known end time. See the timing
+note in [LossOfControl](#lossofcontrol): a school lockout always has one,
+and a control effect has one when ClassicAPI saw the cast that applied it.
+When only the end time is known, `startTime` is the current time and
+`duration` is the remaining time. When several effects block the spell,
+the function reports the one that ends last.
 
 ### `C_Spell.IsCurrentSpell(spellIdentifier)`
 
@@ -10590,7 +15306,7 @@ C_Spell.IsCurrentSpell(GetSpellLink(7620)) -- true while channeling Fishing
 ```
 
 Useful for action-bar addons that want to highlight the active /
-queued button — modern action bars gate the "currently casting" glow
+queued button — action bars gate the "currently casting" glow
 on this. Reads three engine slots and returns true on any match:
 
 - `VAR_CURRENT_CAST_SPELL` (`0x00CECA88`) — cast-bar spellID. Written
@@ -10598,7 +15314,7 @@ on this. Reads three engine slots and returns true on any match:
 - `VAR_QUEUED_CAST_SPELL` (`0x00CECAA8`) — spell that was active when
   a new cast superseded it mid-GCD. Restored to current when the new
   cast ends, so checking it here covers the "queued to cast next"
-  half of modern's documented semantics.
+  half of the documented semantics.
 - `UNIT_FIELD_CHANNEL_SPELL` (descriptor `+0x228`) on the player —
   covers channeled abilities (Fishing, Drain Soul, Ritual of
   Summoning, etc.).
@@ -10633,9 +15349,8 @@ SpellHasRange(10, "spell")    -- 10th spellbook slot in player book
 ```
 
 Looks up `Spell.dbc.RangeIndex` (`+0x90`) → `SpellRange.dbc` row,
-then tests `minRange > 0 or maxRange > 0`. Vanilla 1.12 doesn't ship
-this function at all; 3.3.5+ added it as the `(spellIdentifier)`
-form only. We expose both the modern namespaced form (any
+then tests `minRange > 0 or maxRange > 0`. The stock client doesn't ship
+this function. We expose both the namespaced form (any
 `SpellIdentifier`) and a positional `SpellHasRange(slot, bookType)`
 matching the dual-signature shape used elsewhere in this backport
 (`GetSpellInfo`, `GetSpellLink`, etc.). The `bookType` argument
@@ -10663,7 +15378,7 @@ spell's min/max range — folding in the target's bounding radius — and
 compares center-to-center distance, so the boundary matches the
 client exactly, melee and min-range ("too close") spells included.
 
-Range-only, matching retail: it ignores line of sight, and it does
+Range-only: it ignores line of sight, and it does
 **not** reject wrong-faction targets (a friendly-only heal still
 returns a range answer against an enemy). Check target validity
 separately if you need it. Absent tokens (e.g. `"target"` with no
@@ -10694,114 +15409,49 @@ C_Spell.IsRangedAutoAttackSpell(5019)        -- true (Shoot wand)
 C_Spell.IsRangedAutoAttackSpell(6603)        -- false (melee)
 ```
 
-Tests `Spell.dbc.Attributes & 0x02` (the `SPELL_ATTR_AUTO_REPEAT`
-flag) — verified empirically against in-game spell data. Auto Shot
-(`0x00050012`) and Shoot wand (`0x00000012`) share bit 1; Heroic
-Strike (`0x00050014`) and other ranged abilities don't. Naturally
-covers any future auto-repeating spell a private server might add.
+Tests the auto-repeat flag in `Spell.dbc.AttributesEx2` (bit `0x20`).
+Only Auto Shot and Shoot carry it. The on-cast ranged abilities —
+Aimed Shot and Multi-Shot — set the general `RANGED` bit but not the
+auto-repeat flag, so they return `false`. The flag also covers any
+future auto-repeating spell a private server adds. Verified against
+`Spell.dbc`.
 
 See [`C_SpellBook.IsRangedAutoAttackSpellBookItem`](#c_spellbookisrangedautoattackspellbookitemslot-booktype)
 for the spellbook-slot variant.
 
-### `C_Item.GetWeaponEnchantInfo()`
+### `C_Spell.IsNextMeleeSpell(spellID)`
 
-Returns the modern 12-tuple matching WotLK+'s extended
-`GetWeaponEnchantInfo` signature, including the **temp-enchant IDs**
-that vanilla 1.12's 8-return global omits.
-
-```
-hasMain, mainExpire, mainCharges, mainEnchantID,
-hasOff,  offExpire,  offCharges,  offEnchantID,
-hasRanged, rangedExpire, rangedCharges, rangedEnchantID
-   = C_Item.GetWeaponEnchantInfo()
-```
+Returns `true` if the spell is an "on next swing" melee ability.
+These abilities queue and land on your next weapon swing instead of
+an instant cast (Heroic Strike, Cleave, Maul, Raptor Strike).
 
 ```lua
--- Apply Brilliant Mana Oil to mainhand, then:
-local has, expireMs, charges, enchantID = C_Item.GetWeaponEnchantInfo()
--- has = true, expireMs ≈ 1800000, charges = 5, enchantID = <oil's enchant>
+C_Spell.IsNextMeleeSpell(78)     -- Heroic Strike → true
+C_Spell.IsNextMeleeSpell(6807)   -- Maul → true
+C_Spell.IsNextMeleeSpell(116)    -- Frostbolt → false
 ```
 
-Reads the **temporary** enchant slot (`ITEM_FIELD_ENCHANTMENT`
-slot 1 at descriptor `+0x4C`) — the same slot oils, sharpening
-stones, and poisons populate and the engine drains as they expire.
-This is what modern's `GetWeaponEnchantInfo` measures.
+Tests the two on-next-swing bits in `Spell.dbc.Attributes`
+(`0x04` and `0x400`).
 
-The permanent enchant (Crusader, Mongoose, etc., in slot 0 at
-`+0x40`) is **not** reported here — that's a separate field and
-modern's `GetWeaponEnchantInfo` doesn't expose it either. Get the
-permanent enchant ID by parsing `GetInventoryItemLink("player",
-slot)` (the link includes it as the 2nd numeric field).
+### `C_Spell.ResetsMeleeSwing(spellID)`
 
-Vanilla 1.12's global `GetWeaponEnchantInfo` is unchanged — old
-addons reading positions 4..8 by index still work.
-
-Equivalent to the extension of `GetWeaponEnchantInfo` introduced
-in 3.x.
-
-### `C_Item.GetEnchantInfo(enchantID)`
-
-Resolves an item-enchantment ID — the `enchantID` returned by
-[`C_Item.GetWeaponEnchantInfo`](#c_itemgetweaponenchantinfo) for a
-weapon's temporary enchant, and the same IDs item permanent enchants
-use — into a table:
+Returns `true` if casting the spell resets your melee swing timer.
+Cast-time spells reset it when you cast them (Fireball, Frostbolt,
+Polymorph, wand Shoot). Instant abilities like Sinister Strike do not,
+so a rogue can weave them between swings.
 
 ```lua
-local info = C_Item.GetEnchantInfo(enchantID)
--- info.enchantID = <id>
--- info.name      = "Crusader"        -- localized display name
--- info.effects   = { {type=1, amount=0, arg=20007} }
--- info.spellID   = 20007             -- spell-type enchants only
+C_Spell.ResetsMeleeSwing(133)    -- Fireball → true
+C_Spell.ResetsMeleeSwing(1752)   -- Sinister Strike → false
+C_Spell.ResetsMeleeSwing(1464)   -- Slam → false (flagged "no reset")
 ```
 
-```lua
--- A proc/equip enchant → chain its spellID into C_Spell:
-local info = C_Item.GetEnchantInfo(1900)          -- "Crusader"
-if info.spellID then
-    print(C_Spell.GetSpellDescription(info.spellID))  -- the proc's text
-end
-```
-
-`effects` is an array of the record's non-empty effect slots, each
-`{ type, amount, arg }` where `type` is the standard
-`ITEM_ENCHANTMENT_TYPE`:
-
-| type | meaning | carries |
-|------|---------|---------|
-| 1 | combat-proc spell | `arg` = spellID |
-| 2 | weapon damage | `amount` = +damage |
-| 3 | equip spell / aura | `arg` = spellID |
-| 4 | resistance / armor | `amount` = +value |
-| 5 | stat | `arg` = stat index, `amount` = value |
-| 6 | totem | — |
-| 7 | use spell | `arg` = spellID |
-
-For spell types (1/3/7) `arg` is a spellID feedable into
-[`C_Spell.GetSpellInfo`](#getspellinfospellid--getspellinfoslot-booktype) /
-`GetSpellDescription`; the first such id is also surfaced at top level
-as `spellID` for convenience (absent for non-spell enchants like
-sharpening stones).
-
-Returns `nil` for a non-numeric / non-positive id, an out-of-range
-id, or a record with no name.
-
-Reads `SpellItemEnchantment.dbc` (records `0x00C0D7D8`, count
-`0x00C0D7DC`) — the 24-column table every enchant ID indexes:
-`Type[3]@+0x04`, `Amount[3]@+0x10`, `EffectArg[3]@+0x28`,
-`Name[8]@+0x34` (locale-indexed). The layout was verified by parsing
-the on-disk DBC against known records (Crusader 1900 → type 1, arg
-20007; Sharpened +3 → type 2, amount 3). Fully resident from boot, so
-it answers for any enchant ID with no caching or round-trip.
-
-Lives in `C_Item` (not `C_Spell`) because the id originates from
-`C_Item.GetWeaponEnchantInfo` and the concept is an item enchantment —
-`SpellItemEnchantment` is just the DBC's internal name (enchants are
-*implemented* via spell effects).
-
-> **Not derivable: the source item.** The enchant record holds no
-> back-reference to the item that applied it, and vanilla has no
-> client-side reverse index (enchantID → item). Finding it would need
-> an external scraped DB (pfQuest/Questie-style).
+Mirrors the server's `IsMeleeAttackResetSpell`: `true` when the
+spell's `InterruptFlags` has the auto-attack bit (`0x08`) and its
+`AttributesEx2` does not have the "no reset auto actions" bit
+(`0x20000`). Both fields come from `Spell.dbc`. Slam carries that
+second bit, so it keeps its swing.
 
 ### `IsHarmfulSpell(spell)` / `IsHelpfulSpell(spell)`
 
@@ -10832,18 +15482,17 @@ debuffs server-side. `IsHarmfulSpell` is true iff that bit is set;
 `IsHelpfulSpell` is true iff the spell exists and the bit is NOT
 set. Both return `false` for invalid spellIDs.
 
-> Vanilla 1.12 doesn't have a dedicated "positive" flag, so the
-> helpful side is the rough complement of harmful. For utility
-> spells with no clear orientation (Aspect of the Cheetah,
-> Stealth, ground-targeted AOEs), modern WoW sometimes returns
-> false for both; we return `true` for helpful as a safer default
-> for addons gating on "is this castable on me?" logic. Compute
-> precise modern semantics by also inspecting effect implicit
+> There is no dedicated "positive" flag, so the helpful side is the
+> rough complement of harmful. For utility spells with no clear
+> orientation (Aspect of the Cheetah, Stealth, ground-targeted AOEs),
+> both can read false elsewhere; we return `true` for helpful as a safer
+> default for addons gating on "is this castable on me?" logic. Compute
+> more precise semantics by also inspecting effect implicit
 > targets if you need them.
 
 ### `C_Spell.IsSpellHarmful(spellID)` / `C_Spell.IsSpellHelpful(spellID)`
 
-Same classification logic as the globals above, exposed in the modern
+Same classification logic as the globals above, exposed in the
 `C_Spell` namespace. Don't accept the legacy `(slot, bookType)`
 shape.
 
@@ -10852,8 +15501,7 @@ C_Spell.IsSpellHarmful(133)     -- true (Fireball)
 C_Spell.IsSpellHelpful(2061)    -- true (Flash Heal)
 ```
 
-Equivalent to `C_Spell.IsSpellHarmful` / `C_Spell.IsSpellHelpful`
-introduced in 11.x.
+Equivalent to `C_Spell.IsSpellHarmful` / `C_Spell.IsSpellHelpful`.
 
 ### `GetSpellSchool(spellID)`
 
@@ -10871,10 +15519,9 @@ English name.
 | 6 | `"Shadow"` |
 | 7 | `"Arcane"` |
 
-Reads directly from `Spell.dbc` record `+0x04`. Vanilla 1.12 stores
-School as a single 0-based integer (no multi-school `SchoolMask`
-combinations — that's a TBC+ thing), so a spell belongs to exactly
-one school.
+Reads directly from `Spell.dbc` record `+0x04`. School is stored as a
+single 0-based integer (no multi-school `SchoolMask` combinations), so a
+spell belongs to exactly one school.
 
 Returns `nil` for invalid spellIDs (out of range or unpopulated
 `Spell.dbc` slot).
@@ -10890,10 +15537,12 @@ resistance-aware aura libraries, and damage-meter school tagging.
 Previously addons either maintained hardcoded `spellID → school`
 tables or scanned tooltips for the first-line color tag.
 
-### `CastSpellNoToggle(name | spellID)`
+### `CastSpellNoToggle(name | spellID [, unit [, placeGroundSpell]])`
 
 Spam-safe variant of `CastSpellByName` that won't toggle off an
-already-active spell. Covers both kinds of vanilla-toggle abilities:
+already-active spell. This is what a
+[`/cast !Name`](#cast-and-use) line calls. Covers both kinds of toggle
+abilities:
 
 - **Auto-repeat** — Shoot, Auto-Shot, Wand. Tracked via the engine's
   active-auto-repeat global.
@@ -10903,8 +15552,8 @@ already-active spell. Covers both kinds of vanilla-toggle abilities:
   descriptor's aura array.
 
 If either toggle is already on for the requested spell, the call is
-a no-op — exactly what `/cast !SpellName` does in 2.3.2+ clients,
-but expressed as a vanilla Lua call.
+a no-op — exactly what `/cast !SpellName` does, but expressed as a
+Lua call.
 
 | Engine state                  | Behavior            | Return  |
 |-------------------------------|---------------------|---------|
@@ -10942,17 +15591,49 @@ CastSpellNoToggle("Aspect of the Hawk")
 CastSpellNoToggle("Battle Stance")
 ```
 
+#### Optional unit target
+
+A second argument casts the spell at a unit, without changing your
+current target:
+
+```lua
+CastSpellNoToggle("Auto Shot", "focus")       -- Auto Shot on your focus
+CastSpellNoToggle("Shoot", "targettarget")    -- wand your target's target
+```
+
+The unit is any standard token — `"focus"`, `"targettarget"`,
+`"party1"`, `"mouseover"`, a player name, and so on. A unit-target or
+auto-repeat spell fires straight at that unit. A ground-target spell
+lands at the unit's feet. This is the same cast-at-unit path as
+[`C_Spell.CastAtUnit`](#c_spellcastatunitspellidorname-unit--placegroundspell).
+
+A third argument of `false` holds a ground-target spell back. The spell is
+cast on the unit, and the reticle comes up for you to click, exactly as the
+third argument of `C_Spell.CastAtUnit` works. Leave it out to place the
+spell at the unit.
+
+```lua
+CastSpellNoToggle("Auto Shot", "focus", false)
+```
+
+The toggle gates run first, so the unit only matters when the spell
+actually casts. If the spell is already toggled on, the call stays a
+no-op and ignores the unit. An unknown unit token raises the engine's
+standard "Unknown unit" error, the same as `UnitHealth`.
+
 String input matches case-insensitively and tolerates a trailing
 `(Rank N)` suffix the same way `CastSpellByName` itself does —
 `"Shoot"` and `"Shoot(Rank 1)"` both compare equal to a Shoot that's
-already auto-repeating.
+already auto-repeating. A leading `!` is accepted and dropped, so the
+macro form and the Lua form read the same.
 
 Reads `[VAR_ACTIVE_AUTO_REPEAT_SPELL]` (`0x00CEAC30`) for the auto-
 repeat check, and the engine's `FUN_SPELL_IS_TOGGLE_AURA_ACTIVE`
 (`0x004B36F0`) for the aura-active check. Delegates to
 `Script_CastSpellByName` (`0x004B4AB0`) for the actual cast — same
-resolution semantics (rank picking, target rules, etc.) as the
-engine's own global.
+resolution semantics (rank picking, target rules, and more) as the
+engine's own global. With a unit argument, it dispatches through the
+same cast-at-unit path as `C_Spell.CastAtUnit` instead.
 
 Using this from inside a macro action slot? See
 [`CastSpellNoToggle` as a macro cast line](#castspellnotoggle-as-a-macro-cast-line) below for the additional
@@ -10962,7 +15643,7 @@ parser support that makes the slot tag correctly for action-bar UIs.
 
 Casts a ground-target spell at the player's current cursor world
 position, bypassing the manual click on the AoE reticle the engine
-would otherwise require. ClassicAPI's analog of modern's
+would otherwise require. ClassicAPI's analog of
 `/cast [@cursor] Blizzard`. Returns `true` when the cursor-placement
 leg landed; `false` for non-ground-target spells (cast still fires
 normally on the current target), unknown spells, cursor over UI /
@@ -11004,13 +15685,13 @@ the cast fires normally; the placement-resolve no-ops since the
 engine never set the placement flag, and we return `false`.
 
 The companion item version is
-[`C_Item.UseAtCursor`](#c_itemuseatcursoriteminfo) — same chain via
+[`C_Item.UseAtCursor`](#c_itemuseatcursoritem) — same chain via
 the item-use path for grenades / on-use ground-target items.
 
-### `C_Spell.CastAtUnit(spellIDOrName, unit)`
+### `C_Spell.CastAtUnit(spellIDOrName, unit [, placeGroundSpell])`
 
 Casts a spell **at `unit`, whatever its target type** — ClassicAPI's
-analog of modern's `/cast [@unit] Spell`:
+analog of `/cast [@unit] Spell`:
 
 - **Ground-target spells** (Flamestrike, Blizzard, Rain of Fire, …) are
   placed at the unit's feet, bypassing the AoE reticle click.
@@ -11026,6 +15707,11 @@ for that spell (wrong faction, out of range).
 
 The first argument takes a spellID or a spell name, with the same
 exact-rank / `(Rank N)` semantics as `CastAtCursor`.
+
+`placeGroundSpell` defaults to true, which is the behavior above. Pass
+`false` to cast a normal spell on the unit as usual but leave a ground-target
+spell's reticle for the player to click, instead of dropping it on the unit.
+That is what `/cast [@unit] Spell` does for every unit but yourself.
 
 ```lua
 -- ground-target: dropped at the unit's feet
@@ -11052,13 +15738,12 @@ cancelled. A genuinely unrecognized unit-token string raises the engine's
 standard "Unknown unit" error, matching `UnitHealth("garbage")`.
 
 The companion item version is
-[`C_Item.UseAtUnit`](#c_itemuseatunititeminfo-unit).
+[`C_Item.UseAtUnit`](#c_itemuseatunititem-unit).
 
 ### `C_Spell.CancelSpellByID(spellID)` / `CancelSpellByName(name)`
 
-Cancel a buff on the player by spellID or by spell name. Modern WoW's
-`CancelUnitBuff` reduces to these two primitives internally; both are
-player-only (vanilla server only accepts `CMSG_CANCEL_AURA` for the
+Cancel a buff on the player by spellID or by spell name. Both are
+player-only (the server only accepts `CMSG_CANCEL_AURA` for the
 local player's own auras).
 
 ```lua
@@ -11077,8 +15762,7 @@ per-buff cancelable flag at `[entry+0x0A] & 0x01` and the fallback
 `AttributesEx & 0x04` check on the spell record. Trade-off: the server
 is now the sole authority on what's cancelable. Non-cancelable auras
 (proc-buffs, certain world buffs) still get rejected — just server-side
-instead of client-side, which is the same effective behavior as
-modern WoW's `C_Spell.CancelSpellByID`.
+instead of client-side.
 
 For invalid input (non-positive spellID, OOR, or a Spell.dbc empty
 slot), both functions silently no-op. No `lua_error`, no event fired.
@@ -11095,11 +15779,11 @@ Returns the unit's in-progress **regular cast** (not a channel), or
 `nil` if it isn't casting. `C_Spell.CastingInfo()` is
 `C_Spell.UnitCastingInfo("player")` without the unit-token lookup.
 
-> **Under `C_Spell`, not the global `UnitCastingInfo`.** Modern WoW
-> exposes these as globals, but a global here would clobber addons that
-> ship their own vanilla cast-tracking via the `_G.UnitCastingInfo or
+> **Under `C_Spell`, not the global `UnitCastingInfo`.** A global here
+> would clobber addons that
+> ship their own cast-tracking via the `_G.UnitCastingInfo or
 > <fallback>` idiom — e.g. ShaguTweaks' `libcast` scrapes the combat
-> log for **remote/enemy** casts the 1.12 engine never exposes. If we
+> log for **remote/enemy** casts the engine never exposes. If we
 > occupied the global, those addons would adopt our player-only version
 > and lose their (superior, for that case) fallback. So we cede the
 > global names and register under `C_Spell` instead. Same for
@@ -11121,9 +15805,9 @@ C_Spell.UnitCastingInfo("player")
 `startTimeMs`/`endTimeMs` share `GetTime()`'s epoch (`GetTime()*1000`),
 so progress is `(GetTime()*1000 - startTimeMs) / (endTimeMs - startTimeMs)`.
 
-> **Works for any unit.** Vanilla 1.12 stores no cast times on the
-> CGUnit (the cast bar is Lua-driven off `SPELLCAST_START`), so we
-> source them two ways: the **local player** is self-tracked on a
+> **Works for any unit.** The CGUnit stores no cast times (the cast bar
+> is Lua-driven off `SPELLCAST_START`), so we source them two ways: the
+> **local player** is self-tracked on a
 > per-frame tick (`VAR_CURRENT_CAST_SPELL`, stamping `startTimeMs = now`,
 > `endTimeMs = now + effective cast time`); **other units** come from a
 > co-hook on `SMSG_SPELL_START` (`Spell::Cast`), the one packet carrying
@@ -11142,11 +15826,10 @@ so progress is `(GetTime()*1000 - startTimeMs) / (endTimeMs - startTimeMs)`.
 > victim's bar, while non-interrupting damage doesn't false-clear it.
 > Best-effort for remote units, in three ways: only casts that began while
 > the unit was in range are seen; the remote `startTimeMs`/`endTimeMs` are
-> shifted later by roughly your latency (1.12's `SMSG_SPELL_START` carries
+> shifted later by roughly your latency (`SMSG_SPELL_START` carries
 > only a single `castTime`, so we stamp `start = now, end = now + castTime`
-> on receipt — 3.3.5+ avoids the skew because its packet carries *both*
-> total and remaining cast time and back-dates `start = now − elapsed`;
-> the 1.12 packet has no field to recover `elapsed` from); and remote
+> on receipt — the packet has no field to recover `elapsed` from, so the
+> skew can't be removed); and remote
 > **pushback is invisible** — the server sends `SMSG_SPELL_DELAYED` only
 > to the affected caster, so another unit's bar can't stretch when they
 > take damage. The **local player is unaffected** by all of this — its
@@ -11163,9 +15846,18 @@ so progress is `(GetTime()*1000 - startTimeMs) / (endTimeMs - startTimeMs)`.
 > the cast's **castGUID** — the exact string the
 > [`UNIT_SPELLCAST_*`](#unit_spellcast_-events) events carry for this cast,
 > so you can correlate the polled info with the events (works for the player
-> and other units). Fields vanilla can't fill are structurally-correct
-> placeholders: `castBarID` = `nil`, `notInterruptible` = `false`,
-> `delayTimeMs` = `0`.
+> and other units). `delayTimeMs` is the pushback the cast has taken so far,
+> in milliseconds. `castBarID` has no source here and is always `nil`.
+>
+> `notInterruptible` is `true` when no interrupt or silence that **you**
+> know can stop the cast. The value is relative to your own abilities, so a
+> rogue and a mage can read different values for the same cast. It is `true`
+> in two cases: the spell can never be interrupted, or the caster has an aura
+> that blocks every interrupt and silence you know (for example Divine Shield,
+> Ice Block, or Banish). If you know no interrupt and no silence, the value is
+> always `false`. Limits: a creature's built-in interrupt immunity is
+> server-side data that the client never receives, so a boss with that
+> immunity reads `false` while your interrupt still fails on it.
 
 ### `C_Spell.UnitChannelInfo(unit)` / `C_Spell.ChannelInfo()`
 
@@ -11193,133 +15885,8 @@ as casts: when we observed the channel begin, the remote unit returns full
 **start/end times** (validated against the live `UNIT_FIELD_CHANNEL_SPELL`
 so a stale cache entry never applies to a different/ended channel);
 otherwise it falls back to `name`/`displayName`/`textureID`/`spellID` with
-**`nil` times**. The player path is unchanged (full timing). Same
-placeholder fields as `C_Spell.UnitCastingInfo`.
-
-### `UNIT_SPELLCAST_*` events
-
-Backport of the TBC+ cast/channel events to 1.12, for the **local player and
-other units**. Ported cast-bar / rotation addons (anything written against
-the modern signature) register these instead of vanilla's arg-less
-`SPELLCAST_*` events and read `unit, castGUID, spellID` directly. Thirteen
-events are provided; six also fire for non-player units:
-
-| Event | Fires when | Units | Args |
-|-------|-----------|-------|------|
-| `UNIT_SPELLCAST_SENT` | `CMSG_CAST_SPELL` leaves the client (earliest point) | player | `unit, target, castGUID, spellID, spellName, rank` |
-| `UNIT_SPELLCAST_START` | a cast-time spell begins | all | `unit, castGUID, spellID, spellName, rank` |
-| `UNIT_SPELLCAST_STOP` | a cast-time spell ends (any reason) | all | same |
-| `UNIT_SPELLCAST_DELAYED` | pushback extends the cast | player | same |
-| `UNIT_SPELLCAST_SUCCEEDED` | the spell goes off (`SMSG_SPELL_GO`) — incl. instants | all | same |
-| `UNIT_SPELLCAST_INTERRUPTED` | a started **cast** is interrupted (kick, movement, LoS) — never for channels | all | same |
-| `UNIT_SPELLCAST_FAILED` | a cast is rejected before it starts (range, mana, cooldown) with an error shown | player | same |
-| `UNIT_SPELLCAST_FAILED_QUIET` | a cast fails with **no** error shown (spammy retry, reticle cancel, …) | player | same |
-| `UNIT_SPELLCAST_CHANNEL_START` | a channel begins | all | same |
-| `UNIT_SPELLCAST_CHANNEL_UPDATE` | pushback shortens a channel | player | same |
-| `UNIT_SPELLCAST_CHANNEL_STOP` | a channel ends | all | same |
-| `UNIT_SPELLCAST_RETICLE_TARGET` | a ground-target reticle appears (AoE placement — Blizzard, Flare, …) | player | `unit, "", spellID, spellName, rank` |
-| `UNIT_SPELLCAST_RETICLE_CLEAR` | the reticle is placed or cancelled | player | `unit, "", spellID, spellName, rank` |
-
-`unit` (arg1) is the token of the casting unit — `"player"` for your own
-casts, or a unit token (`"target"`, `"focus"`, `"party3"`, `"nameplate2"`,
-`"pet"`, `"mouseover"`, …) for another unit. `spellName` / `rank` are
-ClassicAPI tail extensions (modern stops at `spellID`); addons reading only
-the first three positional args are unaffected.
-
-**Per-token fan-out.** A caster GUID can map to several tokens at once (your
-`target` is also `party2` and `nameplate1`). Like retail, the event fires
-**once per token** currently pointing at the caster, so a `target`-frame
-cast bar, a `party2` frame, and a nameplate cast bar each get their own
-event with the same castGUID. Tokens are resolved fresh at fire time (they
-shift frame-to-frame). If you run **SuperWoW**, its raw-GUID token (`"0x…"`)
-is deliberately filtered out — only standard tokens are fanned out.
-
-**Non-player limits.** Only the six events above fire for other units, and
-they're **best-effort** — driven purely by the packets an observer receives:
-- `SENT` never fires (only your own outgoing casts are visible).
-- `DELAYED` / `CHANNEL_UPDATE` never fire (pushback is sent only to the
-  caster, so another unit's bar can't stretch/shrink from damage).
-- `FAILED` never fires (a pre-cast requirement failure is client-local).
-- A remote cast/channel only has timing from the moment its
-  `SMSG_SPELL_START` was observed; casters who were already casting when
-  they came into range have no start time.
-
-**Channels never fire `INTERRUPTED`.** Retail emits only `CHANNEL_STOP` when a
-channel ends, whether it completed or was cut short (verified against retail),
-so ClassicAPI matches that for both the player and other units. `INTERRUPTED`
-is a cast-only event.
-
-**Reticle events** fire for ground-targeted (AoE) spells only, always for the
-player: `RETICLE_TARGET` when the placement reticle comes up, `RETICLE_CLEAR`
-when it's placed or cancelled. There's no cast yet, so the castGUID slot
-(arg2) is empty — retail pushes `nil` there, but the engine's event
-dispatcher can't emit a `nil` mid-argument-list, so ClassicAPI pushes `""`
-instead. `unit` (arg1) and `spellID` (arg3) are exact; arg2 is the only
-difference and is inconsequential for a reticle.
-
-**castGUID.** A synthesized string in the modern shape
-`Cast-<type>-<serverID>-<instanceID>-<zoneUID>-<spellID>-<castUID>`. Vanilla
-can't know server / instance / zone, so those three fields are `0`; the
-load-bearing parts are the `spellID` (field 6, which addons `strsplit("-")`
-out) and a unique-per-cast `castUID` (field 7). **Every event of one cast
-carries the same castGUID**, so `SENT` → `START`/`CHANNEL_START` →
-`SUCCEEDED` → `STOP`/`CHANNEL_STOP` all pair up — including across the caster
-and observers (they converge on the same value), and a chained same-spell
-recast gets its own castUID. The `type` and `castUID` follow the
-[spell-cast-GUID spec](https://warcraft.wiki.gg/wiki/GUID#Cast):
-- **Type 3** (real casts — the common case): `castUID` is time-based — the
-  low 23 bits are the cast's UNIX-epoch second, the higher bits a per-second
-  counter.
-- **Type 2** (`UNIT_SPELLCAST_FAILED` — a local-only cast that never reached
-  the server): `castUID` is a plain locally-incrementing integer.
-
-**Ordering** matches modern:
-
-- Cast-time spell: `SENT → START → SUCCEEDED → STOP`.
-- Channel: `SENT → CHANNEL_START → SUCCEEDED → CHANNEL_STOP` (CHANNEL_START
-  before SUCCEEDED, as on retail).
-- Instant: `SENT → SUCCEEDED`.
-
-**INTERRUPTED vs FAILED vs FAILED_QUIET** follow modern's split: a spell that
-never started (out of range, not enough mana, on cooldown, LoS to a target)
-fires `FAILED`, except for a fixed whitelist of "quiet" `SpellCastResult`
-codes that fire `FAILED_QUIET` instead — `SPELL_IN_PROGRESS` (casting while
-already casting / a spell-queue rejection), `DONT_REPORT` (fake fails, a
-cancelled ground reticle), and `CHARMED`. That whitelist mirrors the 3.3.5
-client's own unit-spellcast dispatch, mapped to vanilla's `SpellCastResult`
-enum. A spell that was *already casting* and gets stopped (an enemy kick,
-moving to cancel, breaking LoS mid-cast) fires `INTERRUPTED`. Holding
-the cast key while running fires `INTERRUPTED` repeatedly (once per retry),
-each reusing the interrupted cast's castGUID — matching retail.
-
-**Channel pushback (player).** Taking damage while channeling shortens the
-channel in vanilla; `CHANNEL_UPDATE` fires on each hit and
-[`C_Spell.UnitChannelInfo`](#c_spellunitchannelinfounit--c_spellchannelinfo)'s
-`endTimeMs` re-anchors to the server's new remaining time, so cast bars
-shrink correctly. (The event carries no time — like retail it's a "re-read
-now" trigger; timing is read back from `UnitChannelInfo`.)
-
-Every fire is gated on whether any frame is registered for that event, so
-the whole system costs one pointer-compare per state transition when no
-addon uses it (no arg synthesis, no DBC lookups, no per-token fan-out).
-
-```lua
-local f = CreateFrame("Frame")
-for _, e in ipairs({
-    "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP",
-    "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_CHANNEL_START",
-}) do f:RegisterEvent(e) end
-f:SetScript("OnEvent", function()
-    -- vanilla passes event/arg1/... as globals, not function params
-    if arg1 == "target" then print(event, arg3) end  -- arg3 = spellID
-end)
-```
-
-> **Additive to the vanilla `SPELLCAST_*` events.** The engine's own arg-less
-> `SPELLCAST_START` / `SPELLCAST_CHANNEL_UPDATE` / … still fire as before;
-> these `UNIT_`-prefixed events are the modern layer on top. The empowered-cast
-> events (`UNIT_SPELLCAST_EMPOWER_*`, a Dragonflight addition) are not
-> implemented — vanilla has no empowered casts.
+**`nil` times**. The player path is unchanged (full timing).
+`notInterruptible` follows the same rules as in `C_Spell.UnitCastingInfo`.
 
 ### `C_Spell.GetSpellLevelInfo(spellID)`
 
@@ -11404,8 +15971,149 @@ if slot then
 end
 ```
 
-Equivalent to the legacy function of the same name introduced in 3.0
-(later renamed to `FindSpellBookSlotBySpellID` in 5.x).
+Equivalent to the function of the same name (also known as
+`FindSpellBookSlotBySpellID`).
+
+### `C_SpellBook.GetSpellBookItemInfo(slotIndex, spellBank)`
+
+Returns a table describing the spell in a spellbook slot. `slotIndex` is
+1-based across the whole book. `spellBank` picks the book —
+[`Enum.SpellBookSpellBank.Player`](#enumspellbookspellbank) (`0`) or
+`Enum.SpellBookSpellBank.Pet` (`1`).
+
+```lua
+local info = C_SpellBook.GetSpellBookItemInfo(1, Enum.SpellBookSpellBank.Player)
+-- info.name, info.spellID, info.itemType, info.isPassive, info.iconID, ...
+```
+
+Table fields:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `itemType` | [`Enum.SpellBookItemType`](#enumspellbookitemtype) | `Spell` (1) for the player book, `PetAction` (3) for the pet book. |
+| `actionID` | number | The spellID. Equals `spellID` — there is no spell-override system. |
+| `spellID` | number | The spellID in the slot. |
+| `name` | string | The localized spell name. |
+| `subName` | string | The rank text (e.g. `"Rank 3"`), or `""` when the spell has no rank. |
+| `iconID` | string | The icon **path** — feed it straight to `texture:SetTexture(...)`. |
+| `isPassive` | boolean | `true` for a passive spell. |
+| `isOffSpec` | boolean | Always `false`. |
+
+Returns `nil` for an empty or out-of-range slot.
+
+> **Deviations forced by the data.** `iconID` is a
+> texture path, not a `fileID` (there is no fileID system) — the same
+> deviation as [`C_Spell.GetSpellInfo`](#c_spellgetspellinfospellid).
+> `skillLineIndex` is not returned (`nil`) — use
+> [`C_SpellBook.GetSpellBookItemSkillLineIndex`](#c_spellbookgetspellbookitemskilllineindexslotindex-spellbank).
+> `isOffSpec` is always `false` — there are no specializations.
+
+### `C_SpellBook.GetNumSpellBookSkillLines()`
+
+Returns the number of tabs in the player spellbook: General, then one tab
+per skill line such as Fire or Fury.
+
+### `C_SpellBook.GetSpellBookSkillLineInfo(skillLineIndex)`
+
+Returns a table describing spellbook tab `skillLineIndex` (1-based), or
+`nil` for an index outside `1 .. GetNumSpellBookSkillLines()`.
+
+```lua
+for i = 1, C_SpellBook.GetNumSpellBookSkillLines() do
+    local tab = C_SpellBook.GetSpellBookSkillLineInfo(i)
+    for slot = tab.itemIndexOffset + 1, tab.itemIndexOffset + tab.numSpellBookItems do
+        local item = C_SpellBook.GetSpellBookItemInfo(slot, Enum.SpellBookSpellBank.Player)
+        print(tab.name, item.name)
+    end
+end
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | string | The tab name (`"General"`, `"Fire"`, `"Fury"`, ...). |
+| `iconID` | string | The tab icon **path** — feed it to `texture:SetTexture(...)`. |
+| `itemIndexOffset` | number | This value + 1 is the first `slotIndex` of the tab. |
+| `numSpellBookItems` | number | The number of spells in the tab. |
+| `isGuild` | boolean | Always `false`. |
+| `shouldHide` | boolean | Always `false`. |
+| `specID`, `offSpecID` | nil | Always `nil`. |
+
+The name, icon, offset, and count are the same values
+`GetSpellTabInfo(skillLineIndex)` returns.
+
+### `C_SpellBook.GetSpellBookItemSkillLineIndex(slotIndex, spellBank)`
+
+Returns the 1-based tab index that holds player-book slot `slotIndex`.
+Returns `nil` for a slot past the last spell, and for every pet-book slot
+(the pet book has no tabs).
+
+```lua
+C_SpellBook.GetSpellBookItemSkillLineIndex(1, Enum.SpellBookSpellBank.Player)  -- 1 (General)
+```
+
+### `C_SpellBook.GetSkillLineIndexByID(skillLineID)`
+
+Returns the 1-based tab index for a `SkillLine.dbc` ID, or `nil` when the
+player has no tab for that skill line. The General tab has no skill line
+ID.
+
+```lua
+local _, skillLineID = C_SpellBook.GetSpellSkillLine(133)   -- Fireball: "Fire", 8
+local tab = C_SpellBook.GetSkillLineIndexByID(skillLineID)  -- the Fire tab, or nil on a non-mage
+```
+
+Paired with
+[`C_SpellBook.GetSpellSkillLine`](#c_spellbookgetspellskilllinespellid) it
+answers "which of my tabs holds this spellID" without walking the book.
+
+### `C_SpellBook.GetSpellBookItemCastCount(slotIndex, spellBank)`
+
+Spellbook-slot variant of
+[`C_Spell.GetSpellCastCount`](#c_spellgetspellcastcountspellidentifier).
+Returns `0` for an empty slot.
+
+### `C_SpellBook.GetSpellBookItemLossOfControlCooldownInfo(slotIndex, spellBank)`
+
+Spellbook-slot variant of
+[`C_Spell.GetSpellLossOfControlCooldown`](#c_spellgetspelllossofcontrolcooldownspellidentifier),
+returned as a table. Returns `nil` for an empty slot.
+
+| Field | Type | Notes |
+|---|---|---|
+| `startTime` | number | Start of the blocking effect, in `GetTime()` seconds. `0` when nothing blocks the spell. |
+| `duration` | number | Length of the blocking effect in seconds. `0` when nothing blocks the spell. |
+| `modRate` | number | Always `1`. |
+| `isActive` | boolean | `true` while an effect blocks the spell. |
+| `shouldReplaceNormalCooldown` | boolean | `true` when the effect outlasts the spell's own cooldown. A button then draws the loss-of-control swipe instead of the normal one. |
+
+### `C_SpellBook.GetSpellBookItemLossOfControlCooldownDuration(slotIndex, spellBank)`
+
+The `duration` field above on its own. Returns `nil` for an empty slot.
+
+### `C_SpellBook.IsClassTalentSpellBookItem(slotIndex, spellBank)`
+
+Returns `true` when the spell in the slot comes from a talent: the
+talent's own spell (Mortal Strike rank 1), or a higher rank of that
+ability that you trained (Mortal Strike rank 2). Returns `false` for every
+pet-book slot and for an empty slot.
+
+```lua
+local bank = Enum.SpellBookSpellBank.Player
+local info = C_SpellBook.GetSpellBookItemInfo(slot, bank)
+if C_SpellBook.IsClassTalentSpellBookItem(slot, bank) then
+    print(info.name, "is a talent ability")
+end
+```
+
+Higher ranks are found in two ways: through the next-rank links in the
+client data, and through the spell name. A spellbook spell with the same
+name as a talent's spell counts as a rank of that talent. Mind Flay is one
+chain that needs the second way.
+
+### `C_SpellBook.ContainsAnyDisenchantSpell()`
+
+Returns `true` when the player knows a spell that disenchants items
+(Disenchant, from Enchanting).
 
 ### `C_SpellBook.GetSpellLevelLearned(spellID)`
 
@@ -11421,8 +16129,7 @@ C_SpellBook.GetSpellLevelLearned(2061)   -- Flash Heal rank 1 → 20
 
 Returns `0` for invalid spellIDs, spells with no level requirement
 (most non-class utility spells), or records the engine hasn't
-cached. Matches modern semantics — unknown / utility spells
-return 0 rather than nil.
+cached. Unknown / utility spells return 0 rather than nil.
 
 ### `C_SpellBook.GetCurrentLevelSpells([level])`
 
@@ -11443,18 +16150,70 @@ also pass) and the exclude masks. For each surviving entry, looks
 up the spell's `BaseLevel` and includes it if it matches the
 queried level.
 
-> **Vanilla is trainer-driven.** Modern `GetCurrentLevelSpells`
-> (added in 5.x when trainers were removed) returns *auto-learned*
-> spells. Vanilla 1.12 requires visiting a trainer to actually
-> learn most class spells. We return the closest available analog:
-> **what's *trainable* at this level**. Useful for "what's new
-> this level" UI panels and level-preview tooling ported from MoP+.
+> **Spell learning is trainer-driven.** Elsewhere `GetCurrentLevelSpells`
+> returns *auto-learned* spells. Here you must visit a trainer to
+> actually learn most class spells. We return the closest available
+> analog: **what's *trainable* at this level**. Useful for "what's new
+> this level" UI panels and level-preview tooling.
 
 Class/race come from the local player — there's no
-`(class, race, level)` form because vanilla doesn't expose a
+`(class, race, level)` form because there's no
 clean class-string→classID lookup. Returns an empty table at
 character select / pre-login (no CGPlayer yet) and for levels
 where no class/race spells match.
+
+### `C_SpellBook.GetPlayerSpellsByAura(auraName)`
+
+Returns every spell the player currently knows that has an effect
+applying the given aura, as a 1-based array of spell IDs in ascending
+order. Empty when none does.
+
+```
+spellIDs = C_SpellBook.GetPlayerSpellsByAura(auraName)
+```
+
+`auraName` is an aura code — the same number
+[`C_Spell.GetSpellEffectInfo`](#c_spellgetspelleffectinfospellid)
+reports in its `auraName` field. `0` means "applies no aura" and returns
+an empty array.
+
+This is `IsPlayerSpell` asked the other way round. Instead of testing one
+spell, it reads the same set of known spells and reports the ones whose
+effects carry the aura. A talent is present at its current rank only, so
+summing the amounts of the result never counts two ranks of one talent.
+
+```lua
+-- everything the player knows that shortens the energy tick
+for _, spellID in ipairs(C_SpellBook.GetPlayerSpellsByAura(217)) do
+    local fx = C_Spell.GetSpellEffectInfo(spellID)
+    -- read the amount from the effect whose auraName is 217
+end
+```
+
+Known is not the same as active. For a passive — a talent, a racial —
+it is: known means in effect, and a passive never appears in the buff
+list. A castable buff in the result is only learned; whether it is up is
+a question for the buff list. And a buff another player puts on you is
+not a spell you know, so it is not here at all. Split the result on
+[`C_Spell.IsSpellPassive`](#c_spellisspellpassivespellid) and check
+active buffs separately:
+
+```lua
+local mod = 0
+for _, spellID in ipairs(C_SpellBook.GetPlayerSpellsByAura(217)) do
+    if C_Spell.IsSpellPassive(spellID) then
+        mod = mod + AmountOf(spellID)      -- in effect while known
+    end
+end
+for i = 1, 32 do
+    local spellID = select(10, C_UnitAuras.UnitAura("player", i, "HELPFUL"))
+    if not spellID then break end
+    mod = mod + AmountOf(spellID)          -- in effect while up
+end
+```
+
+A list built this way follows the data: a retuned value, a new rank, or
+an added source shows up without a code change.
 
 ### `C_SpellBook.GetSkillLineName(skillLineID)`
 
@@ -11490,7 +16249,7 @@ if C_SpellBook.GetSkillLineRank(186) then           -- has Mining at all?
 end
 ```
 
-Vanilla's `GetSkillLineInfo(index)` only walks the skill window by
+The stock `GetSkillLineInfo(index)` only walks the skill window by
 position and returns skills by *name*, so an addon starting from a
 SkillLine.dbc id (a quest's `requiredSkill`) has to map id → localized
 name and then string-match every skill line to recover the rank. This
@@ -11534,7 +16293,7 @@ Returns `(nil, nil)` for:
   proc-only spells, item-on-use effects, GM-debug spells)
 - rows whose `skillID` doesn't resolve in `SkillLine.dbc`
 
-Vanilla's `GetSpellTabInfo(tabIndex)` enumerates spellbook tabs by
+The stock `GetSpellTabInfo(tabIndex)` enumerates spellbook tabs by
 1-based index — it can't answer "what tab is *this spellID* in".
 Addons that need a spellID→tab mapping have historically had to walk
 every tab's slot range and string-match against `GetSpellName`. This
@@ -11566,9 +16325,9 @@ C_SpellBook.IsRangedAutoAttackSpellBookItem(10, "spell")
 
 ## State
 
-Player movement / visibility state queries that modern WoW exposes
-as no-arg globals. 1.12 doesn't bind them to Lua despite the engine
-tracking the underlying state — broadcast in UpdateFields for some
+Player movement / visibility state queries, as no-arg globals. The
+stock client doesn't bind them to Lua despite the engine tracking the
+underlying state — broadcast in UpdateFields for some
 (mount, stealth visibility), local-only for others (falling,
 swimming).
 
@@ -11659,7 +16418,7 @@ object exists (pre-world).
 Recomputed live from the engine's WMO geometry query, so it flips as you
 cross an interior threshold rather than tracking the current zone/area —
 you can be indoors and outdoors within the same subzone. Returns `1`/`nil`
-(not `true`/`false`) to match the historical retail contract and
+(not `true`/`false`) to match the historical contract and
 SuperWoW 2.2, so both `if IsIndoors()` and `IsIndoors() == 1` work.
 
 ```lua
@@ -11689,7 +16448,7 @@ UI, where movement breaks the channel), `false` otherwise.
 
 This is distinct from spell channeling: the function fires for
 *participants* who clicked the portal, not the warlock who cast
-Ritual of Summoning. Vanilla has no Lua surface for this state —
+Ritual of Summoning. There is no stock Lua surface for this state —
 the engine's `SPELLCAST_CHANNEL_*` events don't fire and
 `C_Spell.CastingInfo()` returns nothing — so addons that want to react to
 the player being committed to a ritual (e.g. suppress autorun
@@ -11711,7 +16470,7 @@ the conjunction is portal-clicker-specific.
 
 The engine fires `SPELLCAST_CHANNEL_START` / `SPELLCAST_CHANNEL_STOP`
 on the portal click, even though there's no castbar — Blizzard's
-vanilla castbar UI filters out spell ID 698 (Ritual of Summoning),
+castbar UI filters out spell ID 698 (Ritual of Summoning),
 but the events themselves fire normally. Combine them with this
 function for ritual-specific triggers:
 
@@ -11736,12 +16495,12 @@ called before the player object is initialized (login screen).
 ### `IsInGroup()`
 
 Returns `true` if the player is in a party or a raid, `false`
-otherwise. Modern shortcut over stock 1.12's
+otherwise. Shortcut over
 `GetNumPartyMembers() > 0 or GetNumRaidMembers() > 0`.
 
-Accepts an optional `groupType` argument (modern
-`Enum.PartyCategory.Home` / `Instance`). Vanilla has no LFG / LFD
-instance-group concept, so the argument is accepted and ignored.
+Accepts an optional `groupType` argument
+(`Enum.PartyCategory.Home` / `Instance`). There is no LFG / LFD
+instance-group concept here, so the argument is accepted and ignored.
 
 ```lua
 if IsInGroup() then
@@ -11762,8 +16521,8 @@ SendChatMessage("ready check", channel)
 
 ### `GetMirrorTimerInfo(index)` / `GetMirrorTimerProgress(label)`
 
-Modern (3.0+) readers for the BREATH (drowning) / EXHAUSTION
-(off-map) / FEIGNDEATH (hunter Feign Death) bar state. The vanilla
+Readers for the BREATH (drowning) / EXHAUSTION
+(off-map) / FEIGNDEATH (hunter Feign Death) bar state. The
 engine fires the `MIRROR_TIMER_START` / `_PAUSE` / `_STOP` events
 with the full packet payload but doesn't cache anything internally;
 ClassicAPI hooks the SMSG handler at `0x005E7990` and builds a
@@ -11778,7 +16537,7 @@ or nothing if that slot is empty:
 | `timer` | string | Engine type-name: `"EXHAUSTION"`, `"BREATH"`, or `"FEIGNDEATH"` |
 | `value` | number | The snapshot value from the last server packet (ms). Not live-interpolated — see `GetMirrorTimerProgress` for that |
 | `maxValue` | number | Timer's max (ms) |
-| `scale` | number | Server-set rate. **Negative** = depleting (vanilla sends `-1` for breath, draining 60000 ms over 60 s of real time); **positive** = filling. Modern's docs describe the opposite convention — vanilla's wire format predates that flip |
+| `scale` | number | Server-set rate. **Negative** = depleting (the server sends `-1` for breath, draining 60000 ms over 60 s of real time); **positive** = filling |
 | `paused` | boolean | `true` if the engine has frozen the timer |
 | `label` | string | Localized display label, e.g. `"Breath"`. For FEIGNDEATH, the spell name |
 
@@ -11807,16 +16566,16 @@ local function OnUpdate(self)
 end
 ```
 
-> **Modern uses `"FATIGUE"`, vanilla uses `"EXHAUSTION"`.** The engine
-> type-name string for the off-map timer is `"EXHAUSTION"` in 1.12 —
+> **The off-map timer is `"EXHAUSTION"`, not `"FATIGUE"`.** The engine
+> type-name string for the off-map timer is `"EXHAUSTION"` —
 > we surface what the engine actually returns rather than translating
-> to modern's name. Addons backporting `"FATIGUE"`-keyed code need to
+> the name. Addons porting `"FATIGUE"`-keyed code need to
 > handle either string.
 
 ### `GetShapeshiftFormID()`
 
 Returns the player's current shapeshift form as the integer ID from
-vanilla 1.12.1's `SpellShapeshiftForm.dbc`. Returns `0` when the
+`SpellShapeshiftForm.dbc`. Returns `0` when the
 player isn't shifted.
 
 | Class | Form IDs |
@@ -11828,17 +16587,17 @@ player isn't shifted.
 | Priest | `28` Shadowform, `32` Spirit of Redemption |
 
 **Turtle WoW** extends the DBC with custom rows that aren't present
-on Blizzard 1.12.1:
+on the stock client:
 
 | ID | Name | Notes |
 |----|------|-------|
 | `9` | Tree of Life Form | Restoration druid endgame form |
 | `11` | Swift Travel Form | Mounted-speed travel form |
 
-> **Vanilla numbering ≠ modern numbering.** Modern WoW renumbered the
-> table — e.g. modern uses `17` for Travel and `35` for Tree of Life,
-> where 1.12.1 uses `3` (Travel) and Turtle uses `9` (Tree of Life).
-> Don't copy named constants from a modern addon and expect them to
+> **Form numbering is client-specific.** These IDs are the ones this
+> client uses — e.g. `3` for Travel; Turtle uses `9` for Tree of Life.
+> Other clients number the table differently.
+> Don't copy named constants from another addon and expect them to
 > match.
 
 ```lua
@@ -11848,13 +16607,13 @@ end
 ```
 
 Reads byte 2 of `UNIT_BYTES_1` (descriptor `+0x212`) on the local
-player — the same byte vanilla's `Script_GetShapeshiftFormInfo`
+player — the same byte the engine's `Script_GetShapeshiftFormInfo`
 compares against each form-spell's effect-encoded form ID to answer
 "is this form active". The engine updates the byte from
 `SMSG_UPDATE_OBJECT` aura/form packets, so the value is live without
 needing an event listener.
 
-Vanilla 1.12 has only `GetShapeshiftFormInfo(index)` (1-based bar
+The stock client has only `GetShapeshiftFormInfo(index)` (1-based bar
 index); `GetShapeshiftFormID` exposes the DBC ID directly so callers
 can write `if formID == CAT_FORM` without iterating the bar.
 
@@ -11876,8 +16635,8 @@ Redemption, and rogue Stealth. No form table hardcoding — the
 implementation finds whichever buff currently provides the active form
 by scanning `Spell.dbc` effects.
 
-> **Does not cover warrior stances.** Vanilla treats warriors as
-> *always* in a stance — the engine has no "no stance" state and
+> **Does not cover warrior stances.** Warriors are *always* in a
+> stance — the engine has no "no stance" state and
 > right-clicking the active stance in the stance bar does nothing. The
 > server rejects the cancel packet for stances, so this function is a
 > no-op when called as a warrior. Switch stances with the normal stance
@@ -11891,9 +16650,68 @@ the player's buff slots (0..31), looks up each spell's
 `EffectMiscValue` matches the current form ID, sends `CMSG_CANCEL_AURA`
 via the engine's direct sender at [`FUN_006E7040`](../src/Offsets.h#L428).
 
-Mirrors 3.3.5a's `Script_CancelShapeshiftForm` inner (`FUN_00726CE0`),
-which does the same effect-array scan + form-id match before issuing
-its cancel packet. Vanilla just lacks the public Lua surface.
+Does an effect-array scan + form-id match before issuing its cancel
+packet. The engine has the machinery; it just lacks the public Lua
+surface.
+
+### `GetSheathState()`
+
+Returns the weapon type that the player has drawn. Takes no arguments.
+The value is 1-based:
+
+| Value | Meaning |
+|-------|---------|
+| `1` | None. The weapons are put away. |
+| `2` | A melee weapon is drawn. |
+| `3` | A ranged weapon is drawn. |
+
+Returns `1` before the player object exists (out of world).
+
+```lua
+if GetSheathState() == 3 then
+    -- the ranged weapon is out
+end
+```
+
+The engine has `ToggleSheath()` but no matching getter. `GetSheathState`
+adds the query, with 1-based values. To change the state, use the
+built-in `ToggleSheath()`.
+
+## SwingTimer
+
+`C_SwingTimer` reports whether your current target is in range for a
+melee or ranged auto-attack. See
+[`PLAYER_SWING`](#player_swing-event) for the matching attack-timer
+event, and [`Enum.PlayerSwingType`](#enumplayerswingtype) for the
+weapon values both use.
+
+### `C_SwingTimer.EnableRangeCheck(swingType, enable)`
+
+Turns [`PLAYER_SWING_RANGE_UPDATE`](#player_swing_range_update-event)
+on or off for one swing type.
+
+```lua
+C_SwingTimer.EnableRangeCheck(Enum.PlayerSwingType.MainHand, true)
+```
+
+After you enable a swing type, call
+[`C_SwingTimer.IsTargetWithinSwingRange`](#c_swingtimeristargetwithinswingrangeswingtype)
+once to read the current range. The event fires only on a later change.
+
+### `C_SwingTimer.IsTargetWithinSwingRange(swingType)`
+
+Returns whether your current target is in range for a swing type
+(an [`Enum.PlayerSwingType`](#enumplayerswingtype) value).
+
+```lua
+local inRange = C_SwingTimer.IsTargetWithinSwingRange(Enum.PlayerSwingType.MainHand)
+```
+
+Returns `nil` when no range answer is possible. Reasons include no
+current target, an unattackable target, or no weapon equipped for that
+swing type. A `nil` value must not be read as out of range.
+Auto-attacks apply only to the current target, so no other unit can be
+queried.
 
 ## System
 
@@ -11902,16 +16720,16 @@ Host/OS-level helpers that aren't tied to a game domain.
 ### `GetPhysicalScreenSize()`
 
 Returns `(widthPixels, heightPixels)` — the display's physical
-resolution in pixels. Modern WoW added this as a native in 7.0
-(Legion); FrameXML's `PixelUtil` builds its entire pixel↔UI-unit
-conversion on it (`768.0 / physicalHeight`), which is what lets addons
-snap frames to whole pixels for crisp borders at fractional UI scales.
+resolution in pixels. FrameXML's `PixelUtil` builds its entire
+pixel↔UI-unit conversion on it (`768.0 / physicalHeight`), which is what
+lets addons snap frames to whole pixels for crisp borders at fractional
+UI scales.
 
 ```lua
 local w, h = GetPhysicalScreenSize()   -- e.g. 1920, 1080
 ```
 
-Vanilla 1.12 has no such native — and no pre-parsed pixel-dimension
+The stock client has no such native — and no pre-parsed pixel-dimension
 global. `GetScreenWidth()`/`GetScreenHeight()` return UI-space units
 (derived from the UIParent aspect ratio at `[UIParent + 0x7c]`), not
 pixels. The engine only ever holds the current mode as the
@@ -11924,7 +16742,7 @@ directly through the engine's by-name lookup (`FUN_FIND_CVAR`, value at
 Returns `1024, 768` (→ factor 1.0, making PixelUtil a 1:1 no-op) when
 the CVar is missing or unparseable. Caveat: in windowed mode
 `gxResolution` reflects the configured render resolution, which may
-differ from the OS window's client size — vanilla exposes no separate
+differ from the OS window's client size — there is no separate
 window-pixel query.
 
 The companion `PixelUtil` table (`PixelUtil.SetPoint`/`SetSize`/
@@ -11934,7 +16752,7 @@ consumes this function.
 ### `CopyToClipboard(text [, removeMarkup])`
 
 Copies `text` to the Windows clipboard and returns the number of bytes
-copied. Vanilla has no clipboard access at all, so this is a ClassicAPI
+copied. There is no stock clipboard access, so this is a ClassicAPI
 addition backed by the Win32 clipboard API. Available on both the in-game
 and login/character-select screens.
 
@@ -12024,12 +16842,11 @@ Without `classID`, reads the engine's per-tab talent arrays at
 `[0x00BDCD28]` (populated at login from `Talent.dbc` filtered by the
 player's class); with it, reads the `Talent.dbc` flat array directly.
 Either way the `SpellRank[]` array lives at offset `+0x10` of each
-record (stride `0x54`), one spellID per rank — vanilla populates
+record (stride `0x54`), one spellID per rank — the engine populates
 indices 0..4 (ranks 1..5), the higher slots stay zero.
 
-Equivalent to one of `GetTalentInfo`'s extended returns in modern WoW
-(varies by version; the talent's spellID has been part of the tuple
-since 5.0+).
+Equivalent to one of `GetTalentInfo`'s extended returns — the talent's
+spellID.
 
 ### `GetTalentIDByIndex(tabIndex, talentIndex[, classID])`
 
@@ -12043,12 +16860,10 @@ GetTalentIDByIndex(1, 1)      -- 166  (first Discipline talent)
 GetTalentIDByIndex(1, 1, 8)   -- 37   (first Arcane talent — Mage, classID 8)
 ```
 
-1.12's `GetTalentInfo(tab, idx)` returns
+The stock `GetTalentInfo(tab, idx)` returns
 `(name, icon, tier, column, currentRank, maxRank, ...)` but NOT the
-talentID. Modern WoW exposes it (and uses talentIDs as the natural
-key for `GetTalentInfoByID`, talent build sharing strings, etc.); we
-add this getter so addons that key on talentIDs from later expansions
-work unmodified.
+talentID. We add this getter so addons that key on talentIDs (used for
+`GetTalentInfoByID`, talent build sharing strings, etc.) work unmodified.
 
 The optional `classID` (1-based: Warrior 1, Paladin 2, Hunter 3,
 Rogue 4, Priest 5, Shaman 7, Mage 8, Warlock 9, Druid 11) queries any
@@ -12066,29 +16881,29 @@ it falls back to the player's own class.
   the runtime arrays are built from, so `GetTalentIDByIndex(t, i)` and
   `GetTalentIDByIndex(t, i, <player's class>)` return identical values.
 
-Equivalent to the talentID return slot of `GetTalentInfo` in modern
-WoW (5.0+; not exposed at all in 1.12).
+Equivalent to the talentID return slot of `GetTalentInfo` (which the
+stock client doesn't expose).
 
 ## Targeting
 
-Backports of the post-vanilla `TargetScript` selection functions. Vanilla
+Additional `TargetScript` selection functions. The engine
 already ships `TargetNearestEnemy/Friend/PartyMember/RaidMember`,
 `TargetLastEnemy/Target`, `AssistUnit`, `TargetUnit`, `ClearTarget`; these
-fill in the ones added in later patches. They're built on the engine's own
+fill in the rest. They're built on the engine's own
 tab-targeting core — the same visible-unit enumeration, per-mode validity
 predicate (reaction/attackability/alive), and selection commit the native
 `TargetNearestEnemy` uses — so hostility semantics match the client exactly.
 
-Not backported (no vanilla equivalent — soft-target / action-camera era):
+Not backported (no equivalent here — soft-target / action-camera features):
 `TargetPriorityHighlightStart/End`, `IsTargetLoose`, `TargetToggle`.
 
 ### `GetPlayerFacing()`
 
 Returns the player's facing as an angle in radians (`0` … `2*pi`,
 increasing counter-clockwise), or nothing off-world (glue / loading).
-Vanilla never shipped this (only character-create/select facing exist), but
-it's the companion the direction-target functions below need — pass it to
-aim "in front of me."
+The stock client doesn't ship this (only character-create/select facing
+exist), but it's the companion the direction-target functions below need
+— pass it to aim "in front of me."
 
 ```lua
 local facing = GetPlayerFacing()   -- e.g. 1.65
@@ -12139,11 +16954,11 @@ Like `TargetNearestEnemyPlayer`, but restricted to friendly **players**.
 
 ## TaxiMap
 
-Backports of the retail taxi-map node enumerators, reading
+Backports of the taxi-map node enumerators, reading
 `TaxiNodes.dbc` (static) and the open flight master's live session. Both
 also register the `Enum.FlightPathFaction` (`Neutral=0`, `Horde=1`,
 `Alliance=2`) and `Enum.FlightPathState` (`Current=0`, `Reachable=1`,
-`Unreachable=2`) tables, so retail code comparing against those enums
+`Unreachable=2`) tables, so code comparing against those enums
 ports unchanged.
 
 Ship both because they answer different questions:
@@ -12157,11 +16972,11 @@ Ship both because they answer different questions:
 
 Returns an array of flight masters. A numeric `mapID` (a `Map.dbc` id —
 `0` Eastern Kingdoms, `1` Kalimdor, `30` Alterac Valley, … — the same
-identity `C_Map.GetAreaTriggers([mapID])` uses; retail's `uiMapID` has no
-vanilla analog) filters to that continent. **Omitted / non-number returns
+identity `C_Map.GetAreaTriggers([mapID])` uses) filters to that continent.
+**Omitted / non-number returns
 every flight master on every continent** — a one-call flight database
 (each entry carries its own `mapID`). This is a ClassicAPI extension to
-retail's required-argument signature.
+the required-argument signature.
 
 Only real flight masters are returned. `TaxiNodes.dbc` also contains
 non-flight rows — transports/boats/zeppelins (no flight mount) and
@@ -12178,15 +16993,15 @@ Each entry:
 | `name` | localized node name (`"Stormwind, Elwynn Forest"`) |
 | `faction` | `Enum.FlightPathFaction` — Alliance-mount-only → `Alliance`, Horde-only → `Horde`, both → `Neutral` |
 | `reachable` | *(ext)* a flight path leads *to* this node (in-degree > 0). `false` = departure-only, reachable only by other means (druid Teleport → "Nighthaven, Moonglade"; a boat dock → "Stormwind Harbor") |
-| `position` | `{x, y}` 0–1 on the continent map (retail-accurate) |
+| `position` | `{x, y}` 0–1 on the continent map |
 | `mapID` | *(ext)* continent `Map.dbc` id |
 | `x` / `y` / `z` | *(ext)* raw continent world coords |
 | `areaID` | *(ext)* the `AreaTable` zone, from the node's own name — its **location** if that's a mapped city ("Orgrimmar" → Orgrimmar city), else the **zone** suffix ("…, Western Plaguelands" → WPL). Authoritative; absent if unresolved |
 | `mapX` / `mapY` | *(ext)* 0–100 position within that zone (`mapX` horizontal, `mapY` vertical) |
 
-`nodeID` / `name` / `faction` / `position` are the retail fields; the
-rest are ClassicAPI extensions (marked *(ext)*). `position` matches
-retail (continent 0–1), while `areaID` + `mapX`/`mapY` let a zone-map
+`nodeID` / `name` / `faction` / `position` are the standard fields; the
+rest are ClassicAPI extensions (marked *(ext)*). `position` is
+continent 0–1, while `areaID` + `mapX`/`mapY` let a zone-map
 addon pin directly. `areaID` comes from the node's **name**, matched
 against `AreaTable` — the location part when it's a mapped city
 ("Orgrimmar, Durotar" → Orgrimmar city, so a capital's master pins on
@@ -12218,8 +17033,8 @@ Returns the live flight-master destination list — the nodes reachable
 from the **currently open** taxi map, with reachability state and the
 slot index needed to take the flight. **Only meaningful while the taxi
 map is open** (between `TAXIMAP_OPENED` and `TAXIMAP_CLOSED`); returns an
-empty table otherwise. `uiMapID` is accepted for retail signature parity
-but ignored (vanilla has a single active taxi map).
+empty table otherwise. `uiMapID` is accepted for signature parity
+but ignored (there is a single active taxi map).
 
 Each entry:
 
@@ -12227,14 +17042,14 @@ Each entry:
 |---|---|
 | `slotIndex` | the legacy `1..NumTaxiNodes()` index — pass to `TakeTaxiNode(slotIndex)` to fly |
 | `name` | node name |
-| `position` | `{x, y}` 0–1 on the flight-map image (matches retail) |
+| `position` | `{x, y}` 0–1 on the flight-map image |
 | `state` | `Enum.FlightPathState` — `CURRENT`→`Current`, `REACHABLE`→`Reachable`, `DISTANT`/none→`Unreachable` |
 | `nodeID` | `TaxiNodes.dbc` id (resolved from the slot's node record; `0` if absent) |
 
-No `faction` / `isUndiscovered` here — retail's `GetAllTaxiNodes` doesn't
+No `faction` / `isUndiscovered` here — `GetAllTaxiNodes` doesn't
 carry them (reachability implies faction); that data lives on
-`GetTaxiNodesForMap`. `textureKit` / `useSpecialIcon` (retail cosmetic
-fields) have no vanilla equivalent and are omitted.
+`GetTaxiNodesForMap`. The `textureKit` / `useSpecialIcon` cosmetic
+fields have no equivalent here and are omitted.
 
 ```lua
 -- Fly to the first reachable destination:
@@ -12289,7 +17104,7 @@ local wp = C_TaxiMap.GetTaxiPathWaypoints(94)
 | `mapID` | number | continent (`Map.dbc` id) |
 
 Returns nothing for an unknown `pathID` or an empty path. Sum the 3D distances
-between consecutive waypoints for the path's length; vanilla taxi flight
+between consecutive waypoints for the path's length; taxi flight
 speed is 32 yd/s, so `length / 32 ≈ flight seconds` for a single hop.
 (Multi-hop trips are shorter than the sum of their segments — the server cuts
 the corner at each intermediate flight master via data not present in any
@@ -12319,6 +17134,123 @@ Pairs with `GetTaxiPaths` (each consecutive `(from, to)` names a `pathID`) and
 `GetTaxiPathWaypoints` (that path's geometry) to measure a chained trip without
 matching flight-map pixel coordinates back to nodes.
 
+## Texture
+
+An atlas is a name for one piece of art. The name points to a texture file and to
+a rectangle inside that file. `texture:SetAtlas(name)` applies both in one step,
+so you never write the coordinates at the call site.
+
+ClassicAPI ships a small set of built-in atlas names. Call
+`C_Texture.GetAtlasElements()` to list them. To use your own art, describe it once
+with `C_Texture.RegisterAtlas` and then set it by name like any other atlas.
+
+Atlas names are not case sensitive.
+
+The eight raid target markers are published as atlases, named
+`UI-RaidTargetingIcon_1` through `UI-RaidTargetingIcon_8`. All eight markers share
+one sheet here, so an atlas is the only way to name a single marker.
+
+```lua
+markerTexture:SetAtlas("UI-RaidTargetingIcon_8", true)   -- the skull
+```
+
+### `C_Texture.GetAtlasInfo(atlasName)`
+
+Returns a table that describes the atlas, or `nil` when the name is not known.
+
+Table fields:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `elementName` | string | The name in its canonical spelling. |
+| `width` | number | Width of the art in pixels. |
+| `height` | number | Height of the art in pixels. |
+| `leftTexCoord` | number | Left edge of the rectangle, from 0 to 1. |
+| `rightTexCoord` | number | Right edge of the rectangle, from 0 to 1. |
+| `topTexCoord` | number | Top edge of the rectangle, from 0 to 1. |
+| `bottomTexCoord` | number | Bottom edge of the rectangle, from 0 to 1. |
+| `tilesHorizontally` | boolean | True when the art repeats across its width. |
+| `tilesVertically` | boolean | True when the art repeats down its height. |
+| `filename` | string | Path of the texture that holds the art. |
+
+Textures are named by path, so `filename` carries the texture and the `file` field
+is not set.
+
+```lua
+local info = C_Texture.GetAtlasInfo("Repair")
+print(info.filename, info.width, info.height)
+```
+
+### `C_Texture.GetAtlasExists(atlasName)`
+
+Returns `true` when the name is known and `false` when it is not. This agrees with
+`GetAtlasInfo` at all times. A name that exists always returns a table.
+
+### `C_Texture.GetAtlasID(atlasName)`
+
+Returns the id of the sheet that holds the atlas, or `nil` when the name is not
+known. A built-in atlas has a positive id. An atlas you add with
+`C_Texture.RegisterAtlas` gets a negative id, so the two kinds never collide.
+
+### `C_Texture.GetAtlasElementID(atlasName)`
+
+Returns the id of this one piece of art, or `nil` when the name is not known. The
+same positive and negative rule applies.
+
+### `C_Texture.GetAtlasElements()`
+
+Returns an array of every atlas name that is currently known, in alphabetical
+order. The list includes the names you registered yourself.
+
+```lua
+for _, name in ipairs(C_Texture.GetAtlasElements()) do
+    print(name)
+end
+```
+
+### `C_Texture.RegisterAtlas(name, file, width, height, left, right, top, bottom [, tilesHorizontally, tilesVertically])`
+
+A ClassicAPI extension. Adds an atlas name that points at your own art, so
+`SetAtlas` and atlas markup work with a sprite sheet you ship yourself.
+
+- `name` — the atlas name callers will use.
+- `file` — texture path, without the file extension.
+- `width`, `height` — size of the art in pixels, used by `useAtlasSize`.
+- `left`, `right`, `top`, `bottom` — the rectangle inside the file, from 0 to 1.
+
+Registering a name a second time replaces its definition and keeps its ids, so a
+caller that stored an id keeps a valid one. Returns `true`.
+
+```lua
+-- One 32x32 cell from the top-left of a 128x128 sheet.
+C_Texture.RegisterAtlas("myaddon-gem", "Interface\\AddOns\\MyAddon\\sheet",
+                        32, 32, 0, 0.25, 0, 0.25)
+
+myTexture:SetAtlas("myaddon-gem", true)
+```
+
+### Atlas markup
+
+`|A:atlasName:height:width|a` draws an atlas inside any text, next to the
+`|T…|t` form that draws a texture path. Use it in chat messages, tooltip lines,
+and font strings.
+
+- A `height` of `0` uses the atlas's own pixel height.
+- A `width` of `0` keeps the atlas's own shape at the height you asked for.
+- Two more fields shift the art from the text, as `|A:name:h:w:offsetX:offsetY|a`.
+
+```lua
+print("Repair cost: |A:Repair:0:0|a")
+print("Small marker |A:MinimapArrow:12:12|a here")
+```
+
+An unknown name draws nothing and leaves the rest of the line intact. Art that
+repeats is drawn once, so `tilesHorizontally` and `tilesVertically` have no effect
+in text.
+
+Text typed by other players never draws atlas art. This matches how a typed
+texture path behaves.
+
 ## Time
 
 ### `GetServerTime()`
@@ -12332,26 +17264,28 @@ local now = GetServerTime()
 -- now = 1778260148 (Fri 2026-05-08 17:09:08 UTC)
 ```
 
-Reads year/month/day/hour/minute from the engine's game-time struct at
-`0x00CE8538` (populated from `SMSG_LOGIN_VERIFY_WORLD` /
-`SMSG_LOGIN_SETTIMESPEED` and advanced by the internal tick handler) and
-converts via `_mkgmtime`. Stock `GetTime()` returns frame-relative
-seconds-since-login and is useless for wall-clock alignment; this is the
-right call for calendar / log-timestamp / cooldown-sync use cases.
+> **A client can replace this global.** Some clients declare their own
+> `GetServerTime` function in FrameXML, which replaces the global with a
+> different return value. Turtle WoW is one, and its version returns the
+> server hour and the server minute. Call
+> [`ClassicAPI.GetServerTime()`](#classicapi-namespace) to reach the
+> timestamp on such a client.
 
-> **Sub-minute accuracy.** The 1.12 wire protocol carries time at
-> minute granularity — the packed gametime field has no seconds — so
-> the engine's clock only steps every minute. We interpolate within the
-> minute using `GetTickCount`: whenever we observe the engine's minute
-> change, we anchor to the current tick and add `(now - anchor) / 1000`
-> seconds for subsequent calls in that minute.
->
-> The very first call after login lands at second `:00` of the current
-> minute (we have no way to know how far in we are when we first see
-> it), so the cold-start value can be off by 0..59 seconds. After the
-> first minute rollover we observe, the anchor lands at the rollover
-> boundary and the timestamp is accurate to within a second of the
-> engine's clock for as long as the session continues.
+The value is an instant, with second resolution. It is independent of the
+realm's timezone and of any per-zone time shift the realm applies, so it
+stays continuous when the player changes continents. That makes it the
+right call for log timestamps, sorting, and anything that counts down.
+Stock `GetTime()` measures the session instead, and cannot be compared
+against it.
+
+To print the realm's clock digits rather than the instant, use
+[`C_DateAndTime.GetServerTimeLocal()`](#c_dateandtimegetservertimelocal).
+
+> **Right after login.** The realm reports the instant on request, and
+> the answer takes a moment to arrive. Until it does, this function
+> reports the realm's wall clock instead, which is wrong by the realm's
+> timezone offset. The value corrects itself once the answer lands, so a
+> caller that starts at login can see it step once.
 
 ### `GetTimeCached()`
 
@@ -12360,9 +17294,9 @@ Returns the same value as [`GetTime()`](https://warcraft.wiki.gg/wiki/API_GetTim
 within a single frame returns the identical value, refreshed once per
 frame. Same epoch as `GetTime()`, so the two are directly comparable.
 
-Backports the retail 4.x `GetTime()` behavior (retail samples the clock
-once per frame in the main loop) under a distinct name, leaving vanilla's
-`GetTime()` untouched — 1.12's `GetTime()` is *live*, recomputing the OS
+Provides a frame-stable `GetTime()` (sampled once per frame in the main
+loop) under a distinct name, leaving the stock
+`GetTime()` untouched — `GetTime()` is *live*, recomputing the OS
 tick on every call, so two same-frame `GetTime()` calls can differ.
 
 ```lua
@@ -12374,8 +17308,8 @@ if now - lastFire >= interval then
 end
 ```
 
-> **Not a performance feature.** The underlying tick source is cheap in
-> 1.12 (`GetTickCount`, a user-mode shared-page read, or `rdtsc`), and
+> **Not a performance feature.** The underlying tick source is cheap
+> (`GetTickCount`, a user-mode shared-page read, or `rdtsc`), and
 > both functions pay the same Lua→C call overhead, which dominates. So
 > `GetTimeCached()` is not meaningfully faster than `GetTime()` — its
 > only advantage is the frame-stable semantics. To actually cut cost in a
@@ -12390,10 +17324,7 @@ live sample, so it never returns 0.
 ### `C_Timer.After(seconds, callback)`
 
 Schedules `callback` to fire once after `seconds`. Returns nothing.
-Backports modern WoW's `C_Timer.After` as an engine binding (retail
-12.0.5 ships this as a `Script_*` C function, not Lua — we mirror
-that shape so addons relying on the modern semantics get
-identical behavior).
+`C_Timer.After` as an engine binding — a `Script_*` C function, not Lua.
 
 ```lua
 C_Timer.After(0.5, function() print("half a second later") end)
@@ -12401,7 +17332,7 @@ C_Timer.After(0, function() print("next frame") end)
 ```
 
 Errors in the callback are caught (via `lua_pcall`) and silently
-swallowed — same as modern's behavior. One broken timer doesn't
+swallowed. One broken timer doesn't
 poison other timers on the same tick.
 
 ### `C_Timer.NewTimer(seconds, callback)`
@@ -12454,8 +17385,8 @@ Implementation notes (apply to all three functions):
 
 ### `C_DateAndTime` overview
 
-Backport of the modern `C_DateAndTime` namespace — calendar-style
-date math built on top of `GetServerTime()`. All seven functions
+Backport of the `C_DateAndTime` namespace — calendar-style
+date math built on top of the server clock. The calendar functions
 exchange `CalendarTime` tables with these fields (matching
 Blizzard's `TimeDocumentation.lua`):
 
@@ -12468,13 +17399,19 @@ Blizzard's `TimeDocumentation.lua`):
 | `hour` | 0..23 | |
 | `minute` | 0..59 | |
 
-> **Daily reset semantics.** `GetSecondsUntilDailyReset` treats reset
-> as midnight in server wall-clock time. This is exactly what
-> `GetServerTime() % 86400 == 0` gives you — the engine's gametime
-> components are converted to an epoch by treating them as UTC, so
-> day boundaries in epoch math align with server-clock midnight.
+> **Two clocks.** A realm sends the client both an instant and a wall
+> clock, and they differ by the realm's timezone. `GetServerTime` and
+> `GetSecondsUntilDailyReset` report the instant, so they are the ones
+> to compare, sort, store, and count down with.
+> `GetCurrentCalendarTime` and `GetServerTimeLocal` report the wall
+> clock, for display, and always agree with `GetGameTime()`.
 >
-> **Weekly reset not implemented.** Vanilla has no server-broadcast
+> **Daily reset semantics.** `GetSecondsUntilDailyReset` counts down to
+> UTC midnight, which is where a realm's own day boundary sits. A realm
+> can shift that boundary by a configured amount, and it never tells the
+> client, so a realm that shifts it resets at a different moment.
+>
+> **Weekly reset not implemented.** There is no server-broadcast
 > weekly reset schedule, and Turtle WoW realm schedules vary, so
 > `C_DateAndTime.GetSecondsUntilWeeklyReset` would have to hardcode a
 > weekday/hour that's wrong on some realms. Addons that need it can
@@ -12482,8 +17419,11 @@ Blizzard's `TimeDocumentation.lua`):
 
 ### `C_DateAndTime.GetCurrentCalendarTime()`
 
-Returns the server clock as a CalendarTime table, or nothing before
-login. Equivalent to `GetCalendarTimeFromEpoch(GetServerTime())`.
+Returns the realm's date and time as a CalendarTime table, or nothing
+before login. The `hour` and `minute` fields always agree with
+`GetGameTime()`. This is realm time, not the instant, so it does not
+match `GetCalendarTimeFromEpoch(GetServerTime())` on a realm that is
+not on UTC.
 
 ```lua
 local t = C_DateAndTime.GetCurrentCalendarTime()
@@ -12516,12 +17456,11 @@ consistently.
 
 ### `C_DateAndTime.GetServerTimeLocal()`
 
-Returns the server's wall clock re-interpreted as a Unix epoch in
-the **player's** local timezone. Useful when you want to feed a
-server-clock value into Lua's `date(format, epoch)` and have the
-formatted string show the server's apparent hour/minute. If the
-server reports 14:30 and the player is in UTC-5, this returns the
-epoch that corresponds to 14:30 in UTC-5 (which is 19:30 UTC).
+Returns [`GetServerTime()`](#getservertime) offset by the server's
+timezone. The result is a display value, not an instant: formatting it
+shows the realm's clock digits. If the realm reports 14:30, this
+returns the epoch for 14:30 UTC, so `date("!%H:%M", t)` prints
+`14:30`. Do not compare it against a real timestamp.
 
 ### `C_DateAndTime.GetSecondsUntilDailyReset()`
 
@@ -12555,7 +17494,7 @@ end
 | `startTime` | `GetTime()` value when the totem was cast (`0` when none). |
 | `duration` | Total duration in seconds (`0` when none). |
 | `icon` | The active totem spell's icon texture path, or `nil` when none. |
-| `modRate` | Always `1` — vanilla has no per-totem haste. |
+| `modRate` | Always `1` — there is no per-totem haste. |
 | `spellID` | The active summon spell's ID (`0` when none). |
 
 > **`haveTotem` is tool presence, not summon state.** Matching the live
@@ -12566,10 +17505,10 @@ end
 > *tool*, not a consumed reagent), read from the spell — not hardcoded. To
 > check for an *active* totem, test `totemName ~= ""` (or `startTime > 0`).
 
-Vanilla 1.12 has no client-side totem tracking (the totem bar,
-`PLAYER_TOTEM_UPDATE`, and `GetTotemInfo` are all TBC additions), so this
-is self-tracked but **data-driven**: the slot is read from the summon
-spell's `Spell.dbc` effect (`SUMMON_TOTEM_SLOT1..4` = Fire/Earth/Water/Air),
+There is no client-side totem tracking here (no totem bar,
+`PLAYER_TOTEM_UPDATE`, or `GetTotemInfo`), so this is self-tracked but
+**data-driven**: the slot is read from the summon spell's `Spell.dbc`
+effect (`SUMMON_TOTEM_SLOT1..4` = Fire/Earth/Water/Air),
 duration from `SpellDuration.dbc`, the totem's creature entry (for death
 detection) from the effect's `EffectMiscValue`, and the `haveTotem` tool
 item from the spell's `Totem` field (the totem the spell requires) —
@@ -12623,11 +17562,67 @@ Looks up the totem creature's live GUID (object-manager scan for the
 player-owned creature of the slot's tracked entry) and sets the target
 through the same engine path `TargetUnit` uses (`CMSG_SET_SELECTION`).
 
+## Tracking
+
+The engine stores only the tracking spell that is active now. It does
+not keep a list of the tracking spells you know. These globals add that
+list. A minimap addon can then build a tracking menu without a hardcoded
+spell table.
+
+A tracking spell is a spell in your spellbook that finds creatures,
+resources, or hidden units. This is the same test the engine uses to find
+the active tracker. The list covers Find Herbs, Find Minerals, Find
+Treasure, the Hunter Track spells, Sense Undead, Sense Demons, and Track
+Humanoids. It also covers server-added trackers, such as Turtle's Find
+Trees. You do not have to maintain a spell list.
+
+### `GetNumTrackingTypes()`
+
+Returns the number of tracking spells in your spellbook.
+
+```lua
+GetNumTrackingTypes()   -- for example, 8 for a Hunter
+```
+
+### `GetTrackingInfo(index)`
+
+`index` starts at 1 and follows spellbook order. The function returns
+these five values, or `nil` if `index` is out of range:
+
+| # | Value | Type | Notes |
+|---|-------|------|-------|
+| 1 | `name` | string | Localized spell name. |
+| 2 | `texture` | string | Icon path. Give it to `texture:SetTexture(...)`. `nil` if the icon is missing. |
+| 3 | `active` | boolean | `true` when this tracker is the one now in effect. |
+| 4 | `category` | string | Always `"spell"`. There are no non-spell trackers here. |
+| 5 | `spellID` | number | The tracking spell's ID. This is a ClassicAPI extra. |
+
+```lua
+local name, texture, active, category, spellID = GetTrackingInfo(1)
+```
+
+### `SetTracking(index)`
+
+Turns on the tracking spell at `index`. You select a tracker
+when you cast its spell. This function casts it. For an out-of-range
+index, it does nothing. To turn tracking off, use the built-in
+`CancelTrackingBuff()`.
+
+```lua
+for i = 1, GetNumTrackingTypes() do
+    local name = GetTrackingInfo(i)
+    if name == "Find Herbs" then
+        SetTracking(i)
+        break
+    end
+end
+```
+
 ## TradeSkillUI
 
-Backports the 2.x+ **trade-skill list link** — the shareable
+The **trade-skill list link** — the shareable
 `|Htrade:...|h[Profession]|h` link that shows a player's profession and
-which recipes they know. Vanilla 1.12 has no such link type (the engine's
+which recipes they know. The engine has no such link type (its
 hyperlink parser only knows `item:` and `enchant:`), so both the link and the
 click-to-view UI are synthesized. Clicking a received link opens a
 crafting-window-style frame (the real `TradeSkillFrame` parchment art) listing
@@ -12676,11 +17671,11 @@ Clicking a `trade:` link is handled automatically (an override of
 
 ### `C_TradeSkillUI.GetCraftListLink()`
 
-Same as `GetTradeSkillListLink`, but for the **Craft window** — vanilla's
+Same as `GetTradeSkillListLink`, but for the **Craft window** — the
 separate profession frame used by Enchanting and pet training. Returns `nil`
 unless `CraftFrame` is shown. The two windows have separate storage and can be
-open simultaneously, so they get separate builders (matching WotLK); the
-resulting link is the same `|Htrade:...|h` format and opens the same viewer.
+open simultaneously, so they get separate builders; the resulting link is
+the same `|Htrade:...|h` format and opens the same viewer.
 
 ```lua
 local link = C_TradeSkillUI.GetCraftListLink()   -- with the enchanting window open
@@ -12709,7 +17704,7 @@ nearly every trainer-taught recipe). `createdItem` is the crafted item's ID
 
 The array is in canonical recipe order (one entry per *possible* recipe in the
 skill line, not just the known ones). Turn a `spellID` into a name/icon with
-[`GetSpellInfo`](#getspellinfospellid). Recipes past the end of a short/garbled
+[`GetSpellInfo`](#getspellinfospellid--getspellinfoslot-booktype). Recipes past the end of a short/garbled
 `bits` string decode as not-known rather than erroring.
 
 ## UIColor
@@ -12717,7 +17712,7 @@ skill line, not just the known ones). Turn a `spellID` into a name/icon with
 ### `C_UIColor.GetColors()`
 
 Returns an array of rows, each shaped
-`{ baseTag = "FOO_COLOR", color = ColorMixin }`, mirroring the modern
+`{ baseTag = "FOO_COLOR", color = ColorMixin }`, mirroring the
 function of the same name. The `color` field is a real `ColorMixin`
 instance (carries `GetRGB`, `GenerateHexColorMarkup`, etc.) — the DLL
 calls back into Lua's `CreateColor(r,g,b,a)` per row to construct it,
@@ -12726,7 +17721,7 @@ so `ColorMixin` and `CreateColor` must already be defined when
 
 The companion addon `!!!ClassicAPI/Util/Color.lua` does both: it
 defines `ColorMixin`/`CreateColor` first, then loops the result the
-same way `Blizzard_SharedXMLBase/Color.lua` does on modern WoW —
+same way `Blizzard_SharedXMLBase/Color.lua` does —
 assigning each row as a global under its `baseTag` plus a `_CODE`
 variant holding the `|c`-prefixed hex markup:
 
@@ -12738,7 +17733,7 @@ for _, dbColor in ipairs(C_UIColor.GetColors()) do
 end
 ```
 
-After that runs, addons can use the standard modern color globals
+After that runs, addons can use the standard color globals
 directly:
 
 ```lua
@@ -12747,15 +17742,14 @@ directly:
 ITEM_EPIC_COLOR_CODE .. "Legendary" .. "|r"
 ```
 
-The data comes from a snapshot of `GlobalColor.dbc` taken from BC
-Classic 2.5.5 (build 67323) — vanilla 1.12 has no `GlobalColor.dbc`,
-so the rows are embedded in the DLL (see [`src/ui/ColorData.h`](../src/ui/ColorData.h)).
+There is no `GlobalColor.dbc` here, so the data comes from a snapshot
+embedded in the DLL (see [`src/ui/ColorData.h`](../src/ui/ColorData.h)).
 Duplicate `baseTag`s in the source DBC (`PURE_RED_COLOR`,
 `INVASION_*`, etc.) are deduplicated keeping the higher-ID entry,
-matching what `ipairs(DBColors)` ends up assigning on modern. Colors
-introduced after BC (Death Knight runes, Mythic+ medals, healing
-absorbs, glyphs, objective tracker) aren't in the snapshot and so
-aren't surfaced — none have a use case in 1.12 anyway.
+matching what `ipairs(DBColors)` ends up assigning. Colors for
+Death Knight runes, Mythic+ medals, healing
+absorbs, glyphs, and the objective tracker aren't in the snapshot and so
+aren't surfaced — none have a use case here anyway.
 
 If `CreateColor` happens not to be defined when `GetColors` is called
 (e.g. another DLL or addon manages to call us before `!!!ClassicAPI`
@@ -12789,18 +17783,16 @@ continent, in a different zone phase). We now read from the engine's
 parallel group-roster GUID array (populated by `SMSG_GROUP_LIST`),
 which is independent of unit visibility.
 
-> **Vanilla format, not modern.** Vanilla GUIDs are plain 64-bit
-> integers — there's no `"Player-RealmID-CharacterID"` /
-> `"Creature-0-0-MapID-..."` prefix system that modern WoW uses
-> (introduced in 6.0). Addons backporting modern GUID-parsing code
-> will need to either accept the `"0x..."` form or extract the raw
-> hex.
+> **GUID format.** GUIDs here are plain 64-bit integers — there's no
+> `"Player-RealmID-CharacterID"` / `"Creature-0-0-MapID-..."` prefix
+> system. Addons written for the prefixed form will need to either accept
+> the `"0x..."` form or extract the raw hex.
 
-> **Errors on invalid unit tokens.** Same behavior as vanilla's other
+> **Errors on invalid unit tokens.** Same behavior as the other
 > unit-token functions (`UnitAffectingCombat`, `UnitName`, etc.) —
 > passing a string that doesn't match a known unit ID raises a Lua
-> error rather than returning nil. Modern WoW silently returns nil;
-> we match the engine's existing convention here. Unit tokens that
+> error rather than returning nil. We match the engine's existing
+> convention here. Unit tokens that
 > resolve to "no current unit" (like `"target"` with nothing
 > targeted) return nil cleanly via the GUID = 0 check.
 
@@ -12811,10 +17803,9 @@ Best-effort reverse lookup: given a GUID string in the
 known unit tokens and return the first one currently mapped to that
 GUID, or `nil` if none of them point at it.
 
-The search order matches modern retail with post-1.12 tokens
-omitted (`vehicle`, `arenaN`, `arenapetN`, `bossN`, `softenemy`,
-`softfriend`, `softinteract` all post-date vanilla and the engine's
-resolver doesn't recognize them). `nameplateN` and `focus` are
+The search order omits tokens the engine's resolver doesn't recognize
+(`vehicle`, `arenaN`, `arenapetN`, `bossN`, `softenemy`,
+`softfriend`, `softinteract`). `nameplateN` and `focus` are
 included — we hook the resolver so the engine recognizes both token
 forms. As with the other positional tokens, a returned
 `"nameplate3"` result is only valid at that instant; the slot may
@@ -12839,7 +17830,7 @@ end
 > the same GUID at once (your target IS your party1, your pet IS
 > your raidpet5 if you're in a raid), and the mapping changes every
 > time `SMSG_GROUP_LIST` fires, the player tabs target, or a party
-> member loads in. Modern's API has the same warning. If you cache a
+> member loads in. If you cache a
 > result, re-verify with `UnitGUID(token) == originalGuid` before
 > reusing it.
 >
@@ -12847,6 +17838,32 @@ end
 > that don't match any currently-resolvable token — including
 > ex-targets, ex-mouseover units, distant players seen in the chat
 > log, etc. The engine simply doesn't address those by token.
+
+### `UnitTokenFromName(name [, exactMatch])`
+
+Finds the unit called `name` and returns a token for it, or `nil` when
+nobody around matches. This is what lets a character name stand in for a
+unit token, as `[target=Feral]` does in a macro.
+
+```lua
+local token = UnitTokenFromName("Feral")
+if token then
+    print(UnitHealth(token), UnitClass(token))
+end
+```
+
+The search matches on the start of the name and prefers the nearest unit,
+the same rule `TargetByName` uses. Pass a true `exactMatch` to require the
+whole name. It looks through your party, then your raid, then every unit
+loaded around you, so it reaches units that no standard token names.
+
+The result is a standard token such as `party1` or `target` when one fits,
+and otherwise the unit's GUID, which the unit functions also accept.
+
+Treat it as a snapshot. Which token names a unit changes as you retarget or
+as the group changes, so resolve it again rather than storing it.
+
+*ClassicAPI extension.*
 
 ### `UnitSubName(unit)`
 
@@ -12862,8 +17879,7 @@ NPCs, and NPCs with no subtitle.
 -- nil                     (a player, or a wolf in the woods)
 ```
 
-Modern WoW returns the subtitle as `UnitName`'s second return;
-vanilla 1.12's `UnitName` returns only one value, leaving no
+The stock `UnitName` returns only one value, leaving no
 direct route to the subtitle. Addons that wanted it had to scrape
 `GameTooltip` text, which is fragile and required the unit to be
 hovered. `UnitSubName` reads it straight off the engine's creature
@@ -12916,10 +17932,37 @@ resolver the engine's `UnitCreatureType` uses, which handles every unit kind
 [`C_CreatureInfo.GetCreatureTypeInfo`](#c_creatureinfogetcreaturetypeinfocreaturetypeid)
 to get the localized name back from the id.
 
+### `UnitCreatureID(unit)`
+
+Returns the numeric **creature id** — the NPC / creature-template entry — for a
+unit, or `nil`. This is the unit-token twin of
+[`C_CreatureInfo.GetCreatureID`](#c_creatureinfogetcreatureidguid): it does
+`C_CreatureInfo.GetCreatureID(UnitGUID(unit))` for you.
+
+```
+creatureID = UnitCreatureID(unit)
+```
+
+```lua
+/dump UnitCreatureID("target")   -- 1842 for Hogger, nil for a player
+/dump UnitCreatureID("pet")      -- your pet's creature-template id
+```
+
+The id is read live from the unit, so it always matches the name you see, and
+it is the id Wowhead and Turtle's database show for that NPC. For a unit that
+is out of view, the same fallback as `C_CreatureInfo.GetCreatureID` applies.
+Returns `nil` for a player (a player carries no template), an
+unresolvable-but-valid token (`"target"` with nothing targeted, an empty
+`"partyN"` slot), an out-of-view pet, and any unit whose GUID isn't a creature
+or pet. Raises a Lua error on a garbage token — the standard `UnitX` behavior.
+Pair with
+[`C_CreatureInfo.GetCreatureInfoByID`](#c_creatureinfogetcreatureinfobyidcreatureid)
+to get the name from the id.
+
 ### `GetUnitSpeed(unit)`
 
 Returns `currentSpeed, runSpeed, flightSpeed, swimSpeed` — all four
-in yards/second. Modern WoW signature exactly; 1.12 doesn't have
+in yards/second. There is no
 flying, so `flightSpeed` is always `0`.
 
 ```lua
@@ -12938,13 +17981,12 @@ local current, run, _, swim = GetUnitSpeed("player")
   Includes mount / buff / debuff multipliers — the engine maintains
   this field as the post-modifier value, updated by
   `SMSG_FORCE_RUN_SPEED_CHANGE` and friends.
-- **`flightSpeed`** — always `0` in 1.12.
+- **`flightSpeed`** — always `0`.
 - **`swimSpeed`** — raw forward-swim speed from MovementInfo `+0x94`.
 
 All four returns are `0` if the token doesn't resolve to a live
-CGUnit — empty `"target"`, out-of-range party member, etc. Matches
-3.3.5's `Script_GetUnitSpeed` behavior of pushing `0.0` rather than
-nil for non-visible units.
+CGUnit — empty `"target"`, out-of-range party member, etc. Pushes
+`0.0` rather than nil for non-visible units.
 
 Reads `[CGUnit + 0x118]` to get the MovementInfo pointer, then
 reads speed fields directly. Field offsets verified via the
@@ -12965,9 +18007,8 @@ UnitIsAFK("party1")   -- true if party member 1 is AFK
 UnitIsAFK("npc")      -- always false
 ```
 
-> **How it works under the hood.** Vanilla 1.12 doesn't broadcast
-> PLAYER_FLAGS as a UpdateField (modern WoW does — that field was
-> added 3.0+), but every nearby player's CGPlayer-side info struct
+> **How it works under the hood.** PLAYER_FLAGS isn't broadcast as a
+> UpdateField here, but every nearby player's CGPlayer-side info struct
 > at `[unit + 0xE68]` carries it at byte +0x08. Same struct the
 > engine reads when rendering the `<AFK>` prefix above a player's
 > head. Verified against the in-game nameplate behavior.
@@ -12998,9 +18039,7 @@ UnitIsFeignDeath("target")   -- true if a feigning hunter
 
 Returns `1` if the unit/character shares the player's guild, `nil`
 otherwise. Accepts either a unit token (`"player"`, `"target"`,
-`"party1"`, etc.) or a literal character name (`"Bob"`), matching
-3.3.5's `Script_UnitIsInMyGuild` (`0x0060C4B0` in the Frostmourne
-client).
+`"party1"`, etc.) or a literal character name (`"Bob"`).
 
 ```lua
 UnitIsInMyGuild("player")    -- 1 if you're in any guild
@@ -13025,7 +18064,7 @@ Resolution strategy:
    name input — needs `GuildRoster()` to have been called and the
    server's response to have arrived.
 
-Return convention matches 3.3.5: `1.0` / `nil`, not boolean. Both
+Return convention is `1.0` / `nil`, not boolean. Both
 work for `if UnitIsInMyGuild(x) then` checks.
 
 The slow path reads the engine's full roster count
@@ -13039,7 +18078,7 @@ SMSG_GUILD_ROSTER response has arrived.
 
 Returns `true` if the unit is currently possessed (priest's `Mind
 Control`, warlock's `Subjugate Demon`). Reads `UNIT_FIELD_FLAGS` bit
-24 (`0x01000000`) — the standard vanilla `UNIT_FLAG_POSSESSED` per
+24 (`0x01000000`) — the standard `UNIT_FLAG_POSSESSED` per
 emulator sources — directly off the unit's m_objectFields descriptor.
 Works for any unit token since UNIT_FIELD_FLAGS is broadcast in
 object updates.
@@ -13050,7 +18089,7 @@ UnitIsPossessed("target")   -- true if mind-controlled
 
 Distinct from `UnitIsCharmed`: charm covers any charm-type effect
 (including pets summoned via mob-charm spells), possess is the
-specific spell-driven take-over effect modern WoW splits out.
+specific spell-driven take-over effect.
 
 ### `UnitIsMinion(unit)`
 
@@ -13063,8 +18102,7 @@ Minion") carry an owner but not the `PLAYER_CONTROLLED` flag, so a
 flag-only check would miss them. Players, NPCs, and world creatures return
 `false`.
 
-A modern (12.0.0-era) addition with no vanilla or 3.3.5 equivalent —
-backported here from vanilla primitives. A bad or unresolved unit token
+Built from the engine's own primitives. A bad or unresolved unit token
 returns `false`.
 
 ```lua
@@ -13099,9 +18137,9 @@ UnitIsPet("pet")                 -- your pet → true
 
 Returns `true` if `unit` is a minion (pet, guardian, totem, or charmed
 creature) whose owner is a player **other than you**, `false` otherwise.
-Owner-based, matching 5.4.8's `Script_UnitIsOtherPlayersPet`: it reads the
-unit's owner GUID (SummonedBy / CreatedBy / CharmedBy), requires that owner
-to be a player, and requires it to differ from you. World creatures and
+Owner-based: it reads the unit's owner GUID (SummonedBy / CreatedBy /
+CharmedBy), requires that owner to be a player, and requires it to differ
+from you. World creatures and
 players (no owner) return `false`; your own minions (owner is you) return
 `false`. A bad or unresolved unit token returns `false`.
 
@@ -13123,9 +18161,29 @@ if owner == UnitGUID("player") then ... end  -- is it my minion?
 Reads the same owner field the pet predicates use (`CharmedBy`, else
 `CreatedBy` in the unit's `m_objectFields`).
 
+### `UnitCreatedBySpell(unit)`
+
+Returns the spell ID that summoned `unit`: the totem-drop spell for a totem,
+or the summon spell for a pet or guardian. Returns `nil` for an unresolved
+unit, and for a unit that no spell summoned (players and world creatures).
+
+This is the summoning spell, not a spell that the unit casts later. The spell
+that a totem casts stays on the server and never reaches the client. The
+client receives this value for every summoned unit, so it works for any unit
+in range, not only your own summons. Use `GetSpellInfo` to get a readable
+name.
+
+A ClassicAPI extension, not a stock WoW global.
+
+```lua
+UnitCreatedBySpell("pet")                -- your pet's summon spell id
+local id = UnitCreatedBySpell("target")  -- target a totem → its totem spell id
+if id then print(GetSpellInfo(id)) end   -- prints the name, like "Searing Totem"
+```
+
 ### `UnitStandState(unit)`
 
-Returns the unit's standstate as an integer, matching the modern
+Returns the unit's standstate as an integer, matching the
 `Enum.PlayerStandState` values:
 
 | Value | Meaning |
@@ -13144,7 +18202,7 @@ Reads the low byte of `UNIT_BYTES_1` (descriptor `+0x210`), a
 broadcast UpdateField — works for any synced unit (player, target,
 party*, raid*, mouseover, etc.). Returns `0` (STANDING) for
 unresolvable units (empty `party*` slot, no current target, etc.)
-matching the modern behavior of returning a safe default.
+returning a safe default.
 
 ```lua
 UnitStandState("player")    -- 0 standing, 1 sitting, 5 chair-sit, …
@@ -13152,7 +18210,7 @@ UnitStandState("target")    -- works for any visible unit
 UnitStandState("party1")    -- 0 if the slot is empty
 ```
 
-1.12 has `IsSitOrStanding()` (local-player boolean) but no
+The stock client has `IsSitOrStanding()` (local-player boolean) but no
 unit-token form; `UnitStandState` fills the gap and exposes the
 full enum.
 
@@ -13189,11 +18247,11 @@ reports out-of-range for a target the client can actually heal (on a
 large target the reach gap is 2–3 yards). If a unit's descriptor isn't
 populated yet the reach term is 0 and the check degrades to a plain
 40-yard cap. Note this is the one difference from `UnitDistanceSquared`,
-which stays raw center-to-center (matching retail).
+which stays raw center-to-center.
 
-> **`UnitInRange("player")` returns `(false, false)`** by design,
-> matching modern WoW's behavior. The function is meant for healing-
-> frame "is *another* unit in range" checks; querying yourself is
+> **`UnitInRange("player")` returns `(false, false)`** by design.
+> The function is meant for healing-frame "is *another* unit in range"
+> checks; querying yourself is
 > meaningless. We short-circuit before the position read so the
 > result is unambiguous (`checkedRange=false`).
 
@@ -13217,13 +18275,13 @@ end
 
 | Return | Meaning |
 |--------|---------|
-| `distanceSquared` | Squared distance player→unit. `0` when `checkedPosition` is `false` (a placeholder — matches retail's "always a number" shape). |
+| `distanceSquared` | Squared distance player→unit. `0` when `checkedPosition` is `false` (a placeholder — an "always a number" shape). |
 | `checkedPosition` | `true` when both positions were read. `false` when `unit`'s position isn't available (empty `partyN` slot, no target, raid member outside the sync window, etc.). |
 
 The value is **squared** on purpose: nearly all distance logic is a
 threshold compare (`distSq <= range * range`) or a nearest-unit sort,
-neither of which needs the square root — so retail exposes only the
-squared form (added 5.0.4) and never a plain `UnitDistance`. Take
+neither of which needs the square root — so only the
+squared form is exposed, never a plain `UnitDistance`. Take
 `math.sqrt(distanceSquared)` only when you need a yard number to show a
 human.
 
@@ -13243,7 +18301,7 @@ dependency).
 ### `UnitPosition(unit)`
 
 Returns `posY, posX, posZ, instanceID` — the unit's world position, in
-the modern (WoD+) `UnitPosition` shape. `nil` when the unit has no known
+the standard `UnitPosition` shape. `nil` when the unit has no known
 position.
 
 ```lua
@@ -13257,14 +18315,15 @@ local posY, posX, posZ, instanceID = UnitPosition("player")
 | `posZ` | World Z coordinate (height). |
 | `instanceID` | Currently-loaded map id (`Map.dbc` row — e.g. `0` Eastern Kingdoms, `1` Kalimdor). Every visible unit shares the player's instance. |
 
-**Order matches retail** — `posY` (west) first, then `posX` (north), then
-`posZ`, mirroring Blizzard's own `UnitPosition`. So an addon written for
-retail that does `local py, px = UnitPosition(u)` gets its coordinates
+**Standard field order** — `posY` (west) first, then `posX` (north), then
+`posZ`, mirroring Blizzard's own `UnitPosition`. So an addon that does
+`local py, px = UnitPosition(u)` gets its coordinates
 labelled as expected. (World X is north/south, Y is west/east — WoW's
 long-standing convention.)
 
-**Not group-restricted.** Retail returns `nil` for units outside your
-party/raid (a privacy guard that doesn't exist in 1.12). This backport
+**Not group-restricted.** The standard `UnitPosition` returns `nil` for
+units outside your party/raid (a privacy guard that doesn't exist here).
+This backport
 reads any *visible* unit — `"target"`, `"mouseover"`, nameplate tokens,
 arbitrary party/raid members in sync range — so it's strictly more
 permissive, closer to SuperWoW's unit-position access. Units the client
@@ -13278,7 +18337,7 @@ Reads through the same `CGObject::GetPosition` virtual as
 > **SuperWoW interaction.** SuperWoW also defines a global `UnitPosition`
 > with a different return shape. Both register on the same Lua state, so
 > if SuperWoW is loaded the last registrant wins — install order decides
-> which shape is live. Without SuperWoW, this retail-shaped version is the
+> which shape is live. Without SuperWoW, this version is the
 > one you get.
 
 ### `UnitInLineOfSight(unit)`
@@ -13286,7 +18345,7 @@ Reads through the same `CGObject::GetPosition` virtual as
 Returns `true` if the player has clear line of sight to `unit`, `false`
 if world geometry (terrain or a building) blocks it, and `nil` when the
 check can't apply — an absent / unresolvable token, or a non-unit
-object. A ClassicAPI extension (retail has no such global).
+object. A ClassicAPI extension (not a stock WoW global).
 
 ```lua
 if UnitInLineOfSight("target") then
@@ -13305,7 +18364,7 @@ call routes harmlessly through UnitXP_SP3's hook when present).
 Notes and limits:
 - **Terrain + buildings (WMO) only** — M2 *doodads* (trees, small props)
   are not tested (that flag combination crashes in some dungeons). This
-  matches vanilla server-side LoS, which also ignores most doodads.
+  matches server-side LoS, which also ignores most doodads.
 - **Center/eye-line**, not a volume — a sliver of a unit peeking past a
   corner reads as blocked if the eye-line itself is occluded.
 - Pairs beyond ~150 yards report `false` (a guard against a
@@ -13321,7 +18380,7 @@ token plus the numeric classID. The token is one of
 `"SHAMAN"`, `"MAGE"`, `"WARLOCK"`, `"DRUID"`; the classID matches
 the integer `UnitClass`'s third return surfaces (1=Warrior,
 2=Paladin, 3=Hunter, 4=Rogue, 5=Priest, 7=Shaman, 8=Mage,
-9=Warlock, 11=Druid — 6 and 10 are post-vanilla).
+9=Warlock, 11=Druid — 6 and 10 are unused here).
 
 ```lua
 local token, id = UnitClassBase("player")    -- "WARRIOR", 1
@@ -13329,11 +18388,11 @@ local token = UnitClassBase("target")        -- works for any synced unit
 local color = RAID_CLASS_COLORS[UnitClassBase("party1")]
 ```
 
-Modern addons use the token for class detection because vanilla's
+Addons use the token for class detection because the
 `UnitClass(unit)` returns a localized first return (e.g.
 `"Krieger"` on a German client), which is fine for display but
 breaks any addon code that keys on `if class == "WARRIOR"`. The
-classID second return is a vanilla extension — modern's
+classID second return is a ClassicAPI extension — the standard
 `UnitClassBase` returns the token only — but it saves callers
 from chaining `UnitClass(unit)` just to get the integer.
 
@@ -13366,7 +18425,7 @@ local token = UnitRaceBase("target")        -- works for any synced unit
 ```
 
 Sibling to [`UnitClassBase`](#unitclassbaseunit). Same problem
-(vanilla's `UnitRace(unit)` returns a localized name — `"Mensch"`,
+(the `UnitRace(unit)` returns a localized name — `"Mensch"`,
 `"Orc"`, etc.); same solution (locale-independent token straight
 from the DBC). Reads byte 0 of `UNIT_FIELD_BYTES_0` (descriptor
 `+0x78`) and looks up `ChrRaces.dbc::Filename` (`+0x3C`).
@@ -13396,13 +18455,13 @@ Walks the client's visible-object manager, matches creatures whose GUID
 encodes `creatureID` (bits 24–47), and returns the closest one's position
 + center-to-center distance.
 
-> **Differs from retail.** Modern WoW's `ClosestUnitPosition` reads a
-> static client-side spawn database and only works for starting-zone mobs.
-> Vanilla 1.12 ships no such database, so this returns the nearest
+> **Behavior note.** A `ClosestUnitPosition` that reads a static
+> client-side spawn database only works for starting-zone mobs. There is
+> no such database here, so this returns the nearest
 > **currently-visible** creature of that entry (anywhere, not just
 > starting zones). It can't point at un-synced spawns elsewhere in the
-> zone the way retail's database can — but for "where's the nearest `<mob>`
-> I can see" it's more general than retail.
+> zone the way a static spawn database can — but for "where's the nearest
+> `<mob>` I can see" it's more general.
 
 ### `UnitHealthMissing(unit)`
 
@@ -13419,7 +18478,7 @@ with nothing targeted), matching `UnitHealth`'s 0-for-missing convention;
 clamped so a transient `current > max` never returns negative.
 
 Tracks the engine's own `UnitHealth` / `UnitHealthMax` exactly, including
-vanilla's percentage form for non-grouped units (where `UnitHealthMax` is
+the percentage form for non-grouped units (where `UnitHealthMax` is
 `100`): a target at `85/100` reports `15`.
 
 Direct descriptor reads — `desc[+0x40]` (HEALTH), `desc[+0x58]` (MAXHEALTH).
@@ -13427,7 +18486,7 @@ No engine call, no Lua-stack roundtrip.
 
 ### `UnitPower(unit [, powerType [, unmodified]])` / `UnitPowerMax(unit [, powerType [, unmodified]])`
 
-Modern multi-power-type getters. Vanilla 1.12 only ships
+Multi-power-type getters. The stock client only ships
 `UnitMana(unit)` / `UnitManaMax(unit)` which return whichever
 primary power the unit happens to have (mana for casters, energy
 for rogues, rage for warriors, etc.); these add the explicit
@@ -13441,7 +18500,7 @@ local primary = UnitPower("player")      -- whatever the player's primary is
 local maxMana = UnitPowerMax("target", 0)
 ```
 
-`powerType` values (matches modern WoW's enum):
+`powerType` values:
 
 | value | type |
 |---|---|
@@ -13453,21 +18512,19 @@ local maxMana = UnitPowerMax("target", 0)
 
 These match the [`Enum.PowerType`](#globals) namespace published
 alongside — `UnitPower("player", Enum.PowerType.Mana)` is the
-idiomatic modern shape.
+idiomatic shape.
 
 Omitting `powerType` (or passing `-1` / any out-of-range value)
 falls back to the unit's primary power, read from
-`UNIT_FIELD_BYTES_0` byte 3 (descriptor `+0x7B`) — same source the
-vanilla engine uses internally. Same fallback the 3.3.5 client's
-`Script_UnitPower` uses for its `type == 7` sentinel.
+`UNIT_FIELD_BYTES_0` byte 3 (descriptor `+0x7B`) — the same source the
+engine uses internally.
 
 Returns `0` for invalid units, unresolvable tokens, or power types
-outside the 0..4 vanilla range (Runes / Runic Power are WotLK
-additions that don't have descriptor slots in the 1.12 unit
-layout).
+outside the 0..4 range (Runes / Runic Power have no descriptor slots in
+the unit layout).
 
-Display-divisor applied. Vanilla stores some power types at a
-scaled value internally and divides before exposing them through
+Display-divisor applied. Some power types are stored at a
+scaled value internally and divided before being exposed through
 Lua — same trick `Script_UnitMana` (`0x00517670`) uses, reading
 the divisor table at `0x0086F978`:
 
@@ -13480,11 +18537,11 @@ the divisor table at `0x0086F978`:
 | `4` HAPPINESS | 1000 |
 
 So a fresh warrior reads `UnitPower("player", 1)` = `0..100`, not
-`0..1000`. Matches retail Classic.
+`0..1000`.
 
 Pass a truthy `unmodified` (third arg) to bypass the divisor and get the raw
 internal value — `UnitPower("player", 1, true)` returns rage as `0..1000`.
-Same third argument retail's `UnitPower` / `UnitPowerMax` take.
+The same third argument `UnitPower` / `UnitPowerMax` take.
 
 Direct descriptor reads — `desc[+0x44 + type*4]` for current power,
 `desc[+0x5C + type*4]` for max, divided by the table entry for the
@@ -13503,7 +18560,7 @@ local rageMissing  = UnitPowerMissing("player")   -- primary power
 ```
 
 `unmodified` (arg 3, any truthy value) skips the display divisor and returns
-the raw internal deficit — the same third argument retail's `UnitPower` takes.
+the raw internal deficit — the same third argument `UnitPower` takes.
 
 Computed as the difference of the two **display** values (each integer-divided
 by the per-type divisor), not by dividing the raw difference, so it equals
@@ -13513,8 +18570,8 @@ truncates to `94`. Clamped at 0.
 
 ### `UnitPowerType(unit)`
 
-Vanilla 1.12 ships this returning just the integer power type;
-this implementation extends it to the modern 2-tuple
+The stock version returns just the integer power type;
+this implementation extends it to the 2-tuple
 `(powerType, powerToken)`. Strict-superset signature — addons
 that destructure only the first return are unaffected.
 
@@ -13523,7 +18580,7 @@ local pt, token = UnitPowerType("player")
 -- e.g. (0, "MANA") for a paladin, (1, "RAGE") for a warrior
 ```
 
-Token strings match modern WoW exactly:
+Token strings:
 
 | value | token |
 |---|---|
@@ -13535,9 +18592,9 @@ Token strings match modern WoW exactly:
 | `5` | `"RUNES"` |
 | `6` | `"RUNIC_POWER"` |
 
-5/6 are post-WotLK power types that can't appear on a 1.12 unit's
-descriptor; they're included in the table for symmetry with the
-modern enum in case a private server pushes one through.
+5/6 are power types that can't appear on a unit's descriptor here;
+they're included in the table for symmetry in case a private server
+pushes one through.
 
 Chains to the engine's original `Script_UnitPowerType` at
 `0x00517940` to preserve its full unit-resolution flow (object-
@@ -13546,7 +18603,7 @@ the just-pushed integer and appends the token string.
 
 ### `UnitSpellHaste(unit)`
 
-Backport of the TBC+ spell-haste getter — vanilla 1.12 has no haste API.
+A spell-haste getter — there is no stock haste API.
 Returns the spell haste **percentage**: `0` for an unhasted unit, positive
 when casting is sped up, negative when slowed (Curse of Tongues).
 
@@ -13565,20 +18622,58 @@ This is the Blizzard-shaped surface over the field nampower exposes raw as
 Consumers that need the raw multiplier back can recover it as
 `1 / (1 + UnitSpellHaste(unit) / 100)`. Returns `0` for invalid units.
 
+### `UnitSpellTargetName(unit)`
+
+Returns the name of the unit that `unit` is casting or channeling a spell
+**at**, or `nil`.
+
+```
+targetName = UnitSpellTargetName(unit)
+```
+
+```lua
+UnitSpellTargetName("target")   -- "Playername" while the mob casts at you
+UnitSpellTargetName("player")   -- your current cast's target, or nil
+```
+
+Returns `nil` when:
+
+- `unit` is not casting or channeling.
+- The spell has no unit target. This covers a self-cast, a ground-target
+  spell (Blizzard, Rain of Fire), and an item or lock cast.
+- The target's name can't be resolved (an off-screen stranger).
+
+The target comes from the cast's `SMSG_SPELL_START` packet. ClassicAPI
+captures it for the player and for any remote unit whose cast you observed
+since it began. So the same limit as
+[`C_Spell.UnitCastingInfo`](#c_spellunitcastinginfounit--c_spellcastinginfo)
+applies: a remote unit's target is known only while you saw its cast. The
+name is resolved through the object manager (players and creatures), then the
+friends list, then the persistent name cache — the same chain as
+[`UnitNameFromGUID`](#unitnamefromguidguid).
+
+The player's target lands with the confirming packet, about one round-trip
+after the cast starts. So `UnitSpellTargetName("player")` can read `nil` for
+the first part of your own cast, then return the name.
+
 ## UnitAuras
 
-Backport of the modern `C_UnitAuras` namespace. Returns
-`AuraData`-shaped tables instead of vanilla's `UnitBuff` /
-`UnitDebuff` multi-return tuples, so modern addon code that does
+Backport of the `C_UnitAuras` namespace. Returns
+`AuraData`-shaped tables instead of the `UnitBuff` /
+`UnitDebuff` multi-return tuples, so addon code that does
 `local d = C_UnitAuras.GetAuraDataByIndex(unit, 1); if d.dispelName ==
 "Magic" then ...` works unchanged.
 
 Reads primarily off the unit's `m_objectFields` descriptor — same
 data source `UnitBuff` / `UnitDebuff` use. The descriptor has 48 aura
-slots total: 32 helpful (buffs) at indices 0..31, 16 harmful
-(debuffs) at indices 32..47. Functions in this namespace take a
-1-based Lua index that translates onto whichever range the filter
-selects.
+slots. Buffs sit in slots 0 to 31 and debuffs in slots 32 to 47.
+
+Some servers, Turtle among them, put extra debuffs into free buff slots
+once the 16 debuff slots are full. `HELPFUL` and `HARMFUL` still select on
+the aura's real polarity there, so a debuff in a buff slot is still a
+debuff. The native `UnitBuff` and `UnitDebuff` split by slot range and
+report that debuff as a buff. Indices stay stable either way. A `HARMFUL`
+walk visits slots 32 to 47 first, then any spilled debuffs in 0 to 31.
 
 When a party/raid member has **no live unit object at all** (a
 different map, far out of range), there is no descriptor to read — but
@@ -13588,47 +18683,46 @@ these functions surface them, exactly as the built-in `UnitBuff` /
 
 ### `AuraData` table shape
 
-| Field | Type | Source / value on vanilla |
+| Field | Type | Source / value |
 |---|---|---|
 | `name` | string | localized spell name from `Spell.dbc` |
 | `icon` | string | icon path from `SpellIcon.dbc` |
 | `applications` | number | stack count (engine stores `stacks-1`, we display `+1`) |
 | `spellId` | number | spell ID from the descriptor's aura array |
 | `dispelName` | string | `"Magic"` / `"Curse"` / `"Disease"` / `"Poison"` (from `SpellDispelType.dbc`), or `""` if non-dispellable |
-| `isHelpful` | boolean | true for slot < 32 |
-| `isHarmful` | boolean | true for slot >= 32 |
+| `isHelpful` | boolean | true when the aura is a buff |
+| `isHarmful` | boolean | true when the aura is a debuff. This is the aura's real polarity, so a debuff parked in a buff slot still reads harmful |
 | `duration` | number | applied duration in seconds. When the aura's cast was observed (in the `Aura::Source` cache), this is the caster-modified duration — talent/glyph extensions like Improved Shadow Word: Pain included — so it stays consistent with `expirationTime` (`remaining ≤ duration`). On a cache miss it falls back to the base `Spell.dbc → SpellDuration.dbc` value with level scaling. Returns 0 for spells flagged "no duration" (passives, paladin auras, infinite buffs) |
 | `expirationTime` | number | for `unit == "player"`, read from the engine's player-buff table at `0x00BC6040` (same data `GetPlayerBuffTimeLeft` returns). For any other unit, taken from the `Aura::Source` cache (cast time + duration captured from `SMSG_SPELL_GO`; see below). `0` when neither source has it. `expirationTime - GetTime()` gives the true remaining time |
 | `sourceUnit` | string | unit token of the caster (`"player"`, `"raid7"`, `"nameplate1"`, …), resolved from the `Aura::Source` cache. `nil` if the cast wasn't observed or the caster maps to no current token |
-| `sourceGUID` | string | caster's `"0x…"` GUID string from the same cache. **ClassicAPI extension — not a retail `AuraData` field.** Set whenever a caster is known, including when `sourceUnit` is `nil` (caster left token range). Stable for the session, unlike the volatile nameplate token; doubles as a unit token under SuperWoW. `nil` on a cache miss |
-| `charges` / `maxCharges` | number | always `0` — vanilla has stacks, not charges |
-| `timeMod` | number | always `1` — vanilla has no haste-affected auras |
-| `isStealable`, `isBossAura`, `isFromPlayerOrPlayerPet`, `isNameplateOnly`, `nameplateShowAll`, `nameplateShowPersonal`, `canApplyAura`, `shouldConsolidate`, `isRaid` | boolean | always `false` — modern UI concepts vanilla doesn't have |
-| `auraInstanceID`, `points` | (absent) | omitted from the table — Lua read yields nil, matching modern semantics for "field doesn't apply" |
+| `sourceGUID` | string | caster's `"0x…"` GUID string from the same cache. **A ClassicAPI extension — not a standard `AuraData` field.** Set whenever a caster is known, including when `sourceUnit` is `nil` (caster left token range). Stable for the session, unlike the volatile nameplate token; doubles as a unit token under SuperWoW. `nil` on a cache miss |
+| `charges` / `maxCharges` | number | always `0` — there are stacks, not charges |
+| `timeMod` | number | always `1` — there are no haste-affected auras |
+| `isFromPlayerOrPlayerPet` | boolean | true when a player — any player, not only you — or a player's pet applied the aura. Read from the cached caster GUID, so it is `false` when the cast was not seen this session. Totem buffs read `false`: a totem is a creature, not a pet |
+| `isStealable`, `isBossAura`, `isNameplateOnly`, `nameplateShowAll`, `nameplateShowPersonal`, `canApplyAura`, `shouldConsolidate`, `isRaid` | boolean | always `false` — UI concepts not present here |
+| `auraInstanceID`, `points` | (absent) | omitted from the table — Lua read yields nil for "field doesn't apply" |
 
 ### Filter parsing
 
 The optional `filter` string is a pipe-separated set of upper-case
-tokens, matching modern syntax (`"HELPFUL"`, `"HARMFUL"`,
-`"HELPFUL|PLAYER"`, etc.). Honored on vanilla:
+tokens (`"HELPFUL"`, `"HARMFUL"`,
+`"HELPFUL|PLAYER"`, etc.). Honored:
 
-- **`HELPFUL`** (default) / **`HARMFUL`** — pick the buff or debuff range.
-  In `GetUnitAuras`, supplying neither returns both ranges.
-- **`PLAYER`** — restrict to auras the local player cast, via the
-  `Aura::Source` caster cache (`sourceGUID == ` player GUID). Combines with
-  the range tokens (`"HARMFUL|PLAYER"` = your debuffs only). Because the
-  caster is best-effort, an aura whose cast we didn't observe is treated as
-  not-player-cast and excluded — so `PLAYER` can under-report auras that
-  predate login.
+- **`HELPFUL`** (default) / **`HARMFUL`** — pick buffs or debuffs by each
+  aura's polarity flag. In `GetUnitAuras`, supplying neither returns both.
+- **`PLAYER`** — restrict to auras that the player or the player's pet
+  cast. Combines with the range tokens (`"HARMFUL|PLAYER"` = your debuffs
+  only). The caster is known only for casts seen this session, so an aura
+  that predates login counts as not-player-cast and is excluded.
 
 Other tokens (`RAID` / `CANCELABLE` / `INCLUDE_NAME_PLATE_ONLY`) are
 accepted but no-op — they need engine systems (raid-dispel relevance,
-nameplate visibility flags) vanilla doesn't have.
+nameplate visibility flags) not present here.
 
 ### Caster & timing (`Aura::Source`)
 
 `sourceUnit`, `sourceGUID`, and non-player `expirationTime` come from a
-client-side cache that vanilla itself can't provide: the unit aura array
+client-side cache the engine itself can't provide: the unit aura array
 stores only spell IDs — never the caster, and no cast/expiration timing for
 anyone but the local player. `Aura::Source` fills the gap by co-hooking
 three engine functions and caching `(targetGuid, spellId) → { casterGuid,
@@ -13694,7 +18788,7 @@ This path is **spell-ID only**, because that is all the packet carries:
 - `duration` is the `Spell.dbc` base with level scaling.
 - Spell IDs are truncated to 16 bits on the wire, so a custom aura with a
   spell ID above 65535 comes through wrong — an inherent limitation of the
-  vanilla packet that `UnitBuff` shares.
+  packet that `UnitBuff` shares.
 
 Distinct from the in-range descriptor-drop cases (rogue stealth, nearby
 range fluctuation), where the object still exists and the `Aura::Source`
@@ -13715,11 +18809,130 @@ if d then
 end
 ```
 
+**Filter tokens.** `filter` uses the AuraFilters format: tokens
+separated by `|` or spaces, each token optionally negated with a
+leading `!`. This build honors:
+
+- `HELPFUL` / `HARMFUL` — buffs / debuffs, by each aura's polarity flag
+  rather than its slot number. With neither token the query returns both
+  (the indexed getter defaults to helpful).
+- `PLAYER` / `!PLAYER` — only auras the player or the player's pet cast,
+  or only the auras neither of them cast. Caster data comes from casts
+  this session, so an aura present before you saw it cast has no caster
+  and counts as not-player.
+- `DISPELLABLE` / `!DISPELLABLE` — only auras that can be dispelled,
+  purged, or stolen (dispel type Magic, Curse, Disease, or Poison), or
+  only auras that cannot. This is "can it be removed at all", not "can
+  you remove it".
+- `CROWD_CONTROL` / `!CROWD_CONTROL` — only auras that are a crowd-
+  control effect (stun, fear, silence, root, charm, confuse, disarm, and
+  movement slows), or only auras that are not. Shares the loss-of-control
+  classifier with `C_LossOfControl`, plus snares (which are crowd
+  control but not loss of control).
+
+All other AuraFilters tokens (`RAID`, `CANCELABLE`,
+`INCLUDE_NAME_PLATE_ONLY`, `MAW`, and the rest) are accepted and
+ignored — there is no data for them. Token matching is whole-token,
+so `RAID_PLAYER_DISPELLABLE` is not read as `PLAYER`.
+
 ### `C_UnitAuras.GetBuffDataByIndex(unit, index)` / `GetDebuffDataByIndex(unit, index)`
 
 Convenience wrappers locking the filter to `HELPFUL` or `HARMFUL`
 respectively. Equivalent to `GetAuraDataByIndex(unit, index,
 "HELPFUL")` / `"HARMFUL"`.
+
+### `C_UnitAuras.UnitAura(unit, index [, filter])`
+
+Returns the same aura as `GetAuraDataByIndex`, but as 15 positional values
+instead of a table — so it allocates nothing. Use it in an `OnUpdate` loop that
+scans many auras, where one table per aura strains Lua's garbage collector.
+Prefer [`AuraUtil.ForEachAura`](#aurautilforeachaura) for iteration.
+
+The values, in order:
+
+```
+name, icon, count, dispelType, duration, expirationTime, source, isStealable,
+nameplateShowPersonal, spellId, canApplyAura, isBossDebuff, castByPlayer,
+nameplateShowAll, timeMod
+```
+
+Returns a single `nil` when the unit has fewer than `index` matching auras.
+`dispelType` is the dispel-type string (`"Magic"`, `"Curse"`, `"Disease"`,
+`"Poison"`, or `nil`). `source` is the caster's unit token, or `nil` when the cast
+was not seen this session. `castByPlayer` is true when a player — any player, not
+only you — or a player's pet applied the aura, and false when the cast was not
+seen this session. `filter` takes the same tokens as `GetAuraDataByIndex`.
+
+The values are the `GetAuraDataByIndex` fields in the classic `UnitAura` order,
+with two field-name differences from the table: position 12 is `isBossDebuff`
+(the table field is `isBossAura`) and position 13 is `castByPlayer` (the table
+field is `isFromPlayerOrPlayerPet`, the same value). The boss field is
+always false; `castByPlayer` is reported truthfully.
+
+### `C_UnitAuras.UnitBuff(unit, index [, filter])` / `UnitDebuff(unit, index [, filter])`
+
+The `UnitAura` positional form with the range locked to `HELPFUL` or `HARMFUL`.
+The `filter` still honors the `PLAYER`, `DISPELLABLE`, and `CROWD_CONTROL`
+predicates. Namespaced under `C_UnitAuras` so they never clash with the native
+global `UnitBuff` / `UnitDebuff` (which keep their texture-first return).
+
+### `C_UnitAuras.GetAuraSlots(unit [, filter [, maxSlots [, continuationToken]]])`
+
+Returns a continuation token, then the slot ids of the auras on `unit` that
+match `filter`. A slot id is an opaque number. Pass it to `GetAuraDataBySlot`
+or `UnitAuraBySlot` to read that aura.
+
+```lua
+local token, slot1, slot2 = C_UnitAuras.GetAuraSlots("target", "HARMFUL", 2)
+```
+
+The slot ids come in the order that the by-index getters visit the auras.
+`maxSlots` limits how many ids one call returns. With `nil` or `0`, one call
+returns all of them. When more auras remain, the first return value is a
+token. Pass this token back as `continuationToken` to get the next batch. When
+the batch reaches the last aura, the first return value is `nil`.
+
+Use this function instead of a loop over `GetAuraDataByIndex`. The by-index
+getters walk the aura array from the start on every call, so a loop over them
+repeats that walk for each index. One `GetAuraSlots` call plus one by-slot
+fetch per aura walks the array once.
+[`AuraUtil.ForEachAura`](#aurautilforeachaura) uses this path.
+
+A slot id is valid in the frame that returned it. Do not store slot ids
+across frames. `filter` takes the same tokens as `GetAuraDataByIndex`. The
+range is `HELPFUL` unless the filter has `HARMFUL`.
+
+**Fill a table instead (ClassicAPI extension).** Pass a table as the fifth
+argument. The function writes the slot ids into it as `t[1]` to `t[n]`,
+clears old entries after `n`, sets `t.n`, and returns `continuationToken, n`.
+Use this form in code that runs every frame. On this client's Lua, a call to
+a function with `...` in its parameter list allocates a table. So a Lua helper
+that receives the normal return list allocates once per call, and the fill
+form does not.
+
+```lua
+local slots = {}
+local token, n = C_UnitAuras.GetAuraSlots("target", "HARMFUL", nil, nil, slots)
+for i = 1, n do
+    local name = C_UnitAuras.UnitAuraBySlot("target", slots[i])
+end
+```
+
+### `C_UnitAuras.GetAuraDataBySlot(unit, slot)` / `UnitAuraBySlot(unit, slot)`
+
+`GetAuraDataBySlot` returns the `AuraData` table for the aura that slot id
+`slot` names on `unit`. It returns `nil` when the slot id no longer names an
+aura. `UnitAuraBySlot` returns the same aura as the 15 positional values of
+[`C_UnitAuras.UnitAura`](#c_unitaurasunitauraunit-index--filter), so it
+allocates nothing. Get slot ids from `GetAuraSlots`.
+
+```lua
+local token, slot = C_UnitAuras.GetAuraSlots("player", "HELPFUL", 1)
+if slot then
+    local d = C_UnitAuras.GetAuraDataBySlot("player", slot)
+    print(d.name, d.applications)
+end
+```
 
 ### `C_UnitAuras.GetUnitAuraBySpellID(unit, spellID [, filter])`
 
@@ -13743,8 +18956,8 @@ common consumer pattern (WeakAuras-style aura tracking).
 
 Linear-searches `unit`'s aura array for the first populated slot
 whose locale-resolved `name` matches `spellName` exactly. Returns
-the `AuraData` for that slot or `nil` if not found. Case-sensitive
-— matches modern semantics. Without a filter, searches both
+the `AuraData` for that slot or `nil` if not found. Case-sensitive.
+Without a filter, searches both
 ranges (helpful first, then harmful).
 
 ```lua
@@ -13794,7 +19007,7 @@ is the escape hatch for *other* custom servers with the same class of
 gap — call it from your own config or addon; a registered override
 beats both the DBC and the built-in values.
 
-### `C_UnitAuras.RegisterAuraDurationModifier(triggerSpellID, affectedFamily, affectedFamilyFlags, affectedIcon, op [, valueSeconds])`
+### `C_UnitAuras.RegisterAuraDurationModifierByTrigger(triggerFamily, triggerSchool, affectedFamily, affectedFamilyFlags, affectedIcon, op [, valueSeconds])`
 
 ClassicAPI extension for **server-side DoT-duration changes on another
 unit that the client is never told about**. Returns `true` on success.
@@ -13813,45 +19026,42 @@ trigger lands:
 
 | Arg | Meaning |
 |-----|---------|
-| `triggerSpellID` | The spell whose cast triggers the change (match one rank per call — use the exact IDs the server binds). |
-| `affectedFamily` | `SpellFamilyName` of the affected aura (e.g. `5` warlock, `11` shaman, `7` druid). |
-| `affectedFamilyFlags` | A `SpellFamilyFlags` bitmask; the affected aura matches if it overlaps. Family + flag is rank-proof (covers every rank at once). |
-| `affectedIcon` | `SpellIconID` the affected aura must have, or `0` to match any. |
+| `triggerFamily` | `SpellFamilyName` of the triggering cast (e.g. `6` priest). |
+| `triggerSchool` | School index the trigger must be (`0` physical … `2` fire, `5` shadow, `6` arcane), or `< 0` for any. Matching by family + school covers a whole class of spells at once — every rank, plus server-added ones — rather than a named ability. |
+| `affectedFamily` | `SpellFamilyName` of the affected aura (e.g. `5` warlock, `11` shaman, `6` priest). |
+| `affectedFamilyFlags` | A `SpellFamilyFlags` bitmask; the affected aura matches if it overlaps. Family plus flag is rank-proof, so it covers every rank at once. Pass `0` to select on the icon alone. |
+| `affectedIcon` | `SpellIconID` the affected aura must have, or `0` to match any. Give this when the aura has no `SpellFamilyFlags`, which is common for a server's custom spells. An icon is shared by a spell's whole rank ladder, so it stays rank-proof. |
 | `op` | `"refresh"` (reset to full duration), `"reduce"` (subtract `valueSeconds`, removing the aura if it would go non-positive), `"set"` (to `valueSeconds`), `"remove"`. |
 | `valueSeconds` | Amount for `reduce`/`set`; ignored otherwise. |
+
+Give at least one of `affectedFamilyFlags` and `affectedIcon`. A rule with
+neither would match every aura of the class, so it is rejected.
 
 The rule only fires for the aura **cast by the same unit** as the trigger
 (these mechanics act on the caster's own DoT), and misses are excluded for
 free (a missed trigger isn't in the packet's hit list).
 
-**`C_UnitAuras.RegisterAuraDurationModifierByTrigger(triggerFamily, triggerSchool, affectedFamily, affectedFamilyFlags, affectedIcon, op [, valueSeconds])`**
-is the same, but matches the *trigger* by `SpellFamilyName` + school index
-(`0` physical … `2` fire, `5` shadow, `6` arcane; `< 0` = any) instead of an
-exact spellID — one rule covers a whole class of spells (every rank, plus
-server-added ones). Use it when the trigger is a category rather than a named
-ability.
+Rules keyed to an **exact trigger spellID** (rather than a family + school
+category) are registered inside the DLL instead. `!!!ClassicAPI`'s built-in
+Turtle mods — Conflagrate shaving 3s off the caster's Immolate, Molten Blast
+refreshing the caster's Flame Shock, and Bestial Wrath stretching the pet's
+Scent of Blood to its own length — live in `src/turtle/DurationMods.cpp`, and
+Carnage's roll-gated Rip/Rake refresh in `src/turtle/Carnage.cpp`.
 
-`!!!ClassicAPI` ships a default Turtle ruleset
-([Util/AuraDurationModifiers.lua](../AddOns/!!!ClassicAPI/Util/AuraDurationModifiers.lua)):
-Conflagrate shaves 3s off the caster's Immolate, Molten Blast refreshes the
-caster's Flame Shock, and — for a 5/5 Shadow Weaving priest (talent `15334`,
-where the proc is 100%) — any shadow-school priest cast refreshes the target's
-Shadow Vulnerability (`15258`). Deliberately excluded: probabilistic effects
-(Carnage's roll-gated Rip/Rake refresh, and Shadow Weaving below 5/5) — the
-client can't see the server's roll, so inferring them would show wrong timers.
-Two accepted best-effort caveats on the Shadow Weaving rule: DoT *ticks*
-(SW:P / Devouring Plague) also refresh it server-side but emit no cast packet,
-so a pure DoT-only phase under-counts slightly; and a full-consume Conflagrate
-variant on other servers *removes* Immolate, which ClassicAPI already evicts
-via the normal removal path (so the reduce rule is harmless there).
+The one rule registered from Lua
+([Util/AuraDurationModifiers.lua](../AddOns/!!!ClassicAPI/Util/AuraDurationModifiers.lua))
+is Shadow Weaving: for a 5/5 priest (talent `15334`, where the proc is 100%),
+any shadow-school priest cast refreshes the target's Shadow Vulnerability
+(`15258`). Below 5/5 it's roll-gated and deliberately not inferred — the client
+can't see the server's roll, so inferring it would show wrong timers. One
+accepted best-effort caveat: DoT *ticks* (SW:P / Devouring Plague) also refresh
+it server-side but emit no cast packet, so a pure DoT-only phase under-counts
+slightly.
 
 ```lua
 -- Flags are hex; Lua 5.0 has no 0x literals, so use tonumber(hex, 16).
--- Conflagrate (Rank 4) shaves 3s off the caster's Immolate (warlock, flag 0x4):
-C_UnitAuras.RegisterAuraDurationModifier(18932, 5, tonumber("4", 16), 0, "reduce", 3)
--- Molten Blast refreshes the caster's Flame Shock (shaman, flag 0x10000000):
-C_UnitAuras.RegisterAuraDurationModifier(36916, 11, tonumber("10000000", 16), 0, "refresh")
--- Any priest (6) shadow-school (5) cast refreshes Shadow Vulnerability (15258):
+-- Any priest (6) shadow-school (5) cast refreshes Shadow Vulnerability
+-- (affected priest 6, flag 0x4000000, icon 9):
 C_UnitAuras.RegisterAuraDurationModifierByTrigger(6, 5, 6, tonumber("4000000", 16), 9, "refresh")
 ```
 
@@ -13871,7 +19081,7 @@ end
 ### `C_UnitAuras.GetAuraDispelTypeColor(dispelName)`
 
 Returns a `{r, g, b, a}` table for the given dispel-type name,
-matching modern FrameXML's `DebuffTypeColor` values:
+matching FrameXML's `DebuffTypeColor` values:
 
 | dispelName | r | g | b |
 |---|---|---|---|
@@ -13882,7 +19092,7 @@ matching modern FrameXML's `DebuffTypeColor` values:
 | `"Enrage"` | 1.00 | 0.55 | 0.00 |
 | (anything else, including `""`) | 0.80 | 0 | 0 |
 
-Returns a `ColorMixin` instance the same way modern does — the C
+Returns a `ColorMixin` instance — the C
 function `pcall`s Lua's `CreateColor(r, g, b, a)` (defined in
 `!!!ClassicAPI/Util/Color.lua`) and returns whatever table it
 builds. So the returned value carries the mixin methods
@@ -13893,10 +19103,10 @@ loads first thanks to the triple-`!` prefix).
 
 ## VoiceChat
 
-Backport of modern WoW's text-to-speech surface — the `C_VoiceChat` and
+A text-to-speech surface — the `C_VoiceChat` and
 `C_TTSSettings` namespaces — backed by **Windows SAPI** (the OS speech
 engine). All playback is **local** (rendered on your own machine);
-vanilla 1.12 has no voice-chat transport, so there is nothing "remote" to
+there is no voice-chat transport, so there is nothing "remote" to
 transmit synthesized speech into.
 
 > **Coexistence with VanillaTTS:** the same surface also ships as the
@@ -13928,7 +19138,7 @@ end
 Each entry is `{ voiceID = <0-based index>, name = <display name> }`. The
 `voiceID` is the index you pass to `SpeakText` and store via
 `C_TTSSettings.SetVoiceOption`. `GetRemoteTtsVoices` is an alias returning
-the same local list (kept for API parity — vanilla has no voice chat).
+the same local list (kept for API parity — there is no voice chat).
 Calling either refreshes the cached voice list and fires
 `VOICE_CHAT_TTS_VOICES_UPDATE` if it changed.
 
@@ -14039,10 +19249,10 @@ The list is read straight from the engine's virtual-template registry — the
 same store the XML loader fills for `inherits=` — so it covers every template
 currently loaded from **both** Blizzard FrameXML and addon `.xml` files, and is
 rebuilt on `/reload`. Font templates live in a separate registry and are not
-included (matching retail, where `GetTemplates` returns frame templates).
+included (`GetTemplates` returns frame templates).
 Returns an empty table if no template has registered yet.
 
-> **Note (vanilla vs. retail):** retail's `XMLTemplateListInfo` carries only
+> **Note:** the standard `XMLTemplateListInfo` carries only
 > the `name` and `type` fields, both provided here. There's no filtering —
 > every virtual template is returned, in hash-table order (not load or
 > alphabetical order).
@@ -14061,16 +19271,16 @@ local info = C_XMLUtil.GetTemplateInfo("StatFrameTemplate")
 |---|---|---|
 | `type` | string | The template's frame type — its XML element tag (`"Frame"`, `"Button"`, …). |
 | `width` / `height` | number | The size **statically declared on the template itself** via a `<Size>` element, or `0` if it declares none (including when the size comes from an inherited template rather than a direct `<Size>`). |
-| `keyValues` | table | Always an **empty table** in 1.12 — the vanilla XML schema has no `<KeyValues>` element, so no template can carry key/value pairs. Present for API parity. |
+| `keyValues` | table | Always an **empty table** — the XML schema has no `<KeyValues>` element, so no template can carry key/value pairs. Present for API parity. |
 | `inherits` | string? | The template's `inherits=` attribute (a comma-delimited list), or `nil` if it inherits nothing. |
 
 Lookup is by name through the engine's own template registry — the same
 resolution `inherits=` uses — so it's case-insensitive and covers both
 Blizzard FrameXML and addon templates.
 
-> **Not provided:** retail's `sourceLocation` field (file:line where the
-> template was defined) is a 10.2.0 addition; vanilla records no source
-> location for XML nodes, so the field is omitted (reads as `nil`).
+> **Not provided:** the `sourceLocation` field (file:line where the
+> template was defined); no source
+> location is recorded for XML nodes, so the field is omitted (reads as `nil`).
 
 ### `C_XMLUtil.DoesTemplateExist(name)`
 

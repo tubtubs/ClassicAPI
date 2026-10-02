@@ -40,6 +40,47 @@ enum Offsets {
     // state, so `FrameScript_RegisterFunction` writes land on it.
     FUN_LOAD_GLUE_SCRIPT_FUNCTIONS = 0x0046ABB0,
 
+    // Binding manager internals used by the direct-action/override binding backport.
+    //
+    // Stock Lua `SetBinding` wrapper (`int __fastcall(lua_State *)`).
+    // The SetBindingSpell/Item/Macro/Click wrappers delegate to it after
+    // constructing their action command, preserving punctuation-key
+    // normalization, current-set selection, the Boolean return value, and the
+    // native UPDATE_BINDINGS notification.
+    FUN_SCRIPT_SET_BINDING = 0x004B8000,
+
+    // Hardware-key dispatch, before the normal binding table is resolved:
+    //   int __thiscall(manager, key, isDown)
+    // Hooking here lets owner-scoped override bindings remain a separate
+    // layer rather than temporarily mutating the character/account binding
+    // table. The normal dispatcher is called unchanged when no override wins.
+    FUN_BINDING_KEY_DISPATCH = 0x004B7990,
+
+    // Executes a resolved binding command:
+    //   int __thiscall(manager, command, isDown)
+    // Vanilla has no SPELL/ITEM/MACRO/CLICK direct-action command handlers. The
+    // hook recognizes those four families and delegates every native command
+    // to the client.
+    FUN_BINDING_COMMAND_EXECUTE = 0x004B7B50,
+
+    // Binding-manager `this`-relative flag, set to 1 while a resolved binding
+    // command runs. FUN_BINDING_KEY_DISPATCH writes 1 immediately before its
+    // call to FUN_BINDING_COMMAND_EXECUTE and 0 immediately after. Override
+    // commands dispatched outside that engine path must mirror it so native
+    // command handlers observe the same manager state a real keypress produces.
+    // Verified in the FUN_BINDING_KEY_DISPATCH disassembly.
+    OFF_BINDING_MANAGER_EXECUTING = 0xD8,
+
+    // Frame-script execution context and its nesting depth (the `DAT_00ceeac0`
+    // dance referenced below). Shared by the binding dispatcher and the
+    // tooltip/frame script invokers. FUN_BINDING_KEY_DISPATCH saves the context
+    // pointer, zeroes it for the nested command, restores it afterward, and
+    // floors the depth back to 0. `Bindings::Api` mirrors this when it runs an
+    // override command outside the engine's own dispatch. Verified in that
+    // disassembly.
+    VAR_FRAMESCRIPT_EXEC_CONTEXT = 0x00CEEAC0,
+    VAR_FRAMESCRIPT_EXEC_CONTEXT_DEPTH = 0x00CEEAC4,
+
     // GameTooltip script-method prologue helpers (used to resolve self → CFrameScriptObject*).
     // Underlying Lua C API names per [[docs/LuaCAPI.md]] are `lua_rawgeti`
     // (0x6F3BC0) and `lua_touserdata` (0x6F3740). The Set* method prologue's
@@ -75,8 +116,34 @@ enum Offsets {
     // backported convenience methods. Each is `int __fastcall(void *L)`
     // expecting the standard self+args layout on the Lua stack.
     // (Slot numbers are the method-registry index per `docs/raw_methods.txt`.)
+    // `SetText(text [, r, g, b, a, wrap])`: clear (FUN_GAMETOOLTIP_CLEAR), one
+    // line, then the has-text flag + Show vmethod — the exact sequence the
+    // engine's own macro branch (FUN_GAMETOOLTIP_SET_MACRO) runs, reachable
+    // through an entry point no sibling DLL has detoured. Pushes nothing.
+    FUN_SCRIPT_GAMETOOLTIP_SET_TEXT = 0x00531B90,      // slot 9
     FUN_SCRIPT_GAMETOOLTIP_SET_HYPERLINK = 0x00531FD0, // slot 12
+    // `SetAction(slot)`: cooldown via FUN_ACTION_SLOT_COOLDOWN, clear, then
+    // attack → "ATTACK" text; item-by-ID → FUN_GAMETOOLTIP_BUILD_ITEM (owned
+    // instance via FUN_INVMGR_FIND_ITEM_BY_ID, else bare itemID); spell →
+    // FUN_GAMETOOLTIP_BUILD_SPELL_TOOLTIP(spellID, brief /*1 unless the
+    // UberTooltips cvar int is set*/, cooldownRemainingMs, 0, 1, 0, 0);
+    // macro → FUN_GAMETOOLTIP_SET_MACRO (name only). Pushes 1 when the
+    // builder returned non-zero (FrameXML keeps refreshing), else nil.
+    // `Tooltip::SetAction` re-registers the name in front of it for macro
+    // slots with a `#showtooltip` directive and tail-calls it otherwise.
+    FUN_SCRIPT_GAMETOOLTIP_SET_ACTION = 0x005322A0, // slot 13
     FUN_SCRIPT_GAMETOOLTIP_SET_INVENTORY_ITEM = 0x00532EE0, // slot 19
+    FUN_SCRIPT_GAMETOOLTIP_SET_BAG_ITEM = 0x00534620, // slot 30 — (bag, slot)
+    // Macro-slot tooltip: `__thiscall(tooltip, uint macroID)` — clear +
+    // SetText(entry+OFF_MACRO_NAME) + Show. Internal, not a script entry.
+    FUN_GAMETOOLTIP_SET_MACRO = 0x0052B040,
+    // `Script_GameTooltip_SetUnit` (slot 31): self typecheck, lua_isstring(2),
+    // FUN_TOKEN_TO_GUID (raises on an unknown token), then — only for a
+    // non-zero GUID — FUN_GAMETOOLTIP_BUILD_UNIT. Always pushes nil (the
+    // builder returns 0 on every path). The token string is discarded after
+    // the resolve; `Unit::Tooltip` re-registers the name in front of it to
+    // keep the token for `GetUnit` and tail-calls it with the untouched stack.
+    FUN_SCRIPT_GAMETOOLTIP_SET_UNIT = 0x005349B0,
     FUN_SCRIPT_GAMETOOLTIP_SET_UNIT_BUFF = 0x00534AC0, // slot 32
     FUN_SCRIPT_GAMETOOLTIP_SET_UNIT_DEBUFF = 0x00534E30, // slot 33
     FUN_SCRIPT_GAMETOOLTIP_SET_TALENT = 0x00535170, // slot 34
@@ -185,6 +252,123 @@ enum Offsets {
     // so a pointer-keyed cell never goes stale). Same pattern + ABI modeling as
     // FUN_GAMETOOLTIP_SCRIPT_RESOLVER.
     FUN_FRAME_SCRIPT_RESOLVER = 0x0076A0D0,
+
+    // Button widget script-name resolver — __thiscall(button, const char *name)
+    // -> int* slot, 0 for an unknown name. Sits at vtable+0xC on all four
+    // button-family vtables (Button + subclasses). Delegates to the base frame
+    // resolver FUN_FRAME_SCRIPT_RESOLVER first, then maps the two button
+    // scripts: OnClick -> button+0x4CC, OnDoubleClick -> button+0x4D4 (each an
+    // 8-byte {handler, context} slot). Vanilla has no PreClick/PostClick, so
+    // `Frame::ClickEvents` co-hooks this to hand out an external per-button cell
+    // for those two names — same technique as FUN_GAMETOOLTIP_SCRIPT_RESOLVER.
+    FUN_BUTTON_SCRIPT_RESOLVER = 0x00778C50,
+    // Button OnClick / OnDoubleClick script slot offsets (the Button resolver's
+    // returns for those two names; each an 8-byte {handler ref, exec context}).
+    // `Frame::ClickEvents` matches a fire at the runner hook below against
+    // slotPtr == button + one of these to scope GetMouseButtonClicked.
+    OFF_BUTTON_ONCLICK_HANDLER = 0x4CC,
+    OFF_BUTTON_ONDOUBLECLICK_HANDLER = 0x4D4,
+    // CSimpleFrame script slots — the base-frame resolver FUN_0076A0D0's returns
+    // (it chains to CScriptObject FUN_00702590 first, OnEvent @ +0xC). Derived as
+    // one table, recorded as one: OnLoad +0x118, OnSizeChanged +0x120, OnUpdate
+    // +0x128, OnShow +0x130, OnHide +0x138, OnEnter +0x140, OnLeave +0x148,
+    // OnMouseDown +0x150, OnMouseUp +0x158, OnMouseWheel +0x160, OnDragStart
+    // +0x168, OnDragStop +0x170, OnReceiveDrag +0x178, OnChar +0x180, OnKeyDown
+    // +0x188, OnKeyUp +0x190. Only the two mouse-button slots are named:
+    // `Frame::ClickEvents` scopes GetMouseButtonClicked around their fires —
+    // the exact set 3.3.5's frame manager brackets (its CSimpleFrame::OnMouseDown
+    // FUN_0048fc30 and OnMouseUp FUN_0048fce0 write [frameMgr+0x1234]; its
+    // OnDragStart does not; confirmed live on 3.3.5, 2026-09-15). The dispatches
+    // are FUN_0076BF70 (mouse-down: records the drag candidate at +0xFC..+0x110,
+    // then fires) and FUN_0076C040 (mouse-up: dispatches OnDragStop/OnReceiveDrag
+    // instead when a drag was pending), each via FUN_FRAME_RUN_SCRIPT_VARIADIC
+    // (frame, frame + slot, "%s", name).
+    OFF_FRAME_ONMOUSEDOWN_SLOT = 0x150,
+    OFF_FRAME_ONMOUSEUP_SLOT = 0x158,
+    // Button::Click vmethod (Button vtable 0x0081C7F8 + 0x94) — __thiscall(button,
+    // buttonMask, fromScript), RET 8. Gate [+0x328] != 0 (enabled); runs the
+    // internal C++ click listener at +0x314 (vtable+0x10; set by FUN_00779740,
+    // never Lua-visible); iff [+0x4CC] is set, maps the mask through a jump
+    // table (targets @0x007795F4, index bytes @0x0077960C) to the engine's name
+    // literal and fires FUN_FRAME_RUN_SCRIPT_VARIADIC(button, button+0x4CC,
+    // "%s", name). Mask: 1 Left, 2 Middle, 4 Right, 8 Button4, 0x10 Button5,
+    // anything else "UNKNOWN". `fromScript` is 1 from Script_Click
+    // (FUN_007826C0 — folds its optional string to a mask: no arg -> 1,
+    // unrecognized or empty -> 0 -> "UNKNOWN") and 0 from both input handlers
+    // (mouse-down FUN_00779210 fires it for *Down registrations, mouse-up
+    // FUN_007792D0 for *Up, routing to +0x98 DoubleClick instead when [+0x4D4]
+    // is set and the previous click was <= 300 ms ago); the base ignores it.
+    // Every Lua-creatable button reaches this function: Button holds it in its
+    // vtable, CheckButton's override FUN_00785550 toggles +0x4DC then calls it;
+    // the nameplate button FUN_007CB910 and the game-UI button FUN_004C1820
+    // chain to it too. Only the hyperlink button FUN_007A3510 (vtable
+    // 0x0081D5B0) does not — it forwards to its owner's OnHyperlinkClick and
+    // never fires OnClick. `Frame::ClickEvents` co-hooks it to bracket EVERY
+    // click with PreClick/PostClick and the GetMouseButtonClicked scope, with
+    // or without an OnClick handler — the 3.3.5 shape (CSimpleButton::Click
+    // FUN_0096fd70 -> FUN_0096f090 fires PreClick, OnClick, PostClick as three
+    // independent `if (slot)` blocks).
+    //
+    // An earlier note here said SuperWoW inline-hooks this prologue and that a
+    // second MinHook faults (ERROR #132) — the reason PreClick/PostClick were
+    // first implemented at the runner and needed an OnClick handler to fire. A
+    // literal scan (2026-09-15) of every DLL the client loads — SuperWoWhook,
+    // nampower, perf_boost, pngscreenshots, regfix, transmogfix, UnitXP_SP3,
+    // VanillaHelpers, VanillaMultiMonitorFix, AuctionQueryThrottle,
+    // VanillaLooseLoader, VanillaMinimapTracking — finds NO reference to this
+    // address (absolute or RVA), while SuperWoWhook's real targets
+    // (SetEventCount, RebuildEventTable, SignalEventParam, ClearCastingSpell)
+    // all appear as plain literals, so the method would have found it. The #132
+    // sighting was real; this function was not its trigger. Prologue
+    // 55 8B EC 83 EC 14 56 8B CE — no relative branch in the first 6 bytes,
+    // internal jumps all target >= 0x7795B1: MinHook-safe.
+    FUN_BUTTON_CLICK = 0x00779540,
+    // Button::DoubleClick (vtable +0x98, shared by all five button-family
+    // vtables) — same shape, fires +0x4D4. NOT hooked: 3.3.5 fires no
+    // PreClick/PostClick around a double-click (FUN_0096f150 fires only
+    // OnDoubleClick), and its GetMouseButtonClicked scope comes from the runner
+    // gate on OFF_BUTTON_ONDOUBLECLICK_HANDLER. Reference only.
+    FUN_BUTTON_DOUBLECLICK = 0x00779650,
+    // Variadic front of the runner below — __cdecl(frame, slotPtr, fmt, ...),
+    // forwards &va as vaPtr to FUN_FRAME_RUN_SCRIPT_WITH_CONTEXT. The entry
+    // every input-script fire in the engine uses (25 call sites, byte-scanned).
+    // `Frame::ClickEvents` fires PreClick/PostClick through it so they take the
+    // identical path to the engine's own OnClick fire.
+    FUN_FRAME_RUN_SCRIPT_VARIADIC = 0x007026F0,
+    // The engine's "%s" format literal — the fmt every mouse-button script fire
+    // passes (OnClick, OnDoubleClick, OnMouseDown, OnMouseUp, OnDragStart) and
+    // the per-token unit-event broadcast uses. Passed by pointer so our fires
+    // are byte-identical to the engine's.
+    VAR_SCRIPT_FMT_S = 0x0082E280,
+    // The engine's button-name literals, exactly as FUN_BUTTON_CLICK's jump
+    // table selects them — so a PreClick/PostClick arg1 built from these is
+    // pointer-identical to the arg1 the engine hands OnClick.
+    VAR_BUTTON_NAME_LEFT = 0x00878864,    // "LeftButton"    mask 0x01
+    VAR_BUTTON_NAME_MIDDLE = 0x00878854,  // "MiddleButton"  mask 0x02
+    VAR_BUTTON_NAME_RIGHT = 0x00878848,   // "RightButton"   mask 0x04
+    VAR_BUTTON_NAME_4 = 0x00878840,       // "Button4"       mask 0x08
+    VAR_BUTTON_NAME_5 = 0x00878838,       // "Button5"       mask 0x10
+    VAR_BUTTON_NAME_UNKNOWN = 0x00838044, // "UNKNOWN"       any other mask
+    // Frame-script runner WITH exec-context stamping — __cdecl(void *frame,
+    // int *slotPtr, const char *fmt, void *vaPtr). Saves DAT_00ceeac0, stamps
+    // it from slotPtr[1] (the cell's context), then calls FUN_FRAME_RUN_SCRIPT_ARGS
+    // (the arg'd runner Frame::ScriptArgs hooks) and restores. Every arg'd
+    // input-script fire funnels through here via FUN_007026F0 (its variadic
+    // forwarder); the event dispatcher FUN_00703F50 is the only other caller.
+    // ONE hook, owned by `Frame::RunnerHook`, fans out to subscribers that each
+    // claim a disjoint slot address (a second MinHook here would abort the
+    // whole install — subscribe instead): `Frame::ClickEvents` gates on the
+    // four mouse-button script slots (OnClick/OnDoubleClick on buttons,
+    // OnMouseDown/OnMouseUp on every frame) and scopes GetMouseButtonClicked
+    // around the fire — the runner is where the engine hands over the button
+    // NAME, so it is the scope point by design; `Frame::UnitEvent` gates on
+    // `slotPtr == frame + OFF_FRAME_ONEVENT_SLOT` (the dispatcher's per-frame
+    // OnEvent fire) and suppresses the call when a RegisterUnitEvent filter
+    // rejects arg1. PreClick/PostClick themselves fire from a co-hook on
+    // FUN_BUTTON_CLICK (see there — an earlier note here claimed SuperWoW
+    // owned that vmethod, which a per-DLL literal scan disproved).
+    FUN_FRAME_RUN_SCRIPT_WITH_CONTEXT = 0x00702710,
+
     // The other per-object tooltip builders, co-hooked the same way as
     // FUN_GAMETOOLTIP_BUILD_ITEM to back OnTooltipSetSpell / OnTooltipSetUnit /
     // OnTooltipSetGameObject (see Tooltip::SetEvents). Each is the single funnel
@@ -198,10 +382,23 @@ enum Offsets {
     //     Returns an int the caller (Script_GameTooltip_SetUnit) tests, so the
     //     co-hook must forward the original's return value.
     //   - GameObject (0x0052aa20, __thiscall(self, guid*), RET 4) — the GO
-    //     hover populator; resolves the GO (OBJ_TYPE_GAMEOBJECT) and writes the
+    //     hover populator; resolves the GO (TYPEMASK_GAMEOBJECT) and writes the
     //     GO field at +0x370.
     FUN_GAMETOOLTIP_BUILD_UNIT = 0x00529FE0,
     FUN_GAMETOOLTIP_BUILD_GAMEOBJECT = 0x0052AA20,
+    // Pointer to the GameTooltip CFrameScriptObject the engine's mouseover
+    // setter builds into (`DAT_00b4b3c4`; the value at this address is the
+    // tooltip object). `Frame::Attributes` reads it to build the unit tooltip
+    // for offline/out-of-range party & raid members, which FUN_00492890 skips.
+    VAR_GAMETOOLTIP_OBJECT_PTR = 0x00B4B3C4,
+    // The tooltip's OnTooltipSetDefaultAnchor handler slot (the `{handler,
+    // context}` pair the script resolver maps that name to). The engine
+    // mouseover setter fires this before building to (re)establish the
+    // tooltip owner/anchor via FrameXML's GameTooltip_SetDefaultAnchor —
+    // without it a rebuild after the tooltip was hidden has no owner and
+    // stays invisible. `Frame::Attributes` fires it (via the self-contained
+    // FUN_FRAME_INVOKE_SCRIPT) before the offline roster build.
+    OFF_TOOLTIP_SET_DEFAULT_ANCHOR_HANDLER = 0x444,
     FUN_GAMETOOLTIP_ADD_LINE = 0x00530270,        // __thiscall(self, left, right, lColorBGRA*, rColorBGRA*, wrap)
     OFF_GAMETOOLTIP_NUM_LINES = 0x31C,            // int — live line count (AddLine index; +0x320 is the cap)
     // The displayed item's identity is read via the existing
@@ -216,7 +413,12 @@ enum Offsets {
     // the pointer at +0xB8 (both verified from the setters below). We read a
     // line's text/color and re-apply them one slot down, then set line 0.
     FUN_FONTSTRING_SET_TEXT = 0x00771D80,         // __thiscall(fs, text, flag=0)
-    FUN_FONTSTRING_SET_COLOR = 0x0077F750,        // __thiscall(fs, colorBGRA*)
+    FUN_FONTSTRING_SET_COLOR = 0x0077F750,        // __thiscall(region, colorBGRA*) — generic region color setter (fontstrings + textures)
+    // Generic region color GETTER — `void __thiscall(region, uint32* outBGRA)`,
+    // writes the packed {b,g,r,a} (0xFFFFFFFF when the region has no explicit
+    // color). The read half of Texture:GetVertexColor (FUN_0079aa50); paired
+    // with FUN_FONTSTRING_SET_COLOR above. Backs EditBox:GetHighlightColor.
+    FUN_REGION_GET_COLOR = 0x0077F8C0,
     OFF_FONTSTRING_TEXT = 0xF0,                   // char* — current text buffer
     OFF_FONTSTRING_COLOR_PTR = 0xB8,              // ptr → 4-byte {b,g,r,a} color storage
     // A line's FontString is only positioned once shown: set the desired
@@ -249,20 +451,383 @@ enum Offsets {
     OFF_FONTSTRING_FONT_HOLDER = 0xCC,            // font-reference sub-object (SetFont `this`)
     OFF_FONTSTRING_FONT_OBJECT = 0xD0,            // font object pointer (holder + 4)
     OFF_REGION_ANCHOR = 0x24,                     // LayoutFrame anchor sub-object (SetPoint `this` / relativeTo base)
+
+    // --- GetPoint dangling-anchor guard (Frame::GetPointGuard) ---
+    // `Script_GetPoint` walks a region's 9 anchor-node slots at
+    // region+0x28. Each node with vtable VAR_ANCHOR_VTABLE_WITH_RELATIVE
+    // carries a RAW `relativeTo` pointer at +0x0C (the anchor target's
+    // LayoutFrame inner = target CFrame base + OFF_REGION_ANCHOR). When the
+    // target frame is freed the pointer is never cleared; GetPoint then does
+    // `MOV EAX,[relativeTo-0x24+4]` at 0x007A2452 → ERROR #132. The rel-less
+    // anchor node type (vtable 0x0081C42C, 12 bytes) has NO relativeTo field
+    // and its readers never deref one, so only 0x44C nodes can dangle.
+    FUN_GET_POINT = 0x007A2340,                   // engine Script_GetPoint (Region registry idx 15); delegate target
+    FUN_REGION_CLEAR_POINT_BY_RELATIVE = 0x00767E70, // __thiscall(region+OFF_REGION_ANCHOR, relativeTo, doRelayout): frees+NULLs every anchor node on this region whose GetRelativeTo()==relativeTo (pointer compare, never derefs the target). The engine's own "my anchor target was removed" cleanup — the one NOT called on target destruction, which is the bug.
+    OFF_REGION_ANCHOR_ARRAY = 0x28,               // region base + 0x28 = anchor-node slot[0] (= OFF_REGION_ANCHOR + 4)
+    REGION_ANCHOR_SLOT_COUNT = 9,                 // one slot per FRAMEPOINT_* enum (0..8)
+    OFF_ANCHOR_NODE_RELATIVE_TO = 0x0C,           // raw relativeTo ptr within a 0x44C anchor node
+    VAR_ANCHOR_VTABLE_WITH_RELATIVE = 0x0081C44C, // .rdata vtable of anchor nodes that carry a relativeTo (vs rel-less 0x0081C42C)
+
     DRAWLAYER_ARTWORK = 2,
     FRAMEPOINT_TOPLEFT = 0,
+    FRAMEPOINT_TOPRIGHT = 2,
     FRAMEPOINT_LEFT = 3,
     FRAMEPOINT_RIGHT = 5,
     FRAMEPOINT_BOTTOMLEFT = 6,
+    FRAMEPOINT_BOTTOMRIGHT = 8,
 
     // FUN_REGION_SET_POINT stores offsets in *internal* coordinates, not
     // pixels. Script_SetPoint converts: `internal = pixel * [0x00832A44] /
     // ([0x00832A4C] * 1024)` (FUN_0041ae60's factor × input ÷
     // (FUN_0041ad70's return × DAT_007ffd68)). Both globals are runtime
     // UI-scale floats; passing raw pixels makes offsets ~1000× too large.
+    // The REVERSE conversion (internal → UI pixels) is what the Script_*
+    // measure getters push: Script_GetStringWidth (0x0079E510) — and our
+    // GetStringHeight backport — compute `px = internal * [0x00832A4C] *
+    // 1024 / [0x00832A44]` (FUN_0041AE40(FUN_0041AD70() × DAT_007FFD68 × v)).
     VAR_UI_COORD_SCALE_MUL = 0x00832A44,   // float numerator
     VAR_UI_COORD_SCALE_DIV = 0x00832A4C,   // float denominator base
     UI_COORD_SCALE_UNIT = 1024,            // DAT_007ffd68
+    // Semantically, [0x832A44] is the SCREEN WIDTH IN ANCHOR UNITS (the
+    // full-screen x extent of the internal layout space) — that's why it's
+    // the px→internal numerator above — and [0x832A48] is its Y sibling
+    // (screen HEIGHT in anchor units). Verified via the gxu text position
+    // converter FUN_0041ade0: block/node positions are stored NORMALIZED,
+    // x = anchor/[0x832A44], y = anchor/[0x832A48] (the y global was
+    // previously unmapped — the x/y pair sits at +0x00/+0x04, the SetPoint
+    // denominator base at +0x08).
+    VAR_UI_ANCHOR_SCREEN_H = 0x00832A48,
+    // gxu text-raster dimensions — INT dwords holding the live render-target
+    // size in PIXELS ({0,0,640,480} fallback), written by FUN_005c2b50 from
+    // the render-target rect (FUN_0058a240) whenever it changes; every font
+    // page re-rasterizes on change (the FUN_005ca6f0 walk). These are the
+    // normalized→pen multipliers: the origin finalize FUN_005cdf70 computes
+    // node origin (+0x70/+0x74) = round(normalizedPos × [raster]) after
+    // folding the justify shift (right: +widthLimit, centre: +half) and
+    // vertical align; the emitter's font-height helper FUN_005C6FA0 is
+    // round(fontSize × [VAR_TEXT_RASTER_Y]) the same way (x sibling
+    // FUN_005C7010 uses _X). So TEXT PEN UNITS ARE RENDER-TARGET PIXELS, and
+    // pen-per-anchor = [VAR_TEXT_RASTER_*] / [VAR_UI_ANCHOR_SCREEN_*] per
+    // axis — the exact conversion Text::InlineTexture's flush uses to place
+    // icon regions (verified against a live probe: rasterX/anchorW matched
+    // the measured origin÷rect-edge quotient to four digits).
+    VAR_TEXT_RASTER_Y = 0x00C2B9A0,
+    VAR_TEXT_RASTER_X = 0x00C2B9A4,
+    // gxu text-node invalidate/reset — `__fastcall(node)`. Zeroes the
+    // built-line count (+0x9C, the draw builder's early-out gate), resets the
+    // link-rect state (+0x80/+0x90) and wrap cache (+0x68/+0x6C), and frees
+    // all 8 page buffers — the next paint's pre-pass re-runs the builder, so
+    // the emitter re-bakes the node from scratch. This is what the node
+    // colour setter FUN_005CCB40 calls on a colour change for accumulation
+    // (bit-3-clear) nodes; InlineTexture's flush calls it for a SEGMENTED
+    // bit-3 node whose BASE colour RGB changed (glue AddonList toggle), since
+    // baked per-glyph RGB can't be patched in place (|c runs own theirs).
+    FUN_TEXT_NODE_INVALIDATE = 0x005CDEF0,
+    // gxu font-face flags word. Bit 0 (0x1) = thin outline, bit 3 (0x8) =
+    // thick outline: the emitter's prologue (FUN_005CCBE0) reads
+    // *(fontFace+0x180) and grows the line height by [FLOAT_OUTLINE_EXTRA_*]
+    // pen px for outlined faces, because outline INK extends past the glyph
+    // metrics; the rebuild/color-sync shadow paths test the same bits. The
+    // inline-texture lead/trail pads read the same flags so an icon clears an
+    // outlined neighbour's ink (the coin-into-digits clip).
+    OFF_FONTFACE_FLAGS = 0x180,
+    // The engine's outline ink allowance, .rdata float constants (4.0 / 2.0
+    // pen px total, i.e. ~2 / ~1 px per side) — the exact values the emitter
+    // adds to line height for bit 3 / bit 0 outlined faces. Read live so we
+    // stay bit-identical with the engine's own compensation. The 2.0 constant
+    // double-duties as the MINIMUM font size numerator in the node ctor
+    // (FUN_005cd6d0 / FUN_005ccb80: fontSize floored at [0x801628]/rasterY =
+    // 2 pen px).
+    FLOAT_OUTLINE_EXTRA_THICK = 0x0080306C,
+    FLOAT_OUTLINE_EXTRA_THIN = 0x00801628,
+    // The node's BUILT line count — incremented once per emitted wrapped line
+    // by the draw builder (FUN_005CDC20, including the \n break case) and the
+    // builder's own early-out gate (`if (node+0x9C != 0) return`); zeroed by
+    // the node invalidate (FUN_TEXT_NODE_INVALIDATE). The render truth for
+    // FontString:GetNumLines once the node has painted.
+    OFF_TEXT_NODE_BUILT_LINES = 0x9C,
+    // Wrap break-array computer: `__thiscall(fs, const char *text, float
+    // wrapWidth /*fs-internal units*/, int *outBreaks, int cap)` → segment
+    // count (byte offsets into text, [0]=0). Routes through FUN_005C2430 →
+    // the wrap stepper, so it is icon-aware via the stepper co-hook. Verified
+    // from the GameTooltip auto-size (FUN_00530640), which fills a 20-entry
+    // array and measures each segment via FUN_FONTSTRING_MEASURE_SUBSTRING.
+    FUN_FONTSTRING_BREAK_ARRAY = 0x00772B60,
+    // Substring width measure: `__thiscall(fs, const char *text, int len)` →
+    // ST0 (len 0 = strlen). Same measure-core call + `out / fs+0x7C` shape as
+    // GetStringWidthInternal, but for an ARBITRARY string in the fs's font —
+    // no cache. Callers (xrefs): the GameTooltip auto-size FUN_00530640, which
+    // measures each WRAPPED SEGMENT of a wrap-enabled line between the
+    // FUN_00772B60 break positions and takes the max as the tooltip width —
+    // the icon-relevant consumer (an earlier note claimed nothing consumed
+    // this function; the xref list refutes it) — plus the editbox
+    // caret/selection cluster (FUN_0077DA80, FUN_0077DE70, FUN_0077D0D0),
+    // which must stay raw and is excluded by the editable/focused-buffer
+    // gates in the co-hook.
+    FUN_FONTSTRING_MEASURE_SUBSTRING = 0x00772AE0,
+    // FontString → gxu face resolution, for fs-level (measure-hook) callers
+    // that need the face the RENDER will use. The rebuild (FUN_007724a0)
+    // passes [fs+0xE0] (the font HANDLE) to the block creator FUN_0044d420,
+    // which hands [handle+0x20] to FUN_005c1c30 → FUN_005cd6d0, which stores
+    // it at node+0x44 — the emitter's face (`this` for every glyph call, and
+    // the +0x180 outline-flags carrier). So face = [[fs+0xE0]+0x20].
+    OFF_FONTSTRING_FONT_HANDLE = 0xE0,
+    OFF_FONT_HANDLE_FACE = 0x20,
+
+    // CSimpleTexture (`Texture` widget) creation + operate primitives, used by
+    // Text::InlineTexturePool to render inline |T icons as engine-owned,
+    // managed-pool, resident-kept textures (the residency fix — see
+    // docs/InlineTextureResidency.md). Mirrors Script_CreateTexture
+    // (FUN_00773A20) and the Texture frame-method handlers; the sibling of the
+    // CSimpleFontString path above. Same FUN_REGION_POOL_ALLOC / SetPoint /
+    // Show / Hide / SetColor (FUN_FONTSTRING_SET_COLOR) as the FontString pool.
+    VAR_SIMPLETEXTURE_POOL = 0x00CF4CE0,      // &DAT_00cf4ce0 CSimpleTexture free-list pool (`this`)
+    VAR_SIMPLETEXTURE_CLASS_TAG = 0x00846588, // ".?AVCSimpleTexture@@" (alloc debug tag)
+    FUN_SIMPLETEXTURE_CTOR = 0x0076FC40,      // __thiscall(mem, parent, layer, sublayer) -> tex
+    // --- MaskTexture object API (frame:CreateMaskTexture / Texture:AddMaskTexture) ---
+    // CreateMaskTexture mints its mask region by calling the engine's own
+    // Script_CreateTexture (reads (frame,name,layer,template) off the Lua stack and
+    // pushes the new CSimpleTexture), then hides it — the mask is a source, never drawn.
+    // The draw hook reads the mask's HTEXTURE (OFF_SIMPLETEXTURE_HTEXTURE, +0xCC, set
+    // by SetTexture and valid while hidden) + its rect (FUN_REGION_GET_RECT); the
+    // +0xC4 shown flag is OFF_REGION_DESIRED_SHOWN (defined below).
+    FUN_SCRIPT_CREATE_TEXTURE = 0x00773A20,   // Script frame:CreateTexture, __fastcall(L)->int
+    // CSimpleTexture::SetTexture(path). Loads via FUN_00449D90, stores the owned
+    // HTEXTURE at +0xCC (releases the old via DecRef FUN_0041AED0), marks dirty.
+    // `__thiscall(tex, path, 0, *VAR_TEXTURE_BLEND_DEFAULT, 0) -> u32`. The
+    // ownership + engine batched region-draw is the residency win. Same-path
+    // early-out makes pooled reuse cheap.
+    FUN_SIMPLETEXTURE_SET_TEXTURE = 0x00770200,
+    // Script_Texture_SetTexture — the Lua `texture:SetTexture(...)` handler. Its
+    // NUMERIC branch (arg 2 a number) clamps r/g/b/a to [0,1] and fills the
+    // texture with a solid colour via FUN_00770360; its string branch loads a
+    // path through FUN_00770200 above. texture/ColorTexture.cpp aliases this whole
+    // handler as the 7.0 `SetColorTexture` (which IS exactly the numeric form), so
+    // the clamp and opaque-alpha default come straight from the engine.
+    FUN_SCRIPT_TEXTURE_SET_TEXTURE = 0x0079BB40,
+    // Script_Texture_SetTexCoord — the Lua `texture:SetTexCoord(...)` handler
+    // (entry 17 of the Texture method batch at 0x0087C128). Takes the 4-arg
+    // (left, right, top, bottom) and 8-arg corner forms and writes through to
+    // FUN_SIMPLETEXTURE_SET_TEXCOORD below. texture/Atlas.cpp delegates to this
+    // handler rather than the native setter so an atlas set inherits the engine's
+    // own arg validation and both coordinate forms.
+    FUN_SCRIPT_TEXTURE_SET_TEXCOORD = 0x0079BEB0,
+    // `texture:GetTexCoord()` (entry 16 of the same batch). Always returns 8
+    // values — four (x, y) corner pairs read from region +0x104 in the order
+    // UL, LL, UR, LR. texture/Atlas.cpp co-hooks both this and the setter so an
+    // atlas'd texture's coordinates address the sprite rather than the file it
+    // sits in; the pair is the only place that mapping is applied.
+    FUN_SCRIPT_TEXTURE_GET_TEXCOORD = 0x0079BDF0,
+    // CSimpleTexture::SetTexCoord — `__thiscall(tex, float[4])`. Struct field
+    // order is {top, left, bottom, right} = {v0, u0, v1, u1} (verified from the
+    // SetTexCoord handler 0x0079BEB0's Lua-arg → struct mapping). Natural
+    // texcoords (no v-flip — the engine region path is top-left origin).
+    FUN_SIMPLETEXTURE_SET_TEXCOORD = 0x00770410,
+    OFF_SIMPLETEXTURE_HTEXTURE = 0xCC,        // owned HTEXTURE ref (diagnostic)
+    // The four drawn-quad corner POSITIONS: 4 vertices of {x, y, z} floats (0xC
+    // stride), order BL, TL, BR, TR (from FUN_REGION_STORE_CORNERS's writes). The
+    // region draw enqueue FUN_00772fd0 (0x00772fd0) hands region+0xD4 straight to
+    // the vertex batch as FOUR INDEPENDENT vertices — and region+0x104 as the
+    // matching 4 per-corner texcoords — never re-deriving an axis-aligned rect.
+    // So writing ROTATED x,y here draws a rotated quad with NO corner clipping
+    // (unlike 4.3.4's SetRotation, which rotates the texcoords instead). Used by
+    // texture/Rotation.cpp for Texture:SetRotation.
+    OFF_SIMPLETEXTURE_CORNERS = 0xD4,
+    // Region corner-store: `__thiscall(region, const float rect[4])` writes the
+    // drawn quad corners into region+0xD4..+0x100 from the rect ({yA,left,yB,right}
+    // screen px). The renderer only draws a region whose +0xD4 corners are
+    // populated (verified: the draw gate tests region+0xD4 != 0), and normally
+    // SetPoint→layout-resolve calls this. We call it directly to place an icon by
+    // its screen rect with NO anchors (anchoring 100+ textures/frame corrupts the
+    // UI-manager pending-layout list — the FUN_00765650 crash). Co-hooked by
+    // texture/Rotation.cpp, which re-applies rotation right after the engine
+    // restores the axis-aligned corners (layout resolve / SetTexCoord).
+    FUN_REGION_STORE_CORNERS = 0x007705B0,
+    // Texcoord crop applied to a {top,left,bottom,right} screen rect before the
+    // corner-store: shrinks right→left and bottom→top by the region's per-corner
+    // texcoord span (ABS of the +0x104 U/V differences). No-op for full 0..1
+    // texcoords. `__thiscall(region, float rect[4])`, rect in/out. The crop
+    // itself is unconditional; every engine call site gates it on
+    // OFF_REGION_TEXCOORD_MODIFIES_RECT below — with the flag clear (the
+    // default) a partial SetTexCoord draws at the region's FULL size, so
+    // callers replicating an engine store must apply the same gate.
+    FUN_REGION_TEXCOORD_CROP = 0x00770570,
+    // The SetTexCoordModifiesRect flag (int). Written from the Lua boolean by
+    // Script_SetTexCoordModifiesRect (0x0079C080, `piVar4[0x49]`), read back
+    // 1/nil by Script_GetTexCoordModifiesRect (0x0079C120). All three
+    // FUN_REGION_TEXCOORD_CROP call sites test it: the SetTexCoord writers
+    // (FUN_00770410 4-arg, FUN_007704C0 8-arg corner form) crop+store only
+    // when set, and the layout-resolve store path (FUN_00770670) crops when
+    // set / stores the raw anchor rect (+0x40..+0x4C) when clear. Zero by
+    // default (region ctor), so the crop never runs unless an addon opts in.
+    OFF_REGION_TEXCOORD_MODIFIES_RECT = 0x124,
+    // The region's pixel-shader slot (CGxShader*, 0 = fixed-function). This IS
+    // the engine's desaturation state: Script_SetDesaturated (0x0079C1E0)
+    // stores the UI Desaturate shader here via FUN_SIMPLETEXTURE_SET_SHADER,
+    // Script_IsDesaturated (0x0079C2C0) tests it != 0, the batch append
+    // FUN_00772FD0 copies it into the layer entry (+0x18), and the layer draw
+    // FUN_0076FB00 binds it per region with GxRs selector GXRS_PIXEL_SHADER.
+    // The region ctor FUN_0076FC40 zeroes it. texture/Desaturation.cpp selects
+    // its per-level shader objects through this slot — see the "Texture
+    // desaturation" block.
+    OFF_SIMPLETEXTURE_SHADER = 0x128,
+    // Get the region's resolved screen rect: `__thiscall(region+OFF_REGION_ANCHOR,
+    // float out[4]) -> int` (1 = valid, 0 = not laid out yet). Reads the anchor
+    // sub-object's +0x40..+0x4C = {top, left, bottom, right}, gated on the
+    // rect-valid bit [+0x3c]&1. This is the engine's own source for the corner
+    // rect (see FUN_00770410's SetTexCoord path); texture/Rotation.cpp reads it to
+    // rebuild axis-aligned corners before rotating.
+    FUN_REGION_GET_RECT = 0x00768320,
+    // __thiscall(region+OFF_REGION_ANCHOR) -> int (nonzero = layout dirty, needs a
+    // resolve). GetLeft gates its resolve on this. Paired with the flag-1 resolve
+    // below to read a hidden region's rect synchronously.
+    FUN_REGION_LAYOUT_DIRTY = 0x00768310,
+
+    // __thiscall(region+OFF_REGION_ANCHOR, int flag /*stack; pass 0*/) — force a
+    // synchronous layout resolve: recomputes the region's rect (+0x64) from its
+    // anchors right now, instead of waiting for the render's pending-layout pass.
+    // Verified from Show (FUN_0077FCB0 at 0x0077FCE1: PUSH 0; LEA ECX,[ESI+0x24];
+    // CALL). Load-bearing for tick-time icon placement: SetTexCoord
+    // (FUN_00770410) stores the DRAW CORNERS (+0xD4) from the rect as a side
+    // effect, so without a realize between SetPoint and SetTexCoord the corners
+    // are stored from the STALE pre-anchor rect — the region's rect then resolves
+    // correctly (diagnostics look perfect) but the renderer draws the corners,
+    // which stay zero/stale → invisible icons (and the old build's frozen
+    // top-left icons: corners stored from the zero rect at first apply).
+    FUN_REGION_LAYOUT_REALIZE = 0x00768060,
+
+    // CSimpleFontString::RebuildString — destroys the old gxu text node and
+    // creates the fresh one (FUN_0044d420), storing it at fs+0xF8. Gated on the
+    // fs dirty bit (+0x60 & 1), so it fires on TEXT CHANGES, not per frame.
+    // Co-hooked by Text::InlineTexture to map text node → owning fontstring —
+    // the key that lets inline-icon regions anchor to their owning line
+    // (1.12 chat lines ARE CSimpleFontStrings: the ScrollingMessageFrame's
+    // display refresh FUN_00788750 SetTexts/anchors/shows one fs per visible
+    // line — verified against the 4.3.4 CSimpleEmbeddedTexture model, which
+    // anchors its icon regions to the owning fontstring the same way).
+    FUN_FONTSTRING_REBUILD_STRING = 0x007724A0,
+    // fs+0xF8 holds an HTEXTBLOCK handle, NOT the node itself: FUN_0044d420
+    // allocates the 12-byte handle {vtbl, refcount, node}, FUN_005c1c30 writes
+    // the created text node into handle+8, and FUN_0041af10 AddRefs and returns
+    // the handle. The layout's node (what the emitter/paint hooks see) is
+    // therefore *( *(fs+0xF8) + 8 ).
+    OFF_FONTSTRING_TEXT_BLOCK = 0xF8, // HTEXTBLOCK handle (0 when dirty/empty)
+    // CSimpleFontString live text color: count at +0xB4, array pointer at +0xB8
+    // (uint32 BGRA per slot; slot 0 = the base color, alpha = byte 3; a parallel
+    // per-glyph alpha-byte array hangs off +0xA8/+0xA4). Written by the fs
+    // SetColor (FUN_FONTSTRING_SET_COLOR 0x0077F750: stores the dword at
+    // (*(u32**)(fs+0xB8))[0] + the alpha byte at (*(u8**)(fs+0xA8))[0], then
+    // fires the color-update vmethod +0x20). Count 0 = never colored = default
+    // opaque white. THE CHAT-FADE SIGNAL: the ScrollingMessageFrame's fader
+    // (FUN_00788460, gated on the SetFading flag at smf+0x360; per-line state
+    // {rgba@+4, shown@+8, timeVisibleLeft@+0xC, fadeLeft@+0x10} in the
+    // stride-0x10 line array at smf+0x3A4) animates each visible line
+    // fontstring's alpha byte through this same SetColor every frame, then
+    // hides the fs at fade end. Text::InlineTexturePool mirrors this byte onto
+    // the line's icon regions each tick so inline icons fade with their line
+    // (regions parent to the CHAT FRAME, so the frame's own alpha byte —
+    // frame+0xC8, per Script_GetAlpha 0x00774DC0 — already modulates them via
+    // the engine's parent×region product; only the fs's own component needs
+    // mirroring).
+    OFF_FONTSTRING_COLOR_COUNT = 0xB4,
+    OFF_FONTSTRING_COLOR_ARRAY = 0xB8,
+    OFF_TEXTBLOCK_NODE = 0x8,         // the gxu text node inside the handle
+    // Byte of fontstring state flags; bit 1 = "text block needs rebuild".
+    // RebuildString (0x7724A0) gates on it at entry, releases the old block
+    // (+0xF8 = 0), and only CREATES a new one if the fs rect is resolved —
+    // a SetText during an unresolved rect leaves the fs blockless with the
+    // refcounted zombie node still painting. If the bit is also clear at that
+    // point, nothing ever rebuilds (the stuck-blockless state InlineTexture's
+    // flush nudges by re-setting this bit).
+    OFF_FONTSTRING_DIRTY_FLAGS = 0x60,
+    // The per-node draw builder: walks a node's wrapped lines and calls the
+    // glyph emitter (FUN_TEXT_EMITTER) once per line. Called from the paint's
+    // per-node pre-pass FUN_005cd6a0 (`__thiscall(node)`, no stack args). We
+    // co-hook it to stamp exact BUILD BOUNDARIES for the emitter's first-line
+    // detection — the old `text == node+text-ptr` heuristic silently failed on
+    // pfUI-processed chat lines (stale/preprocessed pointer), leaving inherited
+    // records on reused node addresses (ghost icons) or never clearing them.
+    FUN_TEXT_DRAW_BUILDER = 0x005CDC20,
+    // The gxu text-node FREE: unlinks the node from its layout lists and pushes
+    // it onto the node free list (DAT_00c2b98c) for reuse. Single caller —
+    // FUN_005c1d00, the HTEXTBLOCK handle release (handle vtbl 0x008026e4 dtor
+    // 0x0044D5C0 → 0x005c1d00 → here). This is the choke point where every
+    // text node dies and its address becomes reusable: InlineTexture hooks it
+    // to erase ALL per-node state exactly at death, making stale-record and
+    // stale-owner bugs (ghost icons, orphaned records) structurally impossible
+    // instead of heuristically guarded.
+    FUN_TEXT_NODE_FREE = 0x005CD950,
+    // Ensure a text node is laid out: `__fastcall(node)` -> FUN_005cd3f0 + the
+    // draw builder FUN_005CDC20 (runs the glyph emitter and finalizes the node
+    // origin +0x70/+0x74), then clears node+0xc0. Same "ensure built" the paint
+    // pass (FUN_005c8fe0) calls per node; safe to call directly (the builder
+    // re-lays the node — a clean node just re-emits the same glyphs). Verified
+    // callers: the paint pass and FUN_005cd4d0 (the width/resize helper).
+    // Text::InlineTexture drives it PRE-RENDER from the SMF-refresh early-apply
+    // so a chat line's icons are recorded before the frame draws.
+    FUN_TEXT_ENSURE_BUILT = 0x005CD6A0,
+
+    // CScrollingMessageFrame display refresh — `__thiscall(smf, int newestIdx)`.
+    // Rebuilds the visible line set bottom-up: per slot it SetTexts the line
+    // fontstring (FUN_00788af0 -> SetText FUN_00771d80 + enqueue-resolve
+    // FUN_007680e0 flag 1), (re)anchors newly-allocated lines, shows/hides by
+    // message. Every new message shifts the newest index, so EVERY visible slot
+    // is re-SetText'd -> its inline icons must be recomputed; the engine builds
+    // the line lazily at paint, so icons land one frame after the glyphs (the
+    // one-frame lag). Text::InlineTexture co-hooks this and, post-refresh,
+    // forces each icon-bearing line to resolve+build and applies its icon
+    // placement synchronously — pre-render (the refresh runs from the SMF's
+    // Lua/event-driven methods, never mid-render), so icons draw with their
+    // glyphs the same frame. Line-entry layout verified from the decompile:
+    // count@+0x3A0, stride-0x10 entry array@+0x3A4, entry+8 = the line fs.
+    FUN_SMF_DISPLAY_REFRESH = 0x00788750,
+    OFF_SMF_LINE_COUNT = 0x3A0,     // int: allocated visible-line count
+    OFF_SMF_LINE_ARRAY = 0x3A4,     // base of the stride-0x10 line-entry array
+    SMF_LINE_STRIDE = 0x10,         // per-line-entry stride
+    OFF_SMF_LINE_FONTSTRING = 0x8,  // entry+8 = the line's CSimpleFontString
+    // THE pen↔anchor unit bridge. RebuildString (0x7724A0) multiplies every
+    // text-unit quantity by region+0x7C when crossing into node creation:
+    // nodePos = inset×s + rect corner, nodeFontH = fontPx×s, spacing = +0xF4×s,
+    // and divides rect extents by s for the text-unit width/height. SetParent
+    // (FUN_0076AB10) propagates the parent's +0x7C down the frame tree — it's
+    // the per-object layout/UI-scale chain. This single scalar is what every
+    // earlier "derive the scale" attempt (13/16, ownerH/fontH) was guessing at.
+    OFF_LAYOUT_SCALE = 0x7C,          // float: anchor units per text/pen unit
+    OFF_FONTSTRING_INSET_X = 0x110,   // float, text units (RebuildString posX term)
+    OFF_FONTSTRING_INSET_Y = 0x114,   // float, text units (RebuildString posY term)
+    // CSimpleRegion::SetParentAndLayer — __thiscall(region, parentFrame, layer,
+    // show). Handles old-parent unlink + new-parent region-registry insert +
+    // conditional Show. Verified from the region base ctor FUN_0077F640 and the
+    // message frame's per-line setup (FUN_00788750 calls it with (frame, 2, 1)).
+    FUN_REGION_SET_PARENT_AND_LAYER = 0x0077FD10,
+    OFF_REGION_PARENT = 0x9C,         // region's parent frame ptr (read by Show's gates)
+    OFF_REGION_DESIRED_SHOWN = 0xC4,  // Show (FUN_0077FCB0) NO-OPS unless this is set;
+                                      // engine callers always write it before show/hide
+    OFF_REGION_ACTUALLY_SHOWN = 0xC8, // 1 after Show completed (the realize latch)
+
+    // Owning-frame recovery for the inline-icon pool (the 3.3.5 ownership model,
+    // no overlay). Chat renders through the strata walker FUN_007657d0 →
+    // per-frame draw-list rebuild FUN_00765920 → per-layer render FUN_0076FB00 →
+    // text paint (NOT through the child-frame render FUN_0076B3F0). So
+    // Text::InlineTexturePool co-hooks the two below:
+    //   • FUN_FRAME_DRAWLIST_REBUILD — `__fastcall(frame)`, receives the frame
+    //     cleanly and owns its 5 inline draw layers at frame + OFF_FRAME_LAYER_BASE
+    //     + i*FRAME_LAYER_STRIDE. We record layer→frame so the layer-render hook
+    //     can recover the owning frame with no offset-scan / vtable guessing.
+    //   • FUN_FRAME_LAYER_RENDER — `__fastcall(layer)`, the per-layer paint that
+    //     directly wraps the chat text paint. We bracket the icon pool's pass here
+    //     (the flush runs nested) and look the frame up in the layer→frame map.
+    FUN_FRAME_DRAWLIST_REBUILD = 0x00765920,
+    FUN_FRAME_LAYER_RENDER = 0x0076FB00,
+    OFF_FRAME_LAYER_BASE = 0x1C,   // first inline draw layer, region-relative
+    FRAME_LAYER_STRIDE = 0x30,     // per-layer stride
+    FRAME_LAYER_COUNT = 5,         // BACKGROUND..OVERLAY
+    // Resolved on-screen rect of a region: 4 floats at regionBase+0x64 (=
+    // LayoutFrame+0x40), in GxU SCREEN PIXELS — verified: FUN_00770670 reads
+    // them and FUN_007705b0 stores them straight as GxU vertex corners. Layout is
+    // {yA, left, yB, right} (x at [1]/[3], y at [0]/[2]); use min/max to get
+    // left/top without pinning which y index is top.
+    OFF_REGION_RECT = 0x64,
 
     // "Currently displayed thing" state fields on a GameTooltip frame
     // instance. Each Set* path writes one of these (and zero or two
@@ -375,8 +940,10 @@ enum Offsets {
     // `Script_EquipCursorItem` (0x00489660) uses after the cursor's
     // source location has been resolved. Sends opcode 0x10D
     // (CMSG_SWAP_INV_ITEM) for same-container swaps or 0x10C
-    // (CMSG_AUTOEQUIP_ITEM) for cross-container, then runs the
-    // packet through the engine's own send pipeline at FUN_005AB630.
+    // (CMSG_SWAP_ITEM) for cross-container, then runs the packet
+    // through the engine's own send pipeline at FUN_005AB630.
+    // (0x10C is SWAP_ITEM; CMSG_AUTOEQUIP_ITEM is 0x10A and belongs to
+    // the cursor/equip builder FUN_005E1480, not this one.)
     //
     // Signature:
     //   void __thiscall(
@@ -386,7 +953,28 @@ enum Offsets {
     //     u32 srcLinearSlot,
     //     u32 dstContainerGuidLo, u32 dstContainerGuidHi,
     //     u32 dstLinearSlot,
-    //     int flag);   // 0 = normal path
+    //     int flag);
+    //
+    // `flag` IS NOT COSMETIC — it gates a pre-send confirmation check,
+    // and with 0 this function can decide to send NOTHING AT ALL.
+    // Before building the packet, and only when the DESTINATION is not
+    // an equipment or bag-container slot, it resolves the item being
+    // moved (the destination's item when the source is an equipment
+    // slot, otherwise the source's) and then either:
+    //   - stashes the parameters and returns, when that item is not in
+    //     the item cache yet; or
+    //   - stashes the parameters, fires event 0x120 (the bind
+    //     confirmation dialog) and returns, when the item's `m_bonding`
+    //     (record +0x194) is 2 (BIND_WHEN_EQUIPPED) and `FUN_005EA930`
+    //     reports this character could equip it.
+    // Both paths send no packet and report nothing, since the function
+    // returns void — so a caller that moves a Bind-on-Equip item it
+    // could wear just silently does not move it.
+    //
+    // Passing 1 skips the gate, which is what the engine itself does
+    // when it re-issues a swap after the player accepts the dialog. That
+    // is correct for any caller whose two endpoints are both bag content
+    // slots, since nothing there can bind an item.
     //
     // Linear-slot encoding for sources/dests in player invMgr:
     //   0..18  paperdoll (1-based slot - 1)
@@ -428,6 +1016,84 @@ enum Offsets {
     //     u32 dstLinearSlot,                    // only low byte
     //     u32 count);                           // only low byte
     FUN_INVENTORY_SPLIT = 0x005E1210,
+
+    // Third sibling in the same packet-builder family — `__thiscall`,
+    // same shared bag-byte converter (`FUN_005E13B0`), same send
+    // pipeline (`FUN_005AB630`). Builds `CMSG_AUTOSTORE_BAG_ITEM`
+    // (opcode 0x10B): "take this item and put it wherever it belongs
+    // in that container", with the DESTINATION SLOT CHOSEN BY THE
+    // SERVER. Wire format:
+    //   [0x10B, srcBag, srcLinearSlot, dstBag]
+    //
+    // Signature — EIGHT stack args, `RET 0x20`. The count is from the
+    // RET, not from a decompiler parameter list: the last slot
+    // (`EBP+0x24`) is never READ by the body, but it IS popped, so a
+    // 7-arg declaration leaves the callee popping four bytes too many
+    // and ESP walks on every call. Trailing-ignored-arg is this
+    // family's habit — it is where swap keeps its `flag` and split its
+    // `count` — but the family is NOT uniform in arity: those two take
+    // nine (`RET 0x24`), this one eight.
+    //   void __thiscall(
+    //     CGPlayer *this,
+    //     u32 unused1, u32 unused2,             // EBP+0x08/+0x0C, unread
+    //     u32 srcContainerLo, u32 srcContainerHi,
+    //     u32 srcLinearSlot,                    // only low byte hits the wire
+    //     u32 dstContainerLo, u32 dstContainerHi,
+    //     u32 unused3);                         // EBP+0x24, unread but popped
+    //
+    // Note there is no dst slot argument at all — that is the point of
+    // the opcode. Server-side (`HandleAutoStoreBagItemOpcode`) it runs
+    // `CanStoreItem(dstBag, NULL_SLOT, …)`, which is a TWO-PASS search:
+    // first "merge into existing non-full stacks of this item" (filling
+    // a position/count vector, so one stack can be distributed across
+    // several destinations), then "find a free slot" for whatever count
+    // is left. So this single packet performs partial-stack
+    // consolidation with no stack-size lookup on our side at all.
+    //
+    // Note the value in that is NOT that the client's stack size could
+    // be wrong: 1.12 has no item DBC, so stack size arrives from the
+    // server and is cached in itemcache.wdb, and the client's copy
+    // normally agrees by construction. The value is availability —
+    // `C_Item.GetItemMaxStackSizeByID` is nil until an item's data has
+    // arrived, so anything that sizes stacks first has a cold-cache
+    // hole, and the server never needs to size them.
+    //
+    // The converter returns `0xFF` for any GUID absent from the
+    // player's invMgr container array, and the player's own GUID is
+    // absent — so passing the PLAYER as the destination sends
+    // `dstBag = 0xFF` (INVENTORY_SLOT_BAG_0), which the server reads as
+    // "search every bag". The builder guards that case: a converted
+    // `0xFF` is only allowed through when the destination GUID really is
+    // the player's, otherwise it drops the send silently. Consequence:
+    // the backpack is not separately addressable as a destination (it
+    // IS the player container), so bagID 0 means "anywhere it fits".
+    FUN_INVENTORY_AUTOSTORE = 0x005E12E0,
+
+    // Bank counterpart — `CMSG_AUTOSTORE_BANK_ITEM` (opcode 0x282).
+    // THREE stack args, `RET 0xC`. Wire: [0x282, srcBag, srcSlot].
+    //   void __thiscall(
+    //     CGPlayer *this,
+    //     u32 srcContainerLo, u32 srcContainerHi,
+    //     u32 srcLinearSlot);                   // only low byte hits the wire
+    //
+    // No destination of any kind, because the server DERIVES THE
+    // DIRECTION FROM THE SOURCE (`HandleAutoStoreBankItemOpcode`):
+    // a bank source runs `CanStoreItem(NULL_BAG, NULL_SLOT, …)` and
+    // lands in the inventory; an inventory source runs
+    // `CanBankItem(NULL_BAG, NULL_SLOT, …)` and lands in the bank.
+    // Both are the same merge-into-existing-stacks-then-free-slot
+    // search as 0x10B, just aimed at the other side.
+    //
+    // So this opcode moves an item ACROSS the inventory/bank boundary
+    // and cannot move one within its own side. Bank-internal
+    // consolidation is not expressible through autostore at all — it
+    // needs per-pair moves (`FUN_INVENTORY_SPLIT` / `_SWAP`).
+    //
+    // Unlike its siblings this one validates the source itself before
+    // sending: resolves the container by GUID (`FUN_00468460` with
+    // typeMask 1), bounds-checks the slot against the container's item
+    // array, and bails when the GUID in that slot is zero.
+    FUN_INVENTORY_AUTOSTORE_BANK = 0x005E18F0,
 
     // Registers a single global Lua function. __fastcall(name, func).
     FUN_FRAMESCRIPT_REGISTER_FUNCTION = 0x00704120,
@@ -479,6 +1145,42 @@ enum Offsets {
     FUN_FIND_CVAR = 0x0063DEC0,
     OFF_CVAR_VALUE_STR = 0x20,
 
+    // The config filename, as an immediate operand. Boot calls
+    // `FUN_0063D380("Config.wtf")` from `FUN_00402350` at `0x00402370`
+    // (`B9 80 E5 82 00` = `MOV ECX, 0x0082E580`), and that function keeps the
+    // pointer at `VAR_CONFIG_FILENAME_PTR`, which then drives BOTH sides:
+    //   load — `0x0063D428`: `MOV ECX,[0x00C4EDD4]; CALL 0x0063D820`
+    //   save — `FUN_0063D980` builds `"WTF\"` + the same pointer
+    // So one pointer names the file for reading and writing, and swapping it
+    // redirects both consistently. This constant is the 4-byte OPERAND (the
+    // instruction VA + 1), which `Config::FileSwitch` overwrites with its own
+    // string to implement the `-config` switch.
+    //
+    // It is patched rather than hooked because the call happens during boot,
+    // BEFORE VanillaFixes calls our `Load` export — VF hooks GetCPUFrequency
+    // (`0x0042C060`), reached via `FUN_00641260` from the `FUN_0063A230()`
+    // that `FUN_00402350` runs several calls AFTER the config is already read.
+    // Our DllMain does run in time (VF injects every dlls.txt DLL while the
+    // process is still CREATE_SUSPENDED, resuming only afterwards), and a
+    // 4-byte store needs no trampoline.
+    PATCH_CONFIG_FILENAME_PTR = 0x00402371,
+    // Where `FUN_0063D380` stores that pointer. Read by the loader call above
+    // and by the save.
+    VAR_CONFIG_FILENAME_PTR = 0x00C4EDD4,
+    // The config writer, `"WTF\" + [VAR_CONFIG_FILENAME_PTR]`. `int(void)`
+    // (decompiled). Returns 1 at once unless VAR_CVAR_CONFIG_DIRTY is set;
+    // otherwise clears it and writes `SET name "value"` for every cvar with
+    // CVAR_FLAG_ARCHIVE, taking the value from OFF_CVAR_STAGED_STR, else
+    // OFF_CVAR_VALUE_STR, else OFF_CVAR_DEFAULT_STR, and skipping any that
+    // equals the default. Called from the /reload + logout teardown
+    // FUN_00490BD0, from FUN_0046B500 (glue), and from the cvar shutdown
+    // FUN_0063DAF0 — cold paths only.
+    FUN_CVAR_CONFIG_WRITE = 0x0063D980,
+    // u8 "config needs saving". Set by the inner setter FUN_0063E0B0 only when
+    // its last argument (a6) is nonzero, and by the staged-value path in
+    // FUN_SET_CVAR_VALUE; cleared by FUN_CVAR_CONFIG_WRITE.
+    VAR_CVAR_CONFIG_DIRTY = 0x00C4EDD8,
+
     // Internal CVar registrar — what `Script_RegisterCVar` calls after a
     // `FindCVar` miss (the call at `0x00488B8A`). `__fastcall`; ECX=name,
     // EDX is a second string slot the script path leaves 0, then six
@@ -498,6 +1200,53 @@ enum Offsets {
     FUN_SET_CVAR_VALUE = 0x0063DF50,
     // CVar struct fields (beyond the value string at +0x20 above).
     OFF_CVAR_FLAGS = 0x1C,
+    // Hash mask of the cvar registry, and its initialised/not sentinel. Every
+    // lookup gates on it (`if (mask == 0xFFFFFFFF) return 0`) and the registrar
+    // builds the table on first use when it sees the sentinel, so a value other
+    // than 0xFFFFFFFF means at least one cvar has been registered — the closest
+    // thing this client has to "the cvar system is up".
+    VAR_CVAR_HASH_MASK = 0x00C4EDB8,
+    CVAR_HASH_MASK_UNINITIALIZED = 0xFFFFFFFF,
+    // The default value, kept alongside the live one at OFF_CVAR_VALUE_STR.
+    // `cvarlist` (FUN_0063D6F0) compares the two and appends "(default: %s)"
+    // when they differ, which is what identifies each; +0x34 is the reset
+    // value it prints the same way, and +0x38 holds a staged value (below).
+    OFF_CVAR_DEFAULT_STR = 0x30,
+    // The staged value (CVAR_FLAG_STAGED below). FUN_CVAR_CONFIG_WRITE prefers
+    // it over the live value when non-null.
+    OFF_CVAR_STAGED_STR = 0x38,
+    // Flag bits within OFF_CVAR_FLAGS, each from the code that acts on it:
+    //   0x1  archive — the registrar forces it on, and the config writer
+    //        (FUN_0063D980) skips any cvar without it.
+    //   0x2  staged — FUN_SET_CVAR_VALUE stores the new value at +0x38 and
+    //        marks the config dirty INSTEAD of applying it, so the change
+    //        lands on a later run rather than now.
+    //   0x4  read only — Script_SetCVar (FUN_00488C10) tests this before
+    //        doing anything else and raises `"%s" is read only`.
+    //   0x80000000  visible to Lua. FUN_FIND_CVAR rejects any cvar without it
+    //        (`if (-1 < (int)flags) return 0` — the flags read as SIGNED), and
+    //        GetCVar / SetCVar / C_CVar.* all go through that lookup, so a cvar
+    //        missing this bit cannot be reached from Lua at all. It is set when
+    //        the registrar's `registerConsole` argument is 0.
+    //
+    // That last bit is how the engine handles a Config.wtf line it does not
+    // recognise. The config loader FUN_0063D820 runs each `SET` line as a
+    // console command, and the `set` handler FUN_0063D500 looks the name up
+    // with FUN_0063DE30 — the SAME hash walk minus the bit-31 test — and
+    // registers a new cvar with registerConsole = 1 when it finds nothing —
+    // with flags 0, which the registrar then ORs the archive bit into, so the
+    // config writer saves it straight back out.
+    //
+    // So ANY line left in Config.wtf becomes a cvar on the next boot, whether
+    // or not the client implements a setting by that name: it is preserved
+    // across sessions and stays writable from the console, while being
+    // invisible to Lua. realmlist.wtf runs through the same `set` path, so a
+    // line there materialises in Config.wtf the same way. Such a cvar appears
+    // in the console command list and returns nil from every Lua cvar getter,
+    // which is consistent rather than a gap.
+    CVAR_FLAG_ARCHIVE = 0x1,
+    CVAR_FLAG_STAGED = 0x2,
+    CVAR_FLAG_READ_ONLY = 0x4,
     OFF_CVAR_CALLBACK = 0xBC,
     OFF_CVAR_USERDATA = 0xC0,
     // The categoryId the script path passes as the registrar's 6th stack
@@ -540,6 +1289,24 @@ enum Offsets {
     // GUID we already have (e.g. a totem creature). NOTE: reads `guid[0]`
     // (lo) and `guid[1]` (hi) through the pointer.
     FUN_TARGET_BY_GUID = 0x00489A40,
+
+    // The engine's find-a-unit-by-name search, behind `TargetByName`,
+    // `AssistByName` and `FollowByName`.
+    //   `uint64_t __fastcall(const char *name /*ecx*/, uint32_t typeMask /*edx*/,
+    //                        int mode, int exactMatch, float maxDistance)`
+    // Walks party, then raid, then every object, and returns the best GUID
+    // (0 = none). `typeMask` is the object typemask the candidates are
+    // resolved against: 8 (unit, what `TargetByName` passes) or 0x10 (player,
+    // what assist and follow pass). `mode` selects which candidate sets run
+    // (1 skips the party/raid pre-pass, 3 skips the raid one); target and
+    // assist pass 0, follow passes 2. `maxDistance` is a float bit pattern —
+    // the callers all pass 0x7F7FFFFF (FLT_MAX).
+    //
+    // `exactMatch` picks the rule in the per-candidate predicate
+    // `FUN_00493C60`: clear takes the longest case-insensitive PREFIX match,
+    // tied by distance; set requires a full match, and that hit stops the
+    // walk immediately.
+    FUN_UNIT_FIND_BY_NAME = 0x00493AA0,
 
     // Tab-targeting internals, shared with our backported TargetNearest* /
     // TargetDirection* family (`target/Nearest.cpp`).
@@ -602,7 +1369,18 @@ enum Offsets {
     // Don't use this from code paths that need to handle literal
     // character names — see CLAUDE.md "Resolving input to a name"
     // for the `lua_pcall(UnitName)` workaround. For pure unit-token
-    // input it's the right primitive.
+    // input it's the right primitive. To ask "is this string a unit
+    // token?" without eating that error, use
+    // `Unit::TokenResolve::IsUnitToken` (protected probe).
+    //
+    // Verified on the Turtle build: the unknown-token fallthrough
+    // (`jne` at 0x00515C14) is patched to `jmp 0x00D06670`, in the
+    // added `.tdata` section — that stub parses a `0x<16 hex>` GUID
+    // literal and otherwise re-enters the stock error tail at
+    // 0x00515C1A with ("Unknown unit name: %s", token). So the error
+    // is intact, AND this client resolves GUID literals natively,
+    // with no SuperWoW involved (relevant to `unit/TokenExtensions.cpp`,
+    // which adds that family itself only when SuperWoW is absent).
     FUN_TOKEN_TO_GUID = 0x00515970,
 
     // `__fastcall(const uint64_t *guid /*ecx*/, int *outCount /*edx*/) ->
@@ -683,6 +1461,19 @@ enum Offsets {
     OFF_UNIT_FIELD_CHARMEDBY = 0x10,
     OFF_UNIT_FIELD_CREATEDBY = 0x20,
 
+    // UNIT_CREATED_BY_SPELL — the spell that summoned this unit (descriptor
+    // byte +0x230, field index 0x8C). Set for every spell-summoned unit:
+    // totems (the shaman's totem-drop spell), pets, guardians, wild summons.
+    // Verified two ways: the unit-title builder `FUN_0052FD30` reads
+    // `[desc+0x230]` as the summoning spell (then switches on its Spell.dbc
+    // Effect[0] to pick "Guardian"/"Creation"), and the server stamps it
+    // with `m_spellInfo->Id` (tortoise-wow `EffectSummonTotem`/
+    // `EffectSummonGuardian`/`EffectSummon`). A broadcast field, so it's
+    // readable for any unit in range. `Unit::Pet` exposes it as
+    // `UnitCreatedBySpell`. NB: this is the SUMMONING spell — distinct from
+    // the spell a totem casts (that's server-side only, never broadcast).
+    OFF_UNIT_FIELD_CREATED_BY_SPELL = 0x230,
+
     // Pet-vs-minion discriminator for an owned unit: `int __fastcall(unit)`.
     // `0x00605570` is really the engine's **creature-type resolver** — it's
     // `Script_UnitCreatureType`'s (`0x0051A280`) inner helper and returns the
@@ -724,9 +1515,13 @@ enum Offsets {
     // (opcode 0x96 → FUN_0049D560) parses the wire data. Called with
     // the sender GUID as stack args 9 and 10 (lo, hi).
     //
-    // Calling convention: `__fastcall` with 10 args — ECX = sender
-    // name string, EDX = chat type, then 8 stack args ending in the
-    // GUID pair. Called from:
+    // Calling convention: `__fastcall`, `RET 0x28` — ECX = the MESSAGE
+    // text, EDX = chat type, then 10 stack args ending in the sender
+    // GUID pair (lo, hi). (ECX was previously mislabeled "sender name";
+    // verified from the call-site disassembly in FUN_0049D560 —
+    // `MOV ECX,[EBP-0x10]` is the raw/processed message. The message is
+    // copied into one buffer that feeds BOTH the chat frame and the
+    // say/yell bubble spawn FUN_00608AC0.) Called from:
     //   - FUN_0049D560 directly for live (non-throttled) chat
     //   - The pending-chat queue processor (`__AUPENDINGCHAT`) for
     //     messages buffered via FUN_0049CAE0 when the engine flag at
@@ -735,9 +1530,11 @@ enum Offsets {
     //     (system notifications, arena team membership changes, etc.)
     //     which pass 0 / NULL for the GUID args
     //
-    // Hooked by `Chat::CurrentGUID::ChatDispatch_h` to capture the
-    // GUID into a global for `GetCurrentChatGUID()` to read during an
-    // addon's CHAT_MSG_* OnEvent.
+    // Hooked (once) by `Chat::Dispatch`, which orchestrates the concerns
+    // sharing this choke point: `Chat::CurrentGUID` (publish the sender
+    // GUID for `GetCurrentChatGUID()`), `Chat::IconFilter` (strip
+    // player-injected `|T` icon spoofs from chat + speech bubbles), and
+    // `Chat::RaidMarkers` (expand `{rtN}`/`{skull}`/… into inline markers).
     FUN_CHAT_DISPATCH = 0x0049A870,
     // Per-player inventory manager lives at this offset on the player object.
     // +0x00 = u32 slot count (OFF_INVMGR_SLOT_COUNT), +0x04 = u64* GUID
@@ -818,6 +1615,17 @@ enum Offsets {
     // Lua inventory slot (GetInventoryItemLink etc.) = that + 1.
     OFF_DESC_PLAYER_EQUIP_FIRST = 0x4A8,
     DESC_PLAYER_EQUIP_SLOTS = 19,
+
+    // PLAYER_QUEST_LOG_1_1 — first of the 20 quest slots in the player
+    // descriptor, each 0xC bytes ({questID, ?, flags}). 0-based slot =
+    // (offset - 0x28) / 0xC, exactly what FUN_QUEST_SLOT_ANNOUNCE_OBSERVER
+    // computes from the field offset it was registered on. The CGPlayer
+    // sub-struct mirrors the same block at `[player + OFF_CGPLAYER_INFO] +
+    // OFF_CGPLAYER_INFO_QUEST_LIST` (same field and stride, different base —
+    // that's the copy FUN_QUEST_LOG_REBUILD walks).
+    OFF_DESC_PLAYER_QUEST_LOG_FIRST = 0x28,
+    DESC_PLAYER_QUEST_LOG_SLOT_SIZE = 0xC,
+
     DESC_OBSERVER_BANK_PLAYER = 4,
     DESC_OBSERVER_BANK_UNIT = 3, // CGUnit descriptor bank (FUN_0051bbb0's watch loop)
 
@@ -877,6 +1685,24 @@ enum Offsets {
     // descriptor at +0x114 — these are sibling classes under CGObject
     // with class-specific descriptor offsets.
     OFF_UNIT_DESCRIPTOR = 0x110,
+    // A creature's LIVE creature_template entry — in the INSTANCE BLOCK at
+    // `[unit + OFF_UNIT_GUID_PTR]` (GUID @+0x00, entry @+0x0C), the same
+    // shape as CGItem's block (GUID @+0x00, itemID @+0x0C). NOT the
+    // descriptor's OBJECT_FIELD_ENTRY slot (+0xC), which reads 0 for
+    // creatures exactly as it does for items (in-game probe: a Gordunni
+    // Mage-Lord read desc 0 / block 5239 / GUID bits 5236). This is what the
+    // engine keys the creature NAME query on: `FUN_00604600` resolves the unit
+    // and calls the creature cache with `[[unit+8] + 0xC]`; it is registered
+    // as the OBJECT-bank field-0xC handler (`FUN_006041f0` →
+    // `FUN_00468070(0, 0xC, 4, 0x604600)`). Do NOT derive a creature id from
+    // the GUID's entry bits instead: the server builds the GUID from the spawn
+    // row's FIRST creature id (`Creature::CreateFromProto` →
+    // `Object::_Create(guidlow, creature_id[0], …)`) and applies the rolled
+    // template with `UpdateEntry` → `SetEntry` only, so multi-id spawns (6,935
+    // Turtle rows) and respawn re-rolls put a different template behind the
+    // same GUID entry — Turtle's Gordunni rows are {5236, 5238, 5239} and
+    // every one of them carries 5236 in its GUID. Read by `Unit::CreatureID`.
+    OFF_UNIT_INSTANCE_ENTRY = 0x0C,
 
     // CGCreature client-side creature-data cache row. Populated by the
     // engine when an NPC GUID becomes visible (the same row the
@@ -1038,6 +1864,23 @@ enum Offsets {
     // any visible unit, not just the local player.
     OFF_UNIT_FIELD_CHANNEL_SPELL = 0x228,
 
+    // `UNIT_FIELD_BASEATTACKTIME` (main-hand @ field 0x78, off-hand @ field
+    // 0x79) and `UNIT_FIELD_RANGEDATTACKTIME` (field 0x7A) — byte offset =
+    // field index * 4. Verified two ways: (1) the in-binary UpdateField
+    // name table at VA `0x0083A6EC` gives field index 0x78 for the string
+    // "UNIT_FIELD_BASEATTACKTIME" and 0x7A for "UNIT_FIELD_RANGEDATTACKTIME";
+    // (2) `Script_UnitAttackSpeed` (`0x00518E50`) reads `[descriptor+0x1E0]`
+    // / `[+0x1E4]` and `Script_UnitRangedDamage` (`0x00518910`) reads
+    // `[descriptor+0x1E8]` — exactly `field*4`. These already carry the
+    // player's current (hasted) swing time; the server writes the modified
+    // value directly into the broadcast field rather than sending a
+    // separate haste multiplier, so there is no client-side way to recover
+    // the UNHASTED weapon delay from these — that has to come from the
+    // weapon's own `OFF_ITEMSTATS_DELAY`. Used by `Combat::Swing`.
+    OFF_UNIT_FIELD_BASEATTACKTIME = 0x1E0,     // main-hand swing time, ms
+    OFF_UNIT_FIELD_OFFHANDATTACKTIME = 0x1E4,  // off-hand swing time, ms
+    OFF_UNIT_FIELD_RANGEDATTACKTIME = 0x1E8,   // ranged swing time, ms
+
     // Aura arrays in the unit's `m_objectFields` descriptor (at `unit
     // + OFF_CGUNIT_OBJECT_FIELDS`). 48 total auras packed as two
     // parallel sub-ranges (32 buffs, then 16 debuffs) sharing the
@@ -1056,6 +1899,10 @@ enum Offsets {
     // derive `dispelName` from `Spell.dbc[+0x10]` (see
     // `OFF_SPELL_DISPEL_TYPE` below), not from the flags nibble.
     OFF_UNIT_FIELD_AURA = 0xA4,                // u32 spell ID per slot, 48 slots total
+    // UNIT_AURA event id for FUN_UNIT_EVENT_BROADCAST. The per-token unit
+    // events use field-index == event-id; the aura field is index 0x29
+    // (OFF_UNIT_FIELD_AURA 0xA4 >> 2), per Unit::TokenObserver's watched set.
+    UNIT_EVENT_UNIT_AURA = 0x29,
     OFF_UNIT_FIELD_AURAFLAGS = 0x164,          // 4 bits per aura, 2 per byte, covers all 48
     OFF_UNIT_FIELD_AURALEVELS = 0x17C,         // u8 caster level per aura, 48 bytes
     OFF_UNIT_FIELD_AURAAPPLICATIONS = 0x1AC,   // u8 (stacks-1) per aura, display value = byte+1
@@ -1063,6 +1910,30 @@ enum Offsets {
     UNIT_AURA_DEBUFF_COUNT = 16,               // slot range 32..47 (harmful)
     UNIT_AURA_TOTAL = 48,
     UNIT_AURA_VISIBLE_MASK = 0x0E,             // nibble mask used by the engine's visibility gate
+    // Per-slot flag nibble bits. THE MEANING OF 0x02/0x04/0x08 IS NOT THE SAME
+    // ON EVERY SERVER, so read them only through `Aura::Data::IsSlotHarmful`,
+    // which picks the right interpretation.
+    //
+    // Stock (vmangos SpellAuraDefines.h + SetAuraFlag, verified): the bits are
+    // CANCELABLE 0x01, EFF_INDEX_2 0x02, EFF_INDEX_1 0x04, EFF_INDEX_0 0x08 —
+    // one bit per spell effect index that carries an aura, plus cancelable for
+    // a positive aura. NO POLARITY IS ENCODED. Polarity comes from the slot
+    // range instead (0..31 helpful, 32..47 harmful), which is exact because
+    // the slot search is a strict if/else on IsPositive and never crosses over.
+    // Reading 0x08 as "harmful" here would really be reading "effect index 0
+    // has an aura", which is true of nearly every aura — so nearly every BUFF
+    // would come back as a debuff.
+    //
+    // Turtle (tortoise-wow SetAuraFlag, verified) replaces the effect-index
+    // bits with polarity: positive gets 0x04 (+ CANCELABLE unless
+    // SPELL_ATTR_CANT_CANCEL), negative gets 0x08. It has to, because Turtle
+    // also drops the `else` in the slot search so a debuff spills into 0..31
+    // once the 16 harmful slots are full (and sets UNIT_FLAG_AURAS_VISIBLE so
+    // the client still renders it). There the range is unreliable and the
+    // nibble is the real answer — the exact inverse of stock.
+    UNIT_AURA_FLAG_CANCELABLE = 0x01,
+    UNIT_AURA_FLAG_HELPFUL = 0x04,  // Turtle only; stock = EFF_INDEX_1
+    UNIT_AURA_FLAG_HARMFUL = 0x08,  // Turtle only; stock = EFF_INDEX_0
 
     // PLAYER_FIELD_MOD_DAMAGE_DONE_POS/NEG — the player's per-school spell
     // damage bonus. Offsets from the engine's own UpdateField name/index
@@ -1094,6 +1965,15 @@ enum Offsets {
     // `+0x2B0`. Both `Script_UnitBuff` and `Script_UnitDebuff` call
     // it to filter their aura iteration; we call it the same way.
     FUN_SPELL_IS_VISIBLE_AURA = 0x00519860,
+    // The TOOLTIP variant of the gate: what `Script_GameTooltip_SetUnitBuff`
+    // (0x00534AC0) / `SetUnitDebuff` (0x00534E30) apply per slot while
+    // turning a Lua index into a slot. `__fastcall(spellRecord) -> bool`:
+    // Attributes & 0x80 (HIDDEN_CLIENTSIDE) clear, AttributesEx & 0x10000000
+    // (NO_AURA_ICON) clear, and no EffectApplyAuraName in {44, 45, 151}
+    // (the tracking auras). Verified by decompile; differs from the UnitBuff
+    // gate above, so an index into one space is not an index into the other
+    // — `GameTooltip:SetUnitAura` counts with THIS one when it translates.
+    FUN_GAMETOOLTIP_AURA_VISIBLE = 0x00534DF0,
 
     // Player-only aura timing tables. Unlike UNIT_FIELD_AURA (which is
     // populated for any unit but has no timing info), these are the
@@ -1172,20 +2052,33 @@ enum Offsets {
     // folds in the descriptor cost mods).
     FUN_GET_SPELL_COST = 0x006E31B0,
 
-    // Full spell-castability check for the LOCAL player:
-    // `char __fastcall(const uint8_t *spellRecord /*ecx*/,
-    //                  int *outNoMana /*edx*/)`.
-    // Resolves the local player internally (no unit arg), then gates
-    // on casting state, stun/confuse flags, mechanic immunities,
-    // shapeshift/form + required stances, aura-state requirements,
-    // combo points (finishers), spell RequiredSkill, and finally the
-    // power check: `cost(FUN_GET_SPELL_COST) <= currentPower` → usable,
-    // else sets `*outNoMana = 1`. Returns nonzero (low byte) when
-    // usable. Does NOT check spell knowledge — so it's valid to feed
-    // an item's on-use spell record (which the player never "knows").
-    // This is the helper the action-usability recompute uses for
-    // player spell slots; `Item::Usable` reuses it for item on-use
-    // spells. Returns 0 cleanly pre-world (no player).
+    // The engine's spell-castability verdict for the LOCAL player — the
+    // function behind `IsUsableAction` for a player spell slot (the spell
+    // branch of the per-slot recompute `FUN_004E5050`) and behind the
+    // spellbook grey-out recompute (`FUN_004B31C0`, which fires
+    // SPELL_UPDATE_USABLE):
+    //   `char __fastcall(const uint8_t *spellRecord /*ecx*/,
+    //                    int *outNoMana /*edx*/)`.
+    // Resolves the player internally (no unit arg). Verified check order
+    // (decompiled): Effect[0] == ATTACK → always usable; dead / ghost unless
+    // CASTABLE_WHILE_DEAD (0x800000); the player-control flag
+    // (`DAT_00B4B3E4`, toggled with PLAYER_CONTROL_LOST / _GAINED) — with
+    // control lost only spells usable while fleeing / confused / charmed
+    // pass; totems + reagents in bags (`FUN_006E4000`); equipped-item
+    // class / subclass, main-hand / off-hand and ammo (`FUN_006E40E0`);
+    // combo points for finishers (AttributesEx 0x500000); Stances /
+    // StancesNot against the shapeshift byte (`FUN_00612480`, the
+    // Battle-Stance-Whirlwind case); ONLY_STEALTHED (0x20000);
+    // CANT_USED_IN_COMBAT (0x10000000); CasterAuraState; TargetAuraState
+    // (+ can-attack / can-assist on the current target); DISABLED_WHILE_
+    // ACTIVE (0x2000000) while the spell is active; and LAST
+    // `cost(FUN_GET_SPELL_COST) <= currentPower` (PowerType -2 = health) —
+    // the ONLY branch that sets `*outNoMana = 1`. Returns nonzero (low
+    // byte) when usable. Does NOT check cooldown, spell knowledge, silence
+    // or school lockouts — a knowledge gate belongs in the caller, and it's
+    // valid to feed an item's on-use spell record (which the player never
+    // "knows"). Read by `Spell::Usable` (IsUsableSpell) and `Item::Usable`
+    // (item on-use spells). Returns 0 cleanly pre-world (no player).
     FUN_SPELL_IS_USABLE = 0x006E3D60,
 
     // Effective spell/channel duration (ms):
@@ -1215,6 +2108,53 @@ enum Offsets {
     // the same truthy return as "in range" (so it can't yield true/false/
     // nil cleanly).
     FUN_SPELL_RANGE_CHECK = 0x006E47B0,
+
+    // The two floats `FUN_006e3480`'s COMBAT-RANGE branch folds into its
+    // max-range output: `casterReach + targetReach + LEEWAY`, floored at
+    // MIN. Verified by a direct float dump of the image (1.33333 / 5.0);
+    // these are the same constants tortoise-wow's server uses for the
+    // identical formula (`BASE_MELEERANGE_OFFSET = 1.33f`,
+    // `ATTACK_DISTANCE = 5.0f`, `Unit::GetCombatReach`/
+    // `Unit::CanReachWithMeleeAutoAttackAtPosition`). Read live (not
+    // hardcoded) by `Combat::SwingRange`'s DEDICATED melee range check —
+    // see that module for why it can't reuse `FUN_SPELL_RANGE_CHECK`
+    // above: that core (and every other consumer of `FUN_006e3480`, e.g.
+    // the action-bar range glow) computes full 3D distance, but the
+    // SERVER'S actual melee-attack gate
+    // (`WorldObject::CanReachWithMeleeSpellAttack`,
+    // `Unit::CanReachWithMeleeAutoAttackAtPosition`) is explicitly 2D
+    // (X/Y only) — the tortoise-wow source even comments "melee spells
+    // ignore Z-axis checks". Any Z offset between the two units makes the
+    // client's blended 3D check reject a swing the server already allows
+    // (verified in-game: rejected at 5.08yd 3D distance from center while
+    // landing hits — the standing engine mechanism for the GENERIC
+    // spell-range check was simply never asked to gate a real auto-attack
+    // decision before this feature existed, so there's nothing "engine
+    // native" to mirror for that exact semantic; mirroring the SERVER'S
+    // formula with the engine's own live constants is the closest fit).
+    VAR_MELEE_REACH_LEEWAY = 0x0080B058,
+    VAR_MELEE_REACH_MIN = 0x0080A1E8,
+
+    // Pure attackability test: `bool __thiscall(void *attacker /*ecx*/,
+    // void *target /*one stack arg, callee pops it — RET 0x4*/)`.
+    // `Script_UnitCanAttack` (`0x00516C50`) is a thin Lua wrapper over
+    // exactly this call; `FUN_006e4440` (the melee swing resolver) consults
+    // the same helper before a white hit lands. NOT `__fastcall` — verified
+    // by disassembly (`MOV ESI,[EBP+8]` reads the second unit off the
+    // stack; `MOV EDI,ECX` takes the first off ECX; both `RET`s pop 4
+    // bytes). Ghidra's decompile of the one caller renders the call as
+    // plain `FUN_00606980(this,pvVar4)`, which reads as fastcall(ecx,edx)
+    // but isn't — trust the disassembly's prologue over that pseudocode
+    // (same trap `FUN_SET_CVAR_VALUE` bit us with). Declaring this
+    // `__fastcall` sends the second arg through EDX, which the callee never
+    // reads, so it dereferences whatever garbage sits at `[ebp+8]` instead
+    // — crashed in-game (ERROR #132, `[ecx+0xA0]` off a bogus `ecx=4`).
+    //
+    // No position/range check — purely faction/state (hostility, PvP flags,
+    // stealth-detection-independent attackability). Used by `Combat::SwingRange`
+    // to gate the "can I even attack the current target" case Blizzard's
+    // `IsTargetWithinSwingRange` reports as a nil (no-check) answer.
+    FUN_UNIT_CAN_ATTACK = 0x00606980,
 
     // Spell.dbc `m_durationIndex` field — pointer into SpellDuration.dbc.
     // Verified via `FUN_004E44B0` (`0x004e44b0`) and `FUN_006EA000`
@@ -1368,6 +2308,15 @@ enum Offsets {
     // from SMSG_SPELL_START, not server-broadcast state).
     OFF_UNIT_CAST_SPELL = 0xC8C,
 
+    // CGUnit field: the unit's sheath state as a plain int member (NOT a
+    // descriptor UpdateField). 0 = sheathed / no weapon shown, 1 = melee
+    // weapon drawn, 2 = ranged weapon drawn. Read and written by the engine's
+    // own sheath toggler `FUN_005EB480` (behind `ToggleSheath`) and its setter
+    // `FUN_00611CF0` (`*(this+0xD40) = newState`, saving the prior state to
+    // `+0xD3C`). `Unit::Sheath::GetSheathState` reads the local player's value
+    // and returns it 1-based (Lua's GetSheathState is 1=None/2=Melee/3=Ranged).
+    OFF_UNIT_SHEATH_STATE = 0xD40,
+
     // NetClient message dispatch — `__thiscall void(void *conn, uint32_t
     // arg, CDataStore *packet)`. Reads the u16 opcode off the packet
     // cursor, then invokes `[conn + opcode*4 + 0x74]` (the handler table
@@ -1398,6 +2347,35 @@ enum Offsets {
     SMSG_SPELL_CHANNEL_UPDATE = 0x13A,
     SMSG_SPELL_DELAYED = 0x1E2,
     SMSG_SPELL_FAILED_OTHER = 0x2A6,
+    // Melee swing result broadcast. Body (verified against the server's own
+    // writer, tortoise-wow Unit::SendAttackStateUpdate): u32 hitInfo,
+    // packedGuid attacker, packedGuid victim, u32 totalDamage, u8 subCount,
+    // per-sub {u32 school, f32 coeff, u32 damage, u32 absorb, i32 resist},
+    // u32 targetState, u32, u32 spellId, u32 blocked. `Aura::JudgementRefresh`
+    // reads through totalDamage.
+    SMSG_ATTACKERSTATEUPDATE = 0x14A,
+    // hitInfo bit 2 — the swing came from the OFF hand, not main hand
+    // (tortoise-wow `HITINFO_LEFTSWING`; `Unit::AttackerStateUpdate` sets
+    // `HITINFO_NORMALSWING`(0) for `BASE_ATTACK`, this for `OFF_ATTACK`).
+    // Read by `Combat::Swing` to pick which hand a white-hit packet resets.
+    HITINFO_LEFTSWING = 0x4,
+    // `SMSG_ATTACKERSTATEUPDATE`'s `targetState` field, value 3 — the swing
+    // was parried. `Unit::AttackerStateUpdate`'s parry-haste block (server)
+    // shortens the PARRYING unit's own next-swing timer by a fixed formula
+    // when this fires with `victim == local player`; `Combat::Swing` mirrors
+    // it (tortoise-wow `VictimState::VICTIMSTATE_PARRY`).
+    VICTIMSTATE_PARRY = 3,
+
+    // Attack-start broadcast — sent when a unit begins a *melee* auto-attack
+    // (`Unit::SendMeleeAttackStart`, called from `Unit::Attack`). Body:
+    // attackerGuid(u64), victimGuid(u64) — PLAIN 64-bit GUIDs, not packed
+    // (verified against the server's own writer: `ObjectGuid`'s `ByteBuffer`
+    // operator is a raw `buf << uint64(guid.GetRawValue())`, no pack-guid
+    // mask byte). `Unit::Attack` also unconditionally
+    // `ResetAttackTimer(OFF_ATTACK)`s here — the one
+    // off-hand reset that isn't itself a white-hit or a cast — so
+    // `Combat::Swing` treats this as an OffHand reset for the local player.
+    SMSG_ATTACKSTART = 0x143,
 
     // NetClient send — `__thiscall void(void *conn, CDataStore *packet)`.
     // The outgoing counterpart of FUN_NET_MESSAGE_DISPATCH: every CMSG the
@@ -1456,6 +2434,144 @@ enum Offsets {
     VAR_FRAME_METHOD_REGISTRY = 0x00CF4D38,
     VAR_TEXTURE_METHOD_REGISTRY = 0x00CF5434,
     VAR_FONTSTRING_METHOD_REGISTRY = 0x00CF5400,
+    // Button — 39 methods (table 0x00879D00), ctx per docs/raw_methods.txt.
+    // CheckButton inherits it through the dispatcher's type walk. `Frame::
+    // ClickMask` re-registers `RegisterForClicks` here (most recent
+    // registration wins — the Texture::Desaturation mechanism) to add AnyUp /
+    // AnyDown in front of the engine's entry.
+    VAR_BUTTON_METHOD_REGISTRY = 0x00CF4E14,
+    // The engine's `Button:RegisterForClicks(...)` (Button table entry 35) —
+    // standard `int __fastcall(void *L)`. Loops `lua_isstring(L, i)` from
+    // index 2 until the first non-string, SStrCmpI's each against exactly ten
+    // literals (LeftButtonDown 0x1 / LeftButtonUp 0x100, Middle 0x2 / 0x200,
+    // Right 0x4 / 0x400, Button4 0x8 / 0x800, Button5 0x10 / 0x1000 — low
+    // byte = press, high byte = release), an unknown name contributing 0, and
+    // ASSIGNS the OR to button+0x330 via FUN_BUTTON_SET_CLICK_MASK. So a call
+    // with only unknown names (e.g. the modern "AnyUp") zeroes the mask and
+    // the button stops responding to every real click, silently — Button:Click
+    // ignores the mask, so programmatic clicks still work and hide it.
+    // `Frame::ClickMask` appends the five expansions of AnyUp / AnyDown to the
+    // Lua stack and tail-calls this, so the engine's parser, setter and error
+    // text stay in force.
+    FUN_SCRIPT_BUTTON_REGISTERFORCLICKS = 0x00782490,
+    // Button::SetClickMask — __thiscall(button, mask): writes +0x330. The
+    // ctors call it with the type default (Button 0x100 = LeftButtonUp;
+    // hyperlink button 0x500). Reference only.
+    FUN_BUTTON_SET_CLICK_MASK = 0x00779730,
+    // EditBox — 48 methods (table 0x0087BB68), ctx per
+    // docs/BlizzardScriptAPI.md. Backs `EditBox:SetCursorPosition` /
+    // `GetCursorPosition` (`EditBox::Methods`), the modern cursor / focus /
+    // text-state methods vanilla's EditBox lacks.
+    VAR_EDITBOX_METHOD_REGISTRY = 0x00CF5378,
+
+    // Model frame — backs `Model:SetDisplayInfo(creatureDisplayID)`
+    // (`Model::DisplayInfo`). Registry ctx per docs/raw_methods.txt (table
+    // 0x00878948, 23 methods: SetModel/SetSequence/ReplaceIconTexture/…).
+    VAR_MODEL_METHOD_REGISTRY = 0x00CF0C8C,
+    // Model frame-script type id, lazily assigned by the engine on the first
+    // Model method call (`Script_SetModel` FUN_0076d950 prologue:
+    // `if (id == 0) id = ++counter`). Mirror the lazy-assign so a Model
+    // type-check works even before any stock Model method has run; the IsA
+    // check itself is the CFrameScriptObject vmethod at vtable+0x10, shared by
+    // every frame type.
+    VAR_MODEL_LUA_TYPE_ID = 0x00CF0C5C,
+    VAR_FRAMESCRIPT_TYPE_ID_COUNTER = 0x00CEEF6C,
+
+    // Frame-script type ids for the other classes we register methods on —
+    // same lazy-assign mechanism as VAR_MODEL_LUA_TYPE_ID, one id per CLASS
+    // shared by all of its methods (VAR_GAMETOOLTIP_LUA_TYPE_ID is read or
+    // written by ~45 functions in the GameTooltip method block).
+    //
+    // Each was read from the prologue of a method that can only belong to
+    // that class. That matters: a BASE-class method registered into several
+    // tables carries the base's id, so sampling `GetObjectType` or
+    // `GetDrawLayer` risks a gate that accepts unrelated types. Frame is from
+    // `Script_RegisterEvent` (FUN_00774A40) and Texture from
+    // `Script_SetDesaturated` (FUN_0079C1E0), both cross-checked against the
+    // first entry of their table; GameTooltip from
+    // `Script_GameTooltip_SetSpell` (FUN_00532D10). Pairs 1:1 with the
+    // VAR_*_METHOD_REGISTRY values above.
+    VAR_GAMETOOLTIP_LUA_TYPE_ID = 0x00C0D414,
+    VAR_FRAME_LUA_TYPE_ID = 0x00CF0C10,
+    VAR_REGION_LUA_TYPE_ID = 0x00CF0C3C,
+    VAR_TEXTURE_LUA_TYPE_ID = 0x00CF4CDC,
+    VAR_FONTSTRING_LUA_TYPE_ID = 0x00CF2CCC,
+    VAR_EDITBOX_LUA_TYPE_ID = 0x00CF4DB4,
+
+    // CFrameScriptObject vtable slot 4 — the `IsA(typeId)` predicate every
+    // frame class implements, and the gate every engine method applies to its
+    // `self` before touching it. `char __thiscall(void *self, int typeId)`.
+    OFF_VMT_FRAMESCRIPT_ISA = 0x10,
+
+    // The three errors an engine frame method raises for a bad `self`, as
+    // .data string literals. None contains a `%`, so they are safe to hand
+    // straight to the variadic `lua_error`, and reading the engine's own
+    // strings keeps our diagnostics identical to the stock ones.
+    STR_FS_THIS_NON_TABLE = 0x00847EF8,
+    STR_FS_THIS_NON_OBJECT = 0x00847EC0,
+    STR_FS_WRONG_OBJECT_TYPE = 0x00847E98,
+    // FUN_0076cfe0(model /*ecx*/, int replaceableType, const char *path) —
+    // loads `path` as a texture and binds it to the model's replaceable-texture
+    // slot `replaceableType`. Worker behind `Model:ReplaceIconTexture` (which
+    // passes type 14); creature skins use MONSTER_1/2/3 = 11/12/13.
+    FUN_MODEL_SET_REPLACEABLE_TEXTURE = 0x0076CFE0,
+    // The loaded model instance a CSimpleModelFFX keeps at +0x318. It is the
+    // SAME CModel class CGUnits keep at unit+0xD8 — verified via
+    // FUN_007110d0 (the geoset-range setter), whose submesh walk and +0x98
+    // visibility-array writes match the instance layout probed in-game.
+    OFF_SIMPLEMODELFFX_MODEL_INSTANCE = 0x318,
+
+    // --- Character-model compositor ("CharComponent", `Model::DisplayInfo`) --
+    // The engine object that dresses a character-based model: resolves the
+    // hair / facial-hair geosets (CharHairGeosets, CharacterFacialHairStyles —
+    // beards, earrings, teeth), loads the baked NPC body texture or composites
+    // the player one, and applies equipment geosets (sleeves / robe→trousers /
+    // boots / tabard / cape, FUN_00477520). Units keep one at unit+0xD30,
+    // driven by CGUnit_C::UpdateCharacterCustomization (FUN_005fb200) — the
+    // single caller-of-record this whole API was derived from — behind the
+    // poll gate FUN_00607da0 (dress only once FUN_MODEL_INSTANCE_LOADED says
+    // the model is in). The portrait renderer (Script_SetPortraitTexture →
+    // FUN_00524f60) waits on FUN_CHARCOMP_PUMP before rendering, which is why
+    // portraits always show the finished appearance.
+    FUN_CHARCOMP_CREATE = 0x00475FB0,  // () -> builder from the engine pool at 0x00B42720; 0 on exhaustion
+    FUN_CHARCOMP_DESTROY = 0x00476000, // (builder /*ecx*/) — releases refs (FUN_00476ac0), returns node to pool
+    // __thiscall(builder, CharCompInfo*) -> bool. Copies 0x5B dwords
+    // (0x16C bytes) to builder+0x18, validates race against ChrRaces, resolves
+    // skin/hair/facial sections + geosets. Caller must AddRef the model first
+    // (FUN_005fb200 does); the builder owns that ref from then on.
+    FUN_CHARCOMP_SET_INFO = 0x00476B90,
+    // __thiscall(builder, slot 0..9, itemDisplayInfoID) — feed one NPC
+    // equipment piece (validated against ItemDisplayInfo.dbc, no-op for 0 /
+    // out-of-range). Units pass CreatureDisplayInfoExtra +0x20..+0x44.
+    FUN_CHARCOMP_SET_ITEM = 0x00478AA0,
+    // __thiscall(builder, int *unused /*engine passes 0*/) -> bool done.
+    // The per-frame pump: composites pending texture regions; the baked-NPC
+    // path short-circuits to the geoset apply (FUN_00477520) and returns 1 on
+    // the first call. Keep calling until it returns 1.
+    FUN_CHARCOMP_PUMP = 0x00477860,
+    // Model-instance API used around the compositor:
+    FUN_MODEL_INSTANCE_ADDREF = 0x00710390, // (model /*ecx*/)
+    // __thiscall(model, tryLoad, recurseChildren) -> bool loaded. The engine's
+    // dress gate (FUN_00607da0) passes (0, 0) — a passive check.
+    FUN_MODEL_INSTANCE_LOADED = 0x007103D0,
+    // Attached-child list on a model instance (helm/shoulder item models the
+    // compositor attaches via FUN_00712f70). Head + sibling-next verified from
+    // FUN_MODEL_INSTANCE_LOADED's recurseChildren walk.
+    OFF_MODEL_INSTANCE_CHILD_HEAD = 0x1DC,
+    OFF_MODEL_INSTANCE_CHILD_NEXT = 0x1E4,
+    // __thiscall(model, callback, userData) — stores the instance's pre-render
+    // callback pair (instance+0x3BC/+0x3C0). CSimpleModelFFX::SetModelInstance
+    // (FUN_0076cd30) registers FUN_SIMPLEMODELFFX_LIGHT_FOG_CB with the frame
+    // as userData on ITS instance only; attached children have an empty slot
+    // and render UNLIT (pure black — verified in-game: a light tint colored
+    // the body but not the equipment). `Model::DisplayInfo` fills each child's
+    // slot with the same pair so equipment lights like the body.
+    FUN_MODEL_INSTANCE_SET_RENDER_CB = 0x007134B0,
+    // __fastcall-shaped engine callback (never called by us directly): applies
+    // the owning frame's fog (+0x3A4/+0x3A8) and light struct (+0x324, written
+    // by Script_SetLight via FUN_0076cf30) to the render context each time the
+    // instance is drawn.
+    FUN_SIMPLEMODELFFX_LIGHT_FOG_CB = 0x0076D680,
 
     // Engine Script_* method implementations `Frame::Modern` delegates to
     // (each `int __fastcall(void *L)`, reading self at stack index 1).
@@ -1514,6 +2630,16 @@ enum Offsets {
     FUN_SCRIPT_FRAME_SETMAXRESIZE = 0x007762A0,
     FUN_SCRIPT_FRAME_GETSCRIPT = 0x00774780,
     FUN_SCRIPT_FRAME_SETSCRIPT = 0x007748D0,
+    // `frame:RegisterEvent(event)` (Frame registry, `Script_RegisterEvent`) —
+    // standard `int __fastcall(void *L)`: resolves self at 1, reads the event
+    // name at 2, calls FUN_FRAME_REGISTER_EVENT. `Frame::UnitEvent` delegates
+    // `RegisterUnitEvent` to it by stack reshape so chain membership stays
+    // engine-owned (self typecheck, error text, and DllMain's RegisterEvent
+    // hook all run as for a plain call). Siblings from the same method table,
+    // referenced in comments only: UnregisterEvent 0x00774B30 (calls
+    // FUN_FRAME_UNREGISTER_EVENT), RegisterAllEvents 0x00774C20,
+    // UnregisterAllEvents 0x00774CF0 (calls FUN_FRAME_UNREGISTER_ALL_EVENTS).
+    FUN_SCRIPT_FRAME_REGISTEREVENT = 0x00774A40,
     // `frame:EnableMouse(enable)` (Frame registry) — `Frame::Attributes` calls
     // it so a unit-attributed frame registers as the mouse-focus (bare frames
     // otherwise never hover). Standard `int __fastcall(void *L)` Script_* shape.
@@ -1526,12 +2652,11 @@ enum Offsets {
     // `frame:GetFrameStrata()` — pushes the strata name string; ranked for
     // stack ordering (`Frame::MouseFoci`).
     FUN_SCRIPT_FRAME_GET_STRATA = 0x007742A0,
-    // Button OnClick dispatcher — `__thiscall(button, buttonCode)` at
-    // 0x00779540, invoking the button's OnClick slot `[button+0x4CC]`. NOTE: do
-    // NOT MinHook it — SuperWoW's click-casting inline-hooks the same prologue
-    // and a second hook corrupts the trampoline (ERROR #132). `Frame::Attributes`
-    // instead installs a normal chained OnClick on the opted-in frame. Kept as
-    // the verified dispatch reference only.
+    // (The button click dispatcher is FUN_BUTTON_CLICK, defined with the frame
+    // script slots near FUN_FRAME_RUN_SCRIPT_WITH_CONTEXT. A note here used to
+    // forbid hooking it on a SuperWoW-collision theory that a per-DLL scan has
+    // since disproved — see that definition. `Frame::Attributes` chains a normal
+    // OnClick on its opted-in frames for its own reasons, not because of it.)
     // Frame GetAlpha (own alpha, 0..1) + Region GetParent — walked by
     // Frame::Modern's GetEffectiveAlpha up the parent chain.
     FUN_SCRIPT_FRAME_GETALPHA = 0x00774DC0,
@@ -1817,6 +2942,13 @@ enum Offsets {
     OFF_CGPLAYER_INFO_QUEST_LIST = 0x28,
     CGPLAYER_INFO_QUEST_LIST_STRIDE = 0xC,
     CGPLAYER_INFO_QUEST_LIST_MAX = 20,
+    // Per-slot state byte and its "objectives complete" bit. Read by
+    // `FUN_QUEST_SLOT_ANNOUNCE_OBSERVER`, which compares it between the live
+    // slot and the observer's old-values snapshot (same 0xC layout) to decide
+    // whether to re-announce a quest that went from complete back to
+    // incomplete: `(live[7] & 2) == 0 && (old[7] & 2) != 0`.
+    OFF_QUEST_SLOT_STATE = 0x07,
+    QUEST_SLOT_STATE_COMPLETE = 0x02,
     OFF_PLAYER_INFO_FLAGS = 0x08,
     PLAYER_FLAG_AFK = 0x02,
     PLAYER_FLAG_DND = 0x04,
@@ -1873,16 +3005,24 @@ enum Offsets {
     VAR_GUILD_ROSTER_TOTAL_COUNT = 0x00B73118,
     OFF_GUILD_MEMBER_NAME = 0x08,
 
-    // PackBagSlot — __fastcall(L, void **outInvMgr, int *outLinearSlot, int *outUnused) → bool.
+    // PackBagSlot — __fastcall(L, void **outInvMgr, int *outLinearSlot, int *outIsBank) → bool.
     // Reads bagID at Lua stack[1] and slot at stack[2], validates them, and
     // returns the inventory manager + linear slot ready to feed into GetItemBySlot.
+    //
+    // The fourth out-param is NOT unused (it was labelled `outUnused`
+    // here until the bank-autostore work): it is set to 1 for a bank
+    // position — bagID -1 (main bank) and bagIDs 5..10 (bank bags) —
+    // and left 0 otherwise, keyring included. `Script_UseContainerItem`
+    // is what consumes it: a non-zero flag is what makes right-clicking
+    // a bank item send `CMSG_AUTOSTORE_BANK_ITEM` instead of using it.
+    // This is the engine's own definition of "is this a bank slot".
     FUN_PACK_BAG_SLOT = 0x004F9820,
     // Equipped-bag container-GUID getter — `uint64 __fastcall(uint bagIndex0)`
     // where `bagIndex0` is 0-based (Lua bagID 1..4 → 0..3; 4..9 are bank bags,
     // gated on the bank-open globals). Returns the CGContainer GUID of the bag
     // equipped in that slot, or 0 if none. This is the internal PackBagSlot
     // uses to resolve bags 1..4: get the bag GUID here, resolve the container
-    // via FUN_OBJECT_RESOLVE_BY_GUID(OBJ_TYPE_CONTAINER, guid), then call the
+    // via FUN_OBJECT_RESOLVE_BY_GUID(TYPEMASK_CONTAINER, guid), then call the
     // container's vtable[+OFF_CONTAINER_GET_INVENTORY] to get the inventory
     // object GetItemBySlot indexes. Lets us enumerate bag contents in pure C++
     // without PackBagSlot's Lua-stack coupling. (Reads GUID arrays at
@@ -1920,10 +3060,18 @@ enum Offsets {
     // it hides data that's present from boot. Reading the GUID array
     // directly recovers it without ever opening the bank window.
     OFF_INVMGR_GUID_ARRAY = 0x04,
+    INVMGR_BACKPACK_FIRST_SLOT = 23,
+    INVMGR_BACKPACK_LAST_SLOT = 38,
     INVMGR_BANK_MAIN_FIRST_SLOT = 39,
     INVMGR_BANK_MAIN_LAST_SLOT = 62,
     INVMGR_BANK_BAG_FIRST_SLOT = 63,
     INVMGR_BANK_BAG_LAST_SLOT = 68,
+    // Keyring (Lua bagID -2). No LAST constant: the engine bounds this
+    // range against the invMgr's own slot count (OFF_INVMGR_SLOT_COUNT)
+    // rather than a fixed size, since keyring capacity grows with level.
+    // Base confirmed from FUN_PACK_BAG_SLOT, which maps Lua bagID -2 to
+    // `slot - 1 + 0x51`.
+    INVMGR_KEYRING_FIRST_SLOT = 81,
     // Engine's `ObjectMgr::Get`-style resolver — given a type and GUID,
     // returns the resolved CGObject pointer (or null). Same function the
     // engine itself uses inside `GetItemBySlot` (called at `0x00622904`)
@@ -1938,16 +3086,14 @@ enum Offsets {
     //
     // Type values: 2 = item (returns CGItem*), 4 = container/bag
     // (returns CGContainer*). Engine passes `"ItemMgr"` as debugName
-    // and `0x172` as priority for both call sites we've decoded.
+    // and `0x172` as priority for both call sites we've decoded. Some engine
+    // sites type it as `(u32 typeMask, void *unused, u64 guid, int)` —
+    // ABI-equivalent (the u64 occupies the same two stack dwords as
+    // guidLo/guidHi). All our callers go through `Object::ByGuid`
+    // (object/Resolve.h), which wraps this single address.
     FUN_OBJECT_RESOLVE_BY_GUID = 0x00468460,
-    // The type arg is a bitmask of object-type bits, not an enum
-    // index — `1<<1` for items, `1<<2` for containers, `1<<3` for
-    // units, matching what `FUN_00529FE0` passes for SetUnit (`ECX=8`).
-    OBJ_TYPE_ITEM = 2,
-    OBJ_TYPE_CONTAINER = 4,
-    OBJ_TYPE_UNIT = 8,
-    OBJ_TYPE_PLAYER = 0x10, // what the engine's bag observer FUN_004F8DB0 passes
-    OBJ_TYPE_GAMEOBJECT = 0x20, // 1<<5; passed by FUN_0052AA20 (hover-tooltip populator).
+    // The type arg is a bitmask of object-type bits (see the TYPEMASK_*
+    // block below), not an enum index.
 
     // `CGObject::GetName` — returns the display-name `const char *` for
     // a resolved CGObject (CGUnit / CGPlayer / CGCreature). Internally
@@ -2149,9 +3295,16 @@ enum Offsets {
     // enchant ID indexes SpellItemEnchantment.dbc. Block base = field
     // 16 = +0x40 (field 15 FLAGS at +0x3C precedes it); slot stride
     // 0x0C, enchant ID at slot+0x00. Used by spell/BonusDamage.cpp to
-    // fold enchant-granted spell power into GetSpellBonusDamage.
+    // fold enchant-granted spell power into GetSpellBonusDamage, and by
+    // item/WeaponEnchant.cpp to read the temporary slot.
     OFF_DESCRIPTOR_ENCHANTMENT_ID = 0x40,
     DESCRIPTOR_ENCHANTMENT_SLOT_STRIDE = 0x0C,
+    // Within one slot, following the enchant ID at slot+0x00.
+    DESCRIPTOR_ENCHANTMENT_DURATION_DELTA = 0x04,
+    DESCRIPTOR_ENCHANTMENT_CHARGES_DELTA = 0x08,
+    // Slot 1 of the block — poisons, weapon oils, sharpening stones, the
+    // shaman imbues. The timed enchant `GetWeaponEnchantInfo` measures.
+    DESCRIPTOR_ENCHANTMENT_SLOT_TEMPORARY = 1,
     // ITEM_FIELD_DURABILITY (current) and ITEM_FIELD_MAXDURABILITY (max) live
     // adjacent to each other in the descriptor as plain dwords. Verified in
     // `Script_GetInventoryItemBroken` (`0x004C8590`): after resolving the
@@ -2430,7 +3583,14 @@ enum Offsets {
     OFF_ITEMSTATS_PAGE_TEXT = 0x19C,       // u32 — PageText.dbc row (readable books)
     OFF_ITEMSTATS_LANGUAGE_ID = 0x1A0,     // u32 — language for book text
     OFF_ITEMSTATS_PAGE_MATERIAL = 0x1A4,   // u32 — book material
-    OFF_ITEMSTATS_START_QUEST = 0x1A8,     // u32 — questID started by right-click
+    // u32 — the quest this item BEGINS (the tooltip's "This Item Begins
+    // a Quest" line), not one it is an objective for; 0 = starts nothing.
+    // Both of the binary's references to the `ITEM_STARTS_QUEST`
+    // global-string name at `0x0084e4fc` are in the tooltip builder
+    // `FUN_0052b650`, which reads the neighbouring `m_lockID` as
+    // `puVar4[0x6b]` (= +0x1AC) — so this field is `puVar4[0x6a]`.
+    // Read by `C_Container.GetContainerItemQuestInfo` as its `questID`.
+    OFF_ITEMSTATS_START_QUEST = 0x1A8,
     OFF_ITEMSTATS_MATERIAL = 0x1B0,        // i32 — material type
     OFF_ITEMSTATS_SHEATH = 0x1B4,          // u32 — weapon sheath style
     OFF_ITEMSTATS_RANDOM_PROPERTY = 0x1B8, // i32 — random property template
@@ -2542,6 +3702,13 @@ enum Offsets {
     VAR_INVTYPE_STRING_TABLE = 0x0083DDB0,
     INVTYPE_TABLE_MAX_INDEX = 28,
 
+    // The two `m_inventoryType` values that mean "consumed when used", so
+    // both the item-consumable test (`C_Item.IsConsumableItem`) and the
+    // action-slot one (`IsConsumableAction`) single them out. Indices into
+    // the table above: 24 = `INVTYPE_AMMO`, 25 = `INVTYPE_THROWN`.
+    INVTYPE_AMMO = 24,
+    INVTYPE_THROWN = 25,
+
     // Faction "displayed list" — the engine maintains a sorted/visible list
     // of factions the player has rep with. `Script_GetNumFactions` (at
     // 0x004D64C0) returns `[VAR_FACTION_DISPLAY_COUNT]` (the primary list
@@ -2586,6 +3753,17 @@ enum Offsets {
     // matches a spell's OFF_SPELL_RECORD_FAMILY_NAME against. Read by
     // FUN_006e6ca0 (`DAT_00cecaac = ChrClasses[classID] + 0x3c`).
     OFF_CHRCLASSES_SPELL_FAMILY = 0x3C,
+    // Non-zero when the class's slot-18 is a RELIC slot (Libram / Idol /
+    // Totem) rather than a ranged-weapon slot. The whole of
+    // Script_UnitHasRelicSlot's answer — 0x00519EAE-0x00519EC0:
+    //   mov ecx, [0x00c0def4]       ; records
+    //   mov eax, [ecx + eax*4]      ; records[classID]
+    //   mov ecx, [eax + 0x40]
+    //   test ecx, ecx / jz push_nil ; non-zero => true
+    // Last column (16) of the 17-field record; parsing the client's own
+    // ChrClasses.dbc gives 1 for PALADIN / SHAMAN / DRUID and 0 for the
+    // other six, which is exactly the relic-slot set.
+    OFF_CHRCLASSES_RELIC_SLOT = 0x40,
 
     // ChrRaces.dbc — standard 5-DWORD class shape at 0x00C0DED8,
     // records-pointer at +0x08, count at +0x0C. 29 columns,
@@ -2625,6 +3803,66 @@ enum Offsets {
     VAR_CREATURETYPE_COUNT = 0x00C0DE30,
     OFF_CREATURETYPE_NAMES = 0x04,
 
+    // CreatureDisplayInfo.dbc / CreatureModelData.dbc — the
+    // creatureDisplayID → model-file chain behind `Model:SetDisplayInfo`.
+    // Both standard pointer-array DBCs (records[id], sparse). Column offsets
+    // verified two independent ways: parsing the extracted 1.12 DBCs
+    // (C:\WoW\Octo\DBFilesClient) AND the engine's own unit-display resolver
+    // FUN_0060afb0, which reads displayID from `[descriptor+0x1F4]` →
+    // CreatureDisplayInfo[id] +0x04 ModelID → CreatureModelData[ModelID].
+    //   CreatureDisplayInfo: +0x04 ModelID (col 1 → CreatureModelData id);
+    //     +0x18/+0x1C/+0x20 TextureVariation[3] (cols 6/7/8 — creature skin,
+    //     bare filenames applied as replaceable-texture MONSTER_1/2/3).
+    //   CreatureModelData: +0x08 ModelPath (col 2, e.g. "Creature\Rat\Rat.mdx").
+    VAR_CREATUREDISPLAYINFO_RECORDS = 0x00C0DE90,
+    VAR_CREATUREDISPLAYINFO_COUNT = 0x00C0DE94,
+    OFF_CREATUREDISPLAYINFO_MODEL_ID = 0x04,
+    OFF_CREATUREDISPLAYINFO_TEXTURE_VARIATION = 0x18, // char*[3] @ +0x18/+0x1C/+0x20
+    VAR_CREATUREMODELDATA_RECORDS = 0x00C0DE68,
+    VAR_CREATUREMODELDATA_COUNT = 0x00C0DE6C,
+    OFF_CREATUREMODELDATA_MODEL_PATH = 0x08,
+
+    // CreatureDisplayInfo.extendedDisplayInfoID (col 3) — nonzero for a
+    // CHARACTER-based display (shared Character\Race\Sex base model). It indexes
+    // CreatureDisplayInfoExtra.dbc, whose LAST field (col 18 in the 19-col
+    // vanilla layout, +0x48) is the pre-composited body-skin filename. That
+    // texture lives under Textures\BakedNpcTextures\ and applies to the M2
+    // body-skin replaceable types (1/8) — NOT the monster slots, which a
+    // character model has no texture units for (hence "renders white" without
+    // this). The baked skin already carries the equipped body armor. Verified by
+    // parsing the extracted DBC; C:\Git\Inklab resolves the same chain.
+    OFF_CREATUREDISPLAYINFO_EXTENDED_ID = 0x0C,
+    VAR_CREATUREDISPLAYINFOEXTRA_RECORDS = 0x00C0DEA4,
+    VAR_CREATUREDISPLAYINFOEXTRA_COUNT = 0x00C0DEA8,
+    OFF_CREATUREDISPLAYINFOEXTRA_BAKE_NAME = 0x48,  // col 18 (last), string
+    OFF_CREATUREDISPLAYINFOEXTRA_RACE = 0x04,       // col 1 (ChrRaces id)
+    OFF_CREATUREDISPLAYINFOEXTRA_SEX = 0x08,        // col 2 (0=male, 1=female)
+    OFF_CREATUREDISPLAYINFOEXTRA_HAIR_COLOR = 0x18, // col 6 (CharSections color)
+    // Cols 3/4/5/7 + the NPC equipment block — field order verified from
+    // CGUnit_C::UpdateCharacterCustomization (FUN_005fb200), which reads
+    // +0x04..+0x1C into the compositor info struct and walks +0x20..+0x44
+    // as 10 ItemDisplayInfo ids for FUN_CHARCOMP_SET_ITEM.
+    OFF_CREATUREDISPLAYINFOEXTRA_SKIN = 0x0C,        // col 3
+    OFF_CREATUREDISPLAYINFOEXTRA_FACE = 0x10,        // col 4
+    OFF_CREATUREDISPLAYINFOEXTRA_HAIR_STYLE = 0x14,  // col 5
+    OFF_CREATUREDISPLAYINFOEXTRA_FACIAL_HAIR = 0x1C, // col 7
+    OFF_CREATUREDISPLAYINFOEXTRA_EQUIP = 0x20,       // cols 8..17: u32[10] ItemDisplayInfo ids
+
+    // CharSections.dbc — per-race/sex character texture layers. Scanned by
+    // Model:SetDisplayInfo to resolve a character display's HAIR texture (applied
+    // to the M2 hair replaceable type 6, else the hair geoset renders white).
+    // Standard pointer-array DBC; match rows on race/sex/baseSection (3 = Hair) +
+    // color, then read the first texture column. Verified against the extracted
+    // DBC: Human Female (race 1, sex 1) hairColor 0 -> "Character\Human\Hair00_00.blp".
+    VAR_CHARSECTIONS_RECORDS = 0x00C0DF6C,
+    VAR_CHARSECTIONS_COUNT = 0x00C0DF70,
+    OFF_CHARSECTIONS_RACE = 0x04,          // col 1
+    OFF_CHARSECTIONS_SEX = 0x08,           // col 2
+    OFF_CHARSECTIONS_BASE_SECTION = 0x0C,  // col 3 (3 = Hair)
+    OFF_CHARSECTIONS_COLOR = 0x14,         // col 5
+    OFF_CHARSECTIONS_TEXTURE = 0x18,       // col 6 (texture[0] path)
+    CHARSECTIONS_BASE_SECTION_HAIR = 3,
+
     // Race → faction group, mirroring the player branch of
     // `Script_UnitFactionGroup` (`0x00516630`) — backs
     // `C_CreatureInfo.GetFactionInfo(raceID)`. Chain:
@@ -2659,6 +3897,10 @@ enum Offsets {
     VAR_AREATABLE_RECORDS = 0x00C0E048,
     VAR_AREATABLE_COUNT = 0x00C0E04C,
     OFF_AREATABLE_NAMES = 0x2C,
+    // Parent AreaTable id @ +0x08 — a sub-area's enclosing zone (e.g. Goldshire
+    // → Elwynn Forest). GetFriendInfo resolves it to name the zone, not the
+    // sub-area. 0 for a top-level zone.
+    OFF_AREATABLE_PARENT_ID = 0x08,
     // AreaBit @ +0x0C: index into the player's explored-areas bitfield
     // (OFF_PLAYER_EXPLORED_BITS). Gate @ +0x28: when < 0 the area needs no
     // exploration (always counts explored); when >= 0 the AreaBit check
@@ -2829,15 +4071,11 @@ enum Offsets {
     // each callback invocation, guidLo/guidHi pushed as 8 stack bytes.
     FUN_CLNT_OBJ_MGR_ENUM_VISIBLE_OBJECTS = 0x00468380,
 
-    // GUID → CGObject resolver. __fastcall with this signature:
-    //   CGObject *(__fastcall *)(uint32_t typeMask, void *unused,
-    //                            uint64_t guid, int unused2);
-    // typeMask filters to specific object types; returns NULL if the
-    // GUID isn't loaded or its type doesn't match the mask.
-    FUN_CLNT_OBJ_MGR_OBJECT_PTR = 0x00468460,
-
-    // Type-mask flags accepted by FUN_CLNT_OBJ_MGR_OBJECT_PTR. Single-bit
-    // flags can be OR'd together.
+    // Type-mask flags accepted by FUN_OBJECT_RESOLVE_BY_GUID (and the SetUnit
+    // path FUN_00529FE0, which passes ECX=8 for UNIT). A bitmask of
+    // object-type bits, not an enum index — single-bit flags OR together.
+    // PLAYER (0x10) is what the bag observer FUN_004F8DB0 passes; GAMEOBJECT
+    // (0x20) what the hover-tooltip populator FUN_0052AA20 passes.
     TYPEMASK_OBJECT        = 0x01,
     TYPEMASK_ITEM          = 0x02,
     TYPEMASK_CONTAINER     = 0x04,
@@ -2902,6 +4140,17 @@ enum Offsets {
     OFF_SLA_CLASS_MASK = 0x10,
     OFF_SLA_EXCLUDE_RACE = 0x14,
     OFF_SLA_EXCLUDE_CLASS = 0x18,
+    // Field 8: the spellID of the NEXT rank that supersedes this row's
+    // spell (0 = none / not linked). Verified against the extracted DBC:
+    // Mortal Strike 12294 → 21551 → 21552, Kick 1766 → 1767. Populated
+    // for some ability chains (660 of 6812 rows) but NOT for every chain —
+    // Fireball 133's row and the ENTIRE Mind Flay chain (15407, 17311..
+    // 17314, 18807) hold 0 — so treat it as "known next rank", not as a
+    // complete rank graph. The engine's own rank-chain walk
+    // (`FUN_SPELL_RANK_CHAIN_KNOWN`) reads this same field and has the same
+    // gap. `Talent::SpellSet` follows it to extend a talent's rank-1 spell
+    // to its trained higher ranks, then falls back to a shared spell name.
+    OFF_SLA_SUPERCEDED_BY_SPELL = 0x20,
     // Skill-up threshold ranks (grey / green) at record fields 10/11.
     // A row with either nonzero is a craftable recipe; profession
     // rank-up / passive rows have both zero. Empirically: the
@@ -3040,6 +4289,22 @@ enum Offsets {
     VAR_FACTION_DISPLAY_COUNT = 0x00B73764,
     VAR_FACTION_VISIBLE_MAX_INDEX = 0x00B73760,
 
+    // Reputation-pane selection. Stored as a FACTION ID, not a list
+    // index: `Script_SetSelectedFaction` (below) takes a 1-based
+    // displayed-list index but immediately resolves it through
+    // `FUN_RESOLVE_FACTION_INDEX` and stores the resulting factionID
+    // here, and `Script_GetSelectedFaction` (0x004D6C00) walks the
+    // displayed list to map it back to a 1-based index (0 when the
+    // stored id isn't currently listed). So selecting by ID is a
+    // direct write — no index round-trip. Verified by decompiling
+    // both accessors.
+    VAR_FACTION_SELECTED_ID = 0x00B73768,
+
+    // `Script_SetSelectedFaction` — the stock `SetSelectedFaction(index)`
+    // global. `int __fastcall(void *L)`, standard Lua C ABI, so it can be
+    // re-registered under a namespace table as-is.
+    FUN_SCRIPT_SET_SELECTED_FACTION = 0x004D6BB0,
+
     // Faction.dbc — standard 5-DWORD class shape, records pointer at +0x08
     // and count at +0x0C of the class instance at 0x00C0DD48. Records is an
     // array of `FactionRec *` indexed directly by factionID (1-based;
@@ -3082,11 +4347,16 @@ enum Offsets {
     VAR_FACTION_COLLAPSED_BITMASK = 0x0084A0A4,
     MAX_FACTION_HEADERS = 32,
 
-    // Who-query (the /who system).
+    // The social singleton (0x00C28168) — one object shared by the friend
+    // list, ignore list, and /who system. Layout: friend entries inline from
+    // offset 0 (stride 0x20, up to 50; each is {connected@+0x00, name char*
+    // @+0x04, GUID u64 @+0x08, level@+0x10, area@+0x14, class@+0x18}), the
+    // 25-entry ignore-GUID table at +0x650, and the who-query state. Read by
+    // GetNumFriends/GetFriendInfo, GetNumIgnores, and Script_SendWho.
     //
     // `Script_SendWho` (0x005AD3B0) is a 32-byte wrapper:
     //   - validate arg1 is a string via lua_isstring
-    //   - load WhoSystem singleton from `[VAR_WHO_SYSTEM]`
+    //   - load the singleton from `[VAR_SOCIAL_SYSTEM]`
     //   - if non-NULL, lua_tostring(L, 1) for the query string
     //   - tail-call `FUN_WHO_SYSTEM_SEND_QUERY` with
     //     `__thiscall(this = WhoSystem, queryStr)`
@@ -3107,9 +4377,13 @@ enum Offsets {
     // Server-side cooldown for CMSG_WHO is ~5 seconds — a faster
     // client gets silent-dropped, so any client-side gating just
     // matches that.
-    VAR_WHO_SYSTEM = 0x00C28168,
+    VAR_SOCIAL_SYSTEM = 0x00C28168,
     VAR_WHO_TO_UI_FLAG = 0x00C2A12C,
     FUN_WHO_SYSTEM_SEND_QUERY = 0x005AEBB0,
+    // Friend count: `__fastcall(socialSingleton) -> uint` — walks the inline
+    // entries and returns the number of populated friend slots. Backs
+    // GetNumFriends and C_FriendList.IsFriend.
+    FUN_FRIEND_LIST_COUNT = 0x005AE490,
 
     // SMSG_WHO opcode handler — opcode 0x63 (99) per the registration
     // in `FUN_005adc50`: `FUN_005ab650(99, FUN_005adf60, 0)`. Reads
@@ -3122,6 +4396,25 @@ enum Offsets {
     // silent (no chat-count message, no FriendsFrame popup) when the
     // user actually wanted both.
     FUN_SMSG_WHO_RESPONSE = 0x005ADF60,
+
+    // /who result list — the buffer `Script_GetWhoInfo` (0x005AD6E0) and
+    // `Script_GetNumWhoResults` (0x005AD690) read. An array of fixed-size
+    // entries at `VAR_WHO_RESULTS`, stride `WHO_RESULT_STRIDE`; the field
+    // offsets below are all relative to an entry. `name`/`guildName` are
+    // inline C strings; `race`/`class` index ChrRaces/ChrClasses.dbc and
+    // `zone` indexes AreaTable.dbc (own name, not parent-resolved).
+    // `VAR_WHO_RESULT_COUNT` is the displayed count (the first of the two
+    // values GetNumWhoResults returns; the second, total matches, is at +4).
+    // Verified by decompiling both accessors.
+    VAR_WHO_RESULTS = 0x00C281B8,
+    VAR_WHO_RESULT_COUNT = 0x00C2A120,
+    WHO_RESULT_STRIDE = 0xA0,
+    OFF_WHO_NAME = 0x00,   // char[] inline
+    OFF_WHO_GUILD = 0x30,  // char[] inline
+    OFF_WHO_LEVEL = 0x90,  // i32
+    OFF_WHO_RACE = 0x94,   // i32 → ChrRaces.dbc
+    OFF_WHO_CLASS = 0x98,  // i32 → ChrClasses.dbc
+    OFF_WHO_ZONE = 0x9C,   // i32 → AreaTable.dbc
 
     // Per-faction current standing — `__fastcall(ecx = factionID) → int`.
     // Returns `base + delta` where the two values are stored at
@@ -3205,6 +4498,20 @@ enum Offsets {
     // original (see `src/faction/UnitFactionPolyfill.cpp`).
     FUN_FACTION_SET_AT_WAR = 0x004D5FD0,
 
+    // `FactionGetAtWar(factionID)` — `uint __fastcall(ecx = factionID)`.
+    // Resolves factionID → repListID and returns the `AT_WAR` flag bit as
+    // 0/1; returns 0 when the faction has no rep slot. The read half of
+    // `Script_FactionToggleAtWar`'s read-negate-write pair.
+    FUN_FACTION_GET_AT_WAR = 0x004D61B0,
+
+    // `Script_FactionToggleAtWar` — the stock `FactionToggleAtWar(index)`
+    // global. Resolves its 1-based index through
+    // `FUN_RESOLVE_FACTION_INDEX`, then (for a non-zero factionID) calls
+    // GET_AT_WAR and hands the negated value to SET_AT_WAR. Standard Lua C
+    // ABI, so it re-registers under a namespace table as-is. Toggling by
+    // faction id is that same pair without the index resolve.
+    FUN_SCRIPT_FACTION_TOGGLE_AT_WAR = 0x004D6950,
+
     // `FactionSetInactive(factionID, newState)` — `__fastcall(ecx = factionID,
     // edx = char newState)`. Inner setter behind `Script_SetFactionInactive`
     // (`0x004D69B0`, sets INACTIVE bit) and `Script_SetFactionActive`
@@ -3219,6 +4526,22 @@ enum Offsets {
     // **Does NOT fire `UNIT_FACTION`** — same engine omission as the at-
     // war setter. Polyfilled in `src/faction/UnitFactionPolyfill.cpp`.
     FUN_FACTION_SET_INACTIVE = 0x004D60F0,
+
+    // `Script_SetFactionInactive` / `Script_SetFactionActive` — the stock
+    // `SetFactionInactive(index)` / `SetFactionActive(index)` globals. Each
+    // resolves its 1-based index through `FUN_RESOLVE_FACTION_INDEX` and,
+    // for a non-zero factionID, calls SET_INACTIVE with 1 / 0 respectively.
+    // Standard Lua C ABI, so both re-register under a namespace table as-is.
+    // Setting by faction id is the same call without the index resolve.
+    FUN_SCRIPT_SET_FACTION_INACTIVE = 0x004D69B0,
+    FUN_SCRIPT_SET_FACTION_ACTIVE = 0x004D6A00,
+
+    // `Script_IsFactionInactive` — the stock `IsFactionInactive(index)`
+    // global (pushes 1 / nil, not a boolean). Its worker at `0x004D6210`
+    // takes the 0-based INDEX rather than a faction id — unlike the at-war
+    // getter — resolving index → factionID → repListID before reading the
+    // INACTIVE bit. Standard Lua C ABI, so it re-registers as-is.
+    FUN_SCRIPT_IS_FACTION_INACTIVE = 0x004D6AF0,
 
     // SMSG_SET_FACTION_ATWAR handler — `__stdcall(uint32_t opcode,
     // void *packet)`. Fires when the server force-changes the player's
@@ -3406,8 +4729,132 @@ enum Offsets {
     // walk and returns slot-index or -1.
     ACTION_TYPE_BAG_OR_MACRO = 0x40000000,
     ACTION_TYPE_ITEM_BY_ID = 0x80000000,
+    // Equipment-set action; payload (entry & ~ACTION_TYPE_EQUIPMENT_SET) is
+    // the setID. 1.12 has no such type — the tag is 3.3.5's (`FUN_005a78f0`
+    // tests `(entry & 0xF0000000) == 0x20000000`, `FUN_005a7950` masks it
+    // off). Every 1.12 reader falls through harmlessly on it: the spell
+    // resolver answers 0, the texture resolver NULL, `HasAction` true.
+    // `EquipmentSet::Action` owns it. The server drops type 0x20 without
+    // saving it (tortoise-wow `HandleSetActionButtonOpcode` whitelists
+    // spell / macro / item), so the placement is kept client-side.
+    ACTION_TYPE_EQUIPMENT_SET = 0x20000000,
     ACTION_PAYLOAD_MASK_BAG_OR_MACRO = 0xBFFFFFFF,
     ACTION_PAYLOAD_MASK_ITEM_BY_ID = 0x7FFFFFFF,
+
+    // Engine "is this 0x40000000 slot a macro?" — `bool __fastcall(uint
+    // slot0)`: `FUN_MACRO_ID_TO_SLOT(entry & 0xBFFFFFFF) != 0xFFFFFFFF`.
+    // Every action reader's macro branch gates on it.
+    FUN_ACTION_IS_MACRO = 0x004E5030,
+    // Per-slot texture resolver behind `Script_GetActionTexture` (its sole
+    // caller) — `char *__fastcall(uint slot0)`, NULL for an empty slot.
+    // Branch order: attack → auto-repeat → item-by-ID (ItemStats display
+    // info → icon) → spell (SpellIcon path; the active icon `+0x1D8` when
+    // FUN_ACTION_SPELL_ICON_ACTIVE says so) → macro (FUN_MACRO_ICON_PATH
+    // into a static 0x104-byte buffer).
+    FUN_ACTION_SLOT_TEXTURE = 0x004E6A50,
+    // `int __fastcall(uint slot0)` — non-zero while the slot's spell is
+    // active (toggle / stance / auto-repeat up); the texture resolver then
+    // shows Spell.dbc's `activeIconID` (+0x1D8) instead of `iconID` (+0x1D4).
+    FUN_ACTION_SPELL_ICON_ACTIVE = 0x004E55F0,
+    // Per-slot cooldown — `void __fastcall(uint slot0, int *start, int
+    // *duration, uint *enable)`, ms ticks (the triple
+    // `Script_GetActionCooldown` scales by 0.001). Item-by-ID slots go through
+    // FUN_ITEM_QUERY_COOLDOWN; every other slot through FUN_ACTION_SLOT_TO_SPELL
+    // — so a macro slot's cooldown is its cached primary spell's.
+    FUN_ACTION_SLOT_COOLDOWN = 0x004E6CA0,
+    // The engine's own "this slot changed" notifier — `__fastcall(uint slot0
+    // /*ecx*/, int sendToServer /*edx*/, int quiet /*stack*/)`, RET 4.
+    // Recomputes the per-slot usable / noMana arrays (`0x00BC6B60` /
+    // `0x00BC67A0`) via the usable helper `FUN_004E5050` and, when `quiet ==
+    // 0`, fires EVENT_ACTIONBAR_SLOT_CHANGED with `slot0 + 1` — which
+    // FrameXML's `ActionButton_OnEvent` compares against `this.action`.
+    // Called by the engine at the end of every place / pickup. Pass
+    // `(slot0, 0, 0)` to repaint a slot without the CMSG_SET_ACTION_BUTTON
+    // packet (verified by disassembly: the packet build is the `edx != 0`
+    // branch, the event fire the `[esp+4] == 0` branch).
+    FUN_ACTION_SLOT_CHANGED_NOTIFY = 0x004E58E0,
+    // Single-slot clear — `__fastcall(uint slot0)`: writes
+    // `VAR_ACTION_TABLE[slot0] = 0` then FUN_ACTION_SLOT_CHANGED_NOTIFY(slot0,
+    // /*sendToServer=*/1, 0), so the removal goes out as CMSG_SET_ACTION_BUTTON
+    // and the server persists it.
+    FUN_ACTION_SLOT_CLEAR = 0x004E5DB0,
+    // Slot writer — `__fastcall(uint slot0, uint entry, int sendToServer,
+    // int quiet)`: `VAR_ACTION_TABLE[slot0] = entry` (+ the item-count cache
+    // for item-by-ID) then FUN_ACTION_SLOT_CHANGED_NOTIFY. The enter-world
+    // apply loop calls it `(slot, entry, 0, 1)` per buffered button.
+    FUN_ACTION_SLOT_SET = 0x004E5D60,
+    // Per-slot usable — `uint __fastcall(uint slot0, int *outNoMana)`,
+    // the value FUN_ACTION_SLOT_CHANGED_NOTIFY and the bulk recompute
+    // `FUN_004E5C00` (fires ACTIONBAR_UPDATE_USABLE) store into the uint[120]
+    // arrays at `0x00BC6B60` / `0x00BC67A0`, which `IsUsableAction` reads.
+    // Only those two callers; both are event-driven.
+    FUN_ACTION_SLOT_USABLE = 0x004E5050,
+    // Drop the cursor onto a slot — `__fastcall(uint slot0)`. Sole entry
+    // for `PlaceAction`, and the tail of both FUN_ACTION_PICKUP and
+    // nampower's detoured `CGActionBar_UseAction` (`0x004E5EE0`) when the
+    // cursor holds a spell / bag item / macro / type-7 action item. Gated
+    // on FUN_CURSOR_EDIT_ALLOWED(9); picks up whatever the slot held (the
+    // `FUN_CURSOR_PICKUP_*` for its type, or a plain cursor clear for a
+    // type it doesn't know), writes the new entry, and notifies with
+    // `sendToServer = 1`.
+    FUN_ACTION_PLACE = 0x004E62E0,
+    // Pick a slot up — `__fastcall(uint slot0)`. Sole entry for
+    // `PickupAction`. When the cursor already holds something the engine
+    // places (the gate in the note above) it tail-calls FUN_ACTION_PLACE;
+    // else it puts the slot's action on the cursor and FUN_ACTION_SLOT_CLEARs.
+    FUN_ACTION_PICKUP = 0x004E6130,
+    // `Script_UseAction(slot, checkCursor, onSelf)` — `__fastcall(L)`. Parses
+    // `slot - 1`, `checkCursor` = loose bool of arg 2, `onSelf` of arg 3, and
+    // calls `0x004E5EE0` — which nampower detours, so hook here, not there.
+    FUN_SCRIPT_USE_ACTION = 0x004E7140,
+    // `Script_GetActionText(slot)` — `__fastcall(L)`. Pushes the macro name
+    // for a macro slot, nil otherwise.
+    FUN_SCRIPT_GET_ACTION_TEXT = 0x004E7050,
+    // SMSG_ACTION_BUTTONS leaf — `__stdcall(?, CDataStore *)`, RET 8 (stack
+    // args at [ebp+8] / [ebp+0xC]; ECX/EDX unused). Reads 120 u32 into
+    // `VAR_ACTION_BUTTONS_PENDING`; the local-player enter-world init
+    // `FUN_005DEA50` then applies each through FUN_ACTION_SLOT_SET(slot,
+    // entry, 0, 1) — spells only when still known, every tagged entry
+    // unconditionally — and fires ACTIONBAR_SLOT_CHANGED(0).
+    FUN_SMSG_ACTION_BUTTONS = 0x005E6680,
+    VAR_ACTION_BUTTONS_PENDING = 0x00C4C2B4, // uint[120]
+    // The unlearn sweep — `__fastcall(uint spellID)`. Walks all
+    // ACTION_TABLE_MAX_SLOTS slots, resolves each through
+    // FUN_ACTION_SLOT_TO_SPELL, and FUN_ACTION_SLOT_CLEARs every slot whose
+    // spell equals `spellID`. Sole caller is the spell-removal handler
+    // FUN_005E9FE0, immediately after FUN_UNLEARN_SPELL (verified by
+    // disassembly + xrefs). Because the resolver is macro-aware — a macro slot
+    // answers with its primary-spell cache — a macro whose cache holds the
+    // unlearned spell is permanently removed from the action bar, which is why
+    // `Macro::ShowTooltip` co-hooks this to keep its DISPLAY resolution out of
+    // the comparison.
+    FUN_ACTION_BAR_PRUNE_SPELL = 0x004E5E20,
+    // Count of `itemID` the player carries, as `UseAction` caches per
+    // item-by-ID slot into VAR_ACTION_ITEM_COUNTS — `uint __fastcall(uint
+    // itemID)`. Charged items (ItemStats `SPELL_CHARGES[0]` set) sum charges
+    // via FUN_INVMGR_COUNT_ITEM_BY_ID, everything else sums stacks
+    // (`FUN_00622130`). The inner GetActionCount (`0x004E6C70`) only reads
+    // the cached array, item-by-ID slots only.
+    FUN_ACTION_ITEM_COUNT = 0x004E6D20,
+    VAR_ACTION_ITEM_COUNTS = 0x00BC6390, // uint[120]
+    // Inventory-manager searches behind the action-bar item branches —
+    // `__thiscall(invMgr, uint itemID, uint flags)`. Both drive the slot
+    // visitor `FUN_00622420`, which with `flags == 0` on the player
+    // inventory manager walks equipment (linear 0..18), bag slots (19..22),
+    // backpack (23..38), keyring (81..112) and recurses into each equipped
+    // bag — never the bank.
+    FUN_INVMGR_FIND_ITEM_BY_ID = 0x00622270,  // → CGItem *, first match
+    FUN_INVMGR_COUNT_ITEM_BY_ID = 0x00622180, // → summed charges of the matches
+    // The registered action-bar Lua C functions that `Action::ItemState`
+    // re-registers in front of. Tail-call these with the untouched stack for
+    // every slot we don't own (they raise their own usage errors).
+    // `GetActionTexture` needs no override: its macro branch goes through the
+    // hooked FUN_MACRO_ICON_PATH.
+    FUN_SCRIPT_GET_ACTION_TEXTURE = 0x004E6E10,
+    FUN_SCRIPT_GET_ACTION_COOLDOWN = 0x004E6ED0,
+    FUN_SCRIPT_GET_ACTION_COUNT = 0x004E6E70,
+    FUN_SCRIPT_IS_CONSUMABLE_ACTION = 0x004E7470,
+    EVENT_ACTIONBAR_SLOT_CHANGED = 0xD5, // fmt "%d", 1-based slot
 
     // Per-character macro-slot map (uint[36]). Entry N holds the macroID
     // of the macro in slot N (0 = empty slot). The same memory is used
@@ -3424,6 +4871,15 @@ enum Offsets {
     // engine's cached primary-spell ID at `entry + OFF_MACRO_PRIMARY_SPELL`
     // without re-parsing the body. See `Macro::Spell::Script_GetMacroSpell`.
     FUN_MACRO_SLOT_TO_ENTRY = 0x004F0E40,
+    // `Script_GetMacroInfo` — `int __fastcall(void *L)`; pushes `(name,
+    // "Interface\Icons\<OFF_MACRO_ICON>", body, isLocal-or-nil)`, always 4
+    // returns (nils for an empty slot). Left alone deliberately: it is the read
+    // side of the icon `C_Macro.EditMacro` writes, and the Macro UI seeds its
+    // icon selector from that texture (`MacroFrame_Update` ->
+    // `MacroPopupFrame.selectedIconTexture`), so a resolved `#showtooltip`
+    // icon here would report a choice the player never made. The icon a macro
+    // SHOWS is `C_Macro.GetMacroIcon` (`Macro::IconPath`) instead.
+    FUN_SCRIPT_GET_MACRO_INFO = 0x004F1760,
 
     // Macro create/edit workers — back `C_Macro.CreateMacro` /
     // `C_Macro.EditMacro` (see [[src/macro/Edit.cpp]]). Both store the
@@ -3472,41 +4928,121 @@ enum Offsets {
     OFF_MACRO_NAME = 0x24,        // char[0x40] inline
     OFF_MACRO_ICON = 0x64,        // char[0x100] inline bare basename
     OFF_MACRO_LOCAL_FLAG = 0x20,  // uint32 `local` flag (echoed by GetMacroInfo)
+    // Which spellbook the cached primary spell (`OFF_MACRO_PRIMARY_SPELL`)
+    // came from: 0 = player, 1 = pet. Written alongside `+0x564` by the
+    // parser's name resolver (FUN_RESOLVE_SPELL_NAME_TO_BOOK_ID's out-param)
+    // and handed back as the pet flag by FUN_ACTION_SLOT_TO_SPELL.
+    OFF_MACRO_PRIMARY_SPELL_IS_PET = 0x568,
 
-    // Macro-icon database. Populated lazily by `FUN_LOAD_MACRO_ICONS`
-    // on the first `GetNumMacroIcons` call — enumerates `Interface\Icons\`
-    // for `*.blp` files plus a wildcard match, sorts, and de-dupes. Each
-    // entry is the basename (e.g. `"Ability_Kick"`) without the
-    // `Interface\Icons\` prefix; vanilla's `Script_GetMacroIconInfo`
-    // joins the prefix via sprintf before pushing. Verified by reading
-    // `Script_GetNumMacroIcons` (`0x004F19F0`) and
-    // `Script_GetMacroIconInfo` (`0x004F1A30`).
+    // macroID → `MacroEntry *` — `__fastcall(uint macroID)`. Walks the
+    // per-character macro hash (buckets at `[0x00BDCC54]`, mask at
+    // `[0x00BDCC5C]`; `entry+0x00` is the macroID key). The resolver behind
+    // every action-bar macro branch (slot→spell `FUN_004E5BA0`,
+    // FUN_GAMETOOLTIP_SET_MACRO, FUN_MACRO_RUN_BY_ID) — the action table
+    // stores macroIDs, not slots. NULL when the id isn't registered (deleted
+    // macro). (An earlier entry mislabeled this address as a per-spell
+    // "state cache" lookup with `+0x564 = usable` / `+0x568 = noMana`; those
+    // are the macro's primary spell and pet flag, and nothing read them
+    // through the mislabel.)
+    FUN_MACRO_ID_TO_ENTRY = 0x004F0F40,
+
+    // Macro icon path — `void __fastcall(uint macroID, char *out, uint
+    // size)`: sprintf("%s%s", "Interface\\Icons\\", entry+OFF_MACRO_ICON)
+    // into `out`, empty when the id is unknown. Exactly two callers (binary
+    // scan for `call 0x004F0FD0`): the per-slot texture resolver
+    // FUN_ACTION_SLOT_TEXTURE (`0x004E6C44`) and the macro cursor pickup
+    // FUN_MACRO_PICKUP (`0x00494F97`), so a co-hook here (`Macro::IconPath`)
+    // gives the `?`-icon rule to action buttons AND the drag cursor at once —
+    // the same place 3.3.5 keeps it (its getter `FUN_00566ac0`).
+    // `Script_GetMacroInfo` does NOT call it (it formats the path itself).
+    FUN_MACRO_ICON_PATH = 0x004F0FD0,
+    // Puts a macro on the cursor — `__fastcall(uint macroID)`; called from
+    // the UseAction core for macro slots when the cursor is in pickup mode
+    // (`FUN_004E62E0` / `FUN_004E6130`). Paints the cursor via
+    // FUN_MACRO_ICON_PATH. Doc-only.
+    FUN_MACRO_PICKUP = 0x00494F80,
+
+    // Macro body runner — `void __fastcall(MacroEntry *entry)`, null-safe.
+    // Tokenizes the body at `+OFF_MACRO_BODY` with FUN_STORM_STR_TOKENIZE
+    // (delimiters VAR_MACRO_LINE_DELIMS, 0x400-byte line buffer) and fires
+    // EVENT_EXECUTE_CHAT_LINE("%s", line) for every non-empty line;
+    // FrameXML's hidden `MacroEditBox` then pushes each line through
+    // `ChatEdit_SendText`. Sole caller FUN_MACRO_RUN_BY_ID (macroID → entry),
+    // itself called from the UseAction core `FUN_004E5EE0` for macro slots.
+    // Vanilla never skips `#` lines, so `#showtooltip` reached chat —
+    // `Macro::RunBody` co-hooks this to drop them.
+    FUN_MACRO_RUN_BODY = 0x004F14E0,
+    FUN_MACRO_RUN_BY_ID = 0x004F1460,
+    // The two engine re-parse passes that also rewrite `+0x564`/`+0x568`
+    // (both call FUN_MACRO_PARSE_PRIMARY_SPELL per macro): every macro
+    // (world-enter init `FUN_005DEA50` + macro file load `FUN_004F0600`), and
+    // only the unresolved ones (`+0x564 < 0` or `+0x568 != 0`) on spellbook
+    // update (`FUN_004BD990`).
+    FUN_MACRO_REPARSE_ALL = 0x004F0CA0,
+    FUN_MACRO_REPARSE_UNRESOLVED = 0x004F0CE0,
+    // Storm string tokenizer — `__stdcall(char **cursor, char *out, uint
+    // outSize, const char *delims, int *outQuoted)`, RET 0x14. Skips leading
+    // delimiters, copies the next token (honoring `"` quoting) NUL-terminated
+    // into `out` and advances `*cursor` past it. `outQuoted` may be NULL.
+    // Shared by the macro parser (0x100 buffer) and the body runner (0x400).
+    FUN_STORM_STR_TOKENIZE = 0x0064AE50,
+    VAR_MACRO_LINE_DELIMS = 0x0082EDFC, // "\r\n" — the macro line delimiter set (bytes 0D 0A 00 verified)
+    // The engine runner's own line buffer size (`SUB ESP, 0x404` plus the
+    // 0x400 it hands the tokenizer). Anything that tokenizes a macro body
+    // the way the runner does uses the same buffer, so a body line never
+    // truncates differently from the engine's.
+    MACRO_LINE_BUFFER_SIZE = 0x400,
+    EVENT_EXECUTE_CHAT_LINE = 0x188,     // fmt "%s", one macro body line
+
+    // Macro-icon database. One flat array of basenames, built lazily and
+    // cached for the process. Each entry is the basename with its extension
+    // truncated (e.g. `"Ability_Kick"`); `Script_GetMacroIconInfo`
+    // (`0x004F1A30`) re-joins the `Interface\Icons\` prefix with
+    // `SStrPrintf("%s%s", …)` before pushing, and pushes the EMPTY STRING
+    // (not nil) for an out-of-range index. Only `Script_GetNumMacroIcons`
+    // (`0x004F19F0`) triggers the lazy build, gated on `count == 0`.
     //
-    // Vanilla's loader has 3 enumeration passes, each with a per-file
-    // callback. The first two (`FUN_MACRO_ICON_CB_DISK`,
-    // `FUN_MACRO_ICON_CB_USER_MPQ`) prefix-filter on `"Ability_"` and
-    // `"Spell_"` — anything else (including `INV_*` item icons) is
-    // rejected. The third (`FUN_MACRO_ICON_CB_INSTALL_MPQ`) reads as
-    // extension-only filter in the disassembly (any `.blp`/`.tga` is
-    // accepted), but the engine's main icon DB ends up with zero
-    // `INV_*` entries regardless (`GetNumMacroIcons() == 746`, all
-    // `Ability_*`/`Spell_*`). Best guess: a check inside the
-    // `SStrDup`/array-append helpers downstream of all three callbacks
-    // filters them out — but the per-file callbacks themselves DO see
-    // `INV_*` filenames (verified by hook capture: 5,226 unique
-    // `INV_*` basenames flow through the callbacks per session).
+    // `FUN_LOAD_MACRO_ICONS` runs three enumeration passes, then
+    // `qsort(array, count, 4, 0x004F05E0)` + an adjacent case-insensitive
+    // `SStrCmpI` dedup (freeing the dupe and memmove-compacting), then
+    // shrinks the allocation. Every pass appends with the SAME inlined
+    // grow-and-append code — there is no shared downstream helper, so the
+    // ONLY filtering is what each callback does itself:
     //
-    // For `C_Macro::GetMacroItemIcons` we hook each callback at its
-    // entry, capture any `INV_*` filename into a DLL-owned side array,
-    // then forward to the original — dodges whichever downstream
-    // filter the engine applies and matches the parallel item-icon
-    // array 4.3.4 exposes (via `Script_GetMacroItemIcons`).
-    VAR_MACRO_ICON_COUNT = 0x00BDCC1C,          // uint32 count of loaded icons
-    VAR_MACRO_ICON_ARRAY = 0x00BDCC20,          // char ** — pointer to flat array of icon-name C strings (4-byte stride)
-    FUN_LOAD_MACRO_ICONS = 0x004F0090,          // `__cdecl()` lazy populate; no-op if already loaded
-    FUN_MACRO_ICON_CB_DISK = 0x004F0220,        // disk enumerator callback — `__fastcall(const char *fullPath)` — prefix-filtered
-    FUN_MACRO_ICON_CB_USER_MPQ = 0x004F0350,    // user-MPQ enumerator callback — `__fastcall(MpqRecord *r)` — prefix-filtered
-    FUN_MACRO_ICON_CB_INSTALL_MPQ = 0x004F04F0, // install-MPQ enumerator callback — `__fastcall(MpqRecord *r)` — extension-only filter
+    //   pass 1  FUN_MPQ_ENUM_FILES(6, "Interface\Icons\", cb, 0)
+    //           -> FUN_MACRO_ICON_CB_MPQ: skips the prefix, keeps only
+    //              `Ability_*` / `Spell_*` (SStrCmpI, length-bounded) with a
+    //              `.blp` / `.tga` extension.
+    //   pass 2  FUN_ADDON_SCAN_DISK_DIRS(<basePath>+"Interface\Icons\", "*", cb)
+    //           -> FUN_MACRO_ICON_CB_DISK_PREFIXED: same prefix + extension
+    //              test (plus a `.bz` sub-extension strip).
+    //   pass 3  FUN_ADDON_SCAN_DISK_DIRS("Interface\Icons\", "*", cb)
+    //           -> FUN_MACRO_ICON_CB_DISK_ANY: extension test ONLY.
+    //
+    // So the engine's list is all `Ability_*`/`Spell_*`
+    // (`GetNumMacroIcons() == 746`) for one reason: passes 1-2 prefix-filter,
+    // and pass 3 — the only one that doesn't — is a DISK walk over a folder
+    // that is empty on a stock install (every icon ships inside the MPQs).
+    // A loose `INV_*.blp` dropped into `Interface\Icons\` DOES enter the list,
+    // through pass 3 alone. (An earlier note here guessed a filter inside the
+    // `SStrDup`/array-append helpers downstream of all three callbacks; that
+    // was wrong — the append is inlined per callback and nothing runs between
+    // the filter and the array write.) `Macro::Icons` also co-hooks the
+    // loader itself to seed `INV_Misc_QuestionMark` and move it to index 0,
+    // mirroring 3.3.5's loader (so `#showtooltip` macros can pick the `?`).
+    //
+    // `Macro::Icons` hooks all three at ENTRY, before each filter, so it sees
+    // every filename the engine walks — including the ~5,226 archive `INV_*`
+    // names pass 1 rejects — and sorts them into (loose|mpq) x (spell|item)
+    // buckets for the four modern `Get*MacroI*Icons` mutators. The bucket a
+    // callback feeds is therefore decided by WHICH WALKER the loader passed
+    // it to, which is what these names record.
+    VAR_MACRO_ICON_COUNT = 0x00BDCC1C,             // uint32 count of loaded icons
+    VAR_MACRO_ICON_ARRAY = 0x00BDCC20,             // char ** — flat array of icon-name C strings (4-byte stride)
+    FUN_LOAD_MACRO_ICONS = 0x004F0090,             // `__cdecl()` lazy populate; no-op once count != 0
+    FUN_MACRO_ICON_CB_MPQ = 0x004F0220,            // pass 1, ARCHIVE walk — `__fastcall(const char *archivePath)`, prefix + extension filtered; returns 1 to continue
+    FUN_MACRO_ICON_CB_DISK_PREFIXED = 0x004F0350,  // pass 2, DISK walk — `__fastcall(FindRecord *r)` (dir bit `r[4] & 0x10`, inline name at `r+8`), prefix + extension filtered
+    FUN_MACRO_ICON_CB_DISK_ANY = 0x004F04F0,       // pass 3, DISK walk — same record shape, EXTENSION ONLY (the sole route for a non-`Ability_`/`Spell_` icon)
 
     // Quest log: 16-byte-stride entry array and active count.
     // Field +0 of each entry is the questID for real quests (a category index
@@ -3518,6 +5054,12 @@ enum Offsets {
     OFF_QUEST_LOG_ENTRY_STRIDE = 0x10,
     OFF_QUEST_LOG_ENTRY_QUEST_ID = 0x0,
     OFF_QUEST_LOG_ENTRY_HEADER_PTR = 0x8,
+    // Script_GetQuestLogTitle — `int __fastcall(lua_State *L)`, the Lua entry
+    // itself. Reads L[1] (1-based index into the FULL entry array above) and
+    // pushes 6: title, level, questTag, isHeader (1/nil), isCollapsed
+    // (1/nil — header whose category bit in 0x00BB748C is clear), isComplete
+    // (1 = objectives done, -1 = failed, nil otherwise). Verified by decompile.
+    FUN_SCRIPT_GET_QUEST_LOG_TITLE = 0x004DF930,
 
     // The single chokepoint that rebuilds the quest log from the
     // player's authoritative quest-slot data at `[CGPlayer + 0xE68 +
@@ -3540,6 +5082,25 @@ enum Offsets {
     // no known DLL collisions.
     FUN_QUEST_LOG_REBUILD = 0x004DE510,
 
+    // The engine's per-quest-slot player-descriptor observer, registered 20
+    // times by FUN_005DD8A0 (once per slot, at OFF_DESC_PLAYER_QUEST_LOG_FIRST
+    // + N * DESC_PLAYER_QUEST_LOG_SLOT_SIZE, size DESC_PLAYER_QUEST_LOG_SLOT_SIZE).
+    // Standard observer callback ABI; resolves the player from the GUID it is
+    // handed via FUN_OBJECT_RESOLVE_BY_GUID(TYPEMASK_PLAYER, …) and returns 1.
+    //
+    // This is the engine's own accept/remove decision point. On a slot taking
+    // a quest — `new != 0 && (old == 0 || (new == old && !complete(new) &&
+    // complete(old)))` — it announces "Quest accepted: <name>" via
+    // `FUN_00496720(0x89, title)`, the game-message table at 0x00B4B498
+    // (stride 0x14), row 137 = { "ERR_QUEST_ACCEPTED_S", channel 0, sound
+    // "QUESTADDED" }. On `old != 0 && new != old` it drops the old quest
+    // (FUN_004DF0E0). The title comes from the QUEST CACHE, never from the
+    // quest log, so it can announce a quest the Lua-visible log hasn't picked
+    // up yet; on a cache miss it announces nothing and queues the deferred
+    // twin at 0x005DDEB0, which re-reads the cache once the query response
+    // lands. Hooked by `Quest::LogEvents` — see that file.
+    FUN_QUEST_SLOT_ANNOUNCE_OBSERVER = 0x005DDD80,
+
     // Player and pet spellbooks — flat int32 arrays indexed by 0-based slot.
     // Each entry is a spellID (0 for unused slots). Engine bounds-checks
     // each slot against an absolute max of `SPELLBOOK_MAX_SLOTS = 0x400`
@@ -3553,6 +5114,68 @@ enum Offsets {
     VAR_PLAYER_SPELLBOOK = 0x00B700F0,
     VAR_PET_SPELLBOOK = 0x00B6F098,
     SPELLBOOK_MAX_SLOTS = 0x400,
+    // Populated-slot count of the player array above. The learn writer
+    // `FUN_LEARN_SPELL` appends a newly learned spell at
+    // `VAR_PLAYER_SPELLBOOK[count++]` (0x004B2B37: `mov [ecx*4 + B700F0],
+    // spellID; inc [B7116C]`), so a before/after read of this count is the
+    // exact "was it added to the book" gate the engine itself uses before
+    // firing LEARNED_SPELL_IN_TAB. Read by `Spell::Learn`.
+    VAR_PLAYER_SPELLBOOK_COUNT = 0x00B7116C,
+
+    // The player's pet GUID as a u64 (lo @ +0, hi @ +4). Verified three
+    // ways: `Script_HasPetUI` (0x004BE670) resolves it with TYPEMASK_UNIT
+    // through FUN_OBJECT_RESOLVE_BY_GUID, FUN_PET_ACTIONS_USABLE compares it
+    // against the CGPlayer pet field (`[player+0xE68]+0x830`), and the pet
+    // branch of the action-usability recompute `FUN_004E5050` resolves the
+    // pet from it before reading the pet's power.
+    VAR_PET_GUID = 0x00B714A0,
+    // "The pet can act" — the core of `Script_GetPetActionsUsable`
+    // (0x004BE0B0), `int()` with no args. True when the player isn't
+    // charmed, the CGPlayer pet field matches VAR_PET_GUID, the pet
+    // resolves, its charmer / summoner is the player, it's not stunned /
+    // fleeing / confused, and the pet-state flag `[0x00B71468] & 0x8000000`
+    // is clear. The pet branch of `FUN_004E5050` gates on it before the
+    // pet power check; `Spell::Usable` mirrors that branch for pet-book
+    // spells.
+    FUN_PET_ACTIONS_USABLE = 0x004BCF70,
+
+    // Spellbook TABS — what `GetNumSpellTabs` / `GetSpellTabInfo` read.
+    // `[VAR_SPELL_TAB_ENTRIES]` is a `SpellTab **` (heap array of pointers,
+    // grown by `FUN_LEARN_SPELL` as new skill lines appear); `[VAR_SPELL_TAB_
+    // COUNT]` is the live tab count. Each 8-byte `SpellTab` is
+    // `{ skillLineID @+0, numSpells @+4 }` — verified from
+    // `Script_GetSpellTabInfo` (0x004B3CE0), which reads `entry[0]` as the
+    // SkillLine.dbc ID (0 = the "General" tab, name from the GENERAL global
+    // string + `Interface\Icons\Ability_Kick`; else name `SkillLine+0x0C`
+    // localized, icon via `SkillLine+0x54` → SpellIcon.dbc) and pushes
+    // `entry[1]` as numSpells. Tabs partition the player spellbook array in
+    // order: tab i covers slots `[offset(i), offset(i) + numSpells)` where
+    // `offset` is `FUN_SPELL_TAB_SLOT_OFFSET`. The skillLineID per tab is
+    // never surfaced to Lua by the stock API — `Spell::Tabs` exposes it as
+    // `C_SpellBook.GetSkillLineIndexByID` / `GetSpellBookItemSkillLineIndex`.
+    VAR_SPELL_TAB_ENTRIES = 0x00B71160,
+    VAR_SPELL_TAB_COUNT = 0x00B71170,
+    OFF_SPELL_TAB_SKILL_LINE_ID = 0x00,
+    OFF_SPELL_TAB_NUM_SPELLS = 0x04,
+    // `int __fastcall(uint tabIndex0)` — sum of `numSpells` over tabs
+    // `[0, tabIndex0)`, i.e. the 0-based first slot of that tab (the `offset`
+    // return of `GetSpellTabInfo`). Returns 0 for tab 0 and for OOR input.
+    FUN_SPELL_TAB_SLOT_OFFSET = 0x004B2580,
+    // The engine's own `Script_GetSpellTabInfo(index)` Lua C function
+    // (`int __fastcall(void *L)`; reads `L[1]`, pushes `name, texture,
+    // offset, numSpells`). `C_SpellBook.GetSpellBookSkillLineInfo` reshapes
+    // the stack and calls it directly so the GENERAL-tab localization and the
+    // SkillLine → SpellIcon chain stay the engine's.
+    FUN_SCRIPT_GET_SPELL_TAB_INFO = 0x004B3CE0,
+
+    // Active minimap-tracking spell ID (0 = none). Vanilla tracks exactly
+    // one active tracker as a plain int here, derived from the player's
+    // active Track Creatures/Resources/Stealthed aura by `FUN_004E4170`
+    // (an aura-descriptor observer registered by `FUN_004E4100`). Read by
+    // `Script_GetTrackingTexture` (`0x004E4A20`), `Script_CancelTrackingBuff`
+    // (`0x004E4A80`), and `GameTooltip:SetTrackingSpell` (`0x00532C50`);
+    // `Spell::Tracking::GetTrackingInfo` reads it to report `active`.
+    VAR_ACTIVE_TRACKING_SPELL = 0x00BC6378,
 
     // Player-spell-knowledge bitmap — `[VAR_PLAYER_SPELL_BITMAP]` is a
     // pointer to a dword bitmap covering all spellIDs the player has
@@ -3577,10 +5200,20 @@ enum Offsets {
     // spellbook arrays, and fires SPELLS_CHANGED; unlearn (`FUN_004b2c50`)
     // clears the bit and removes the spell. Both `__fastcall`: learn is
     // (uint spellID, int notify, uint replacedSpellID), unlearn is
-    // (uint spellID, int). Co-hooked (spell/Info.cpp) to bump
+    // (uint spellID, int). Co-hooked (spell/Learn.cpp) to bump
     // Player::StatSignal so a talent respec invalidates GetSpellBonusHealing's
-    // talent-conversion cache. They fire at login (SMSG_INITIAL_SPELLS) and on
-    // each learn/unlearn — never per-frame, so cool hook targets.
+    // talent-conversion cache, and to fire LEARNED_SPELL_IN_SKILL_LINE. They
+    // fire at login (SMSG_INITIAL_SPELLS) and on each learn/unlearn — never
+    // per-frame, so cool hook targets.
+    //
+    // Learn's own event gate (decompiled): it fires LEARNED_SPELL_IN_TAB
+    // (event 0x1FE, fmt "%d" at 0x00835154) only when `notify != 0` AND the
+    // spell was appended to the player spellbook array (non-trade, non-
+    // hidden spells; passives included). Shapeshift-form spells additionally
+    // hit the form list + UPDATE_SHAPESHIFT_FORMS; trade spells only get the
+    // "learned how to create" chat line (0x39). There is NO action-bar
+    // auto-placement anywhere in it — 1.12 never pushes a learned spell to a
+    // bar, so SPELL_PUSHED_TO_ACTIONBAR has no engine source.
     FUN_LEARN_SPELL = 0x004B25B0,
     FUN_UNLEARN_SPELL = 0x004B2C50,
 
@@ -3657,22 +5290,13 @@ enum Offsets {
     OFF_SPELL_REAGENT_COUNT = 0xC8,
     SPELL_MAX_REAGENTS = 8,
 
-    // Per-spell *runtime* state cache, indexed by spellID via a hash
-    // table (mask at `[VAR_SPELL_STATE_HASH_MASK]`, base at
-    // `[VAR_SPELL_STATE_HASH_BASE]`). The engine maintains the cache as
-    // player state changes — cooldown, silence, GCD, mana balance, etc.
-    // each update flips the relevant byte. The action-bar usability
-    // path at `0x004E5BA0` reads `+0x564` (usable) and `+0x568`
-    // (noMana) directly off this cache; we do the same to back
-    // `IsUsableSpell` / `C_Spell.IsSpellUsable`.
-    //
-    // `FUN_SPELL_LOOKUP_STATE` is `__fastcall(int spellID) → void *`
-    // — the hash-walking helper. Returns null for spells the player
-    // doesn't know (cache only holds known spellIDs) or pre-login
-    // (when `[VAR_SPELL_STATE_HASH_MASK]` is `-1`).
-    FUN_SPELL_LOOKUP_STATE = 0x004F0F40,
-    OFF_SPELL_STATE_USABLE = 0x564,
-    OFF_SPELL_STATE_NO_MANA = 0x568,
+    // (`0x004F0F40` used to be listed here as a per-spell "state cache"
+    // lookup with `+0x564 = usable` / `+0x568 = noMana`. Decompiled, it is
+    // the macroID → MacroEntry resolver — see FUN_MACRO_ID_TO_ENTRY — and the
+    // two fields are the macro's cached primary spell and its pet flag
+    // (OFF_MACRO_PRIMARY_SPELL / OFF_MACRO_PRIMARY_SPELL_IS_PET). The
+    // action-bar path `0x004E5BA0` that reads them is the macro branch of
+    // FUN_ACTION_SLOT_TO_SPELL. `IsUsableSpell` never read the mislabel.)
 
     // Spell description format helper. Reads the locale-resolved description
     // string from `record[+0x228 + locale*4]` and walks it character-by-
@@ -3824,6 +5448,15 @@ enum Offsets {
     // results). Callable directly from C++ — push args on stack, call.
     FUN_SCRIPT_CAST_SPELL_BY_NAME = 0x004B4AB0,
 
+    // `Script_CastSpell` — engine's Lua wrapper for the slot-based
+    // `CastSpell(spellbookSlot, bookType)` global. `int __fastcall(void *L)`.
+    // Parses (slot, bookType) from stack[1]/[2] via `FUN_004B3EC0`, then
+    // dispatches through `FUN_SPELL_CAST_DISPATCH` with the current target
+    // (or self). Raises "Invalid spell slot in CastSpell" for a bad slot.
+    // Callable from C++ by preparing the stack and tail-calling it (the
+    // `Spell::Tracking::SetTracking` "select = cast" path does this).
+    FUN_SCRIPT_CAST_SPELL = 0x004B42F0,
+
     // Inner spell-cast dispatcher — `__fastcall(slot, bookType, targetGuidLo,
     // targetGuidHi)`. `Script_CastSpellByName` calls this after resolving
     // the spell name to a spellbook slot. For ground-target spells, the
@@ -3858,9 +5491,11 @@ enum Offsets {
     // `__fastcall(const char *name, int *outIsPet)`. Internally calls
     // `FUN_004B3950` (the rank-stripping name-with-`(Rank N)` parser)
     // to get a spellbook slot, then returns
-    // `[VAR_PLAYER_SPELLBOOK][slot]` (or `[VAR_PET_SPELLBOOK][slot]`
-    // when `*outIsPet` is set on entry). Returns 0 if the name doesn't
-    // resolve to a known spellbook entry. This is the resolver the
+    // `[VAR_PLAYER_SPELLBOOK][slot]` or `[VAR_PET_SPELLBOOK][slot]` and
+    // WRITES which book matched to `*outIsPet` (0 player, 1 pet — an
+    // output; initialize it to 0). The macro parser passes
+    // `&entry->OFF_MACRO_PRIMARY_SPELL_IS_PET` here. Returns 0 if the name
+    // doesn't resolve to a known spellbook entry. This is the resolver the
     // engine's macro parser uses — name → spellID lookup that respects
     // the player's known spell list.
     FUN_RESOLVE_SPELL_NAME_TO_BOOK_ID = 0x004B3BC0,
@@ -3872,9 +5507,9 @@ enum Offsets {
     // `Script_CastSpellByName` (every Lua cast) AND by
     // `FUN_RESOLVE_SPELL_NAME_TO_BOOK_ID` (which the macro parser
     // uses). Hooking here makes one change to both the runtime cast
-    // path AND the macro-tagging path — useful for accepting numeric
-    // spellID input as if it were a name (the `Spell::CastByID`
-    // module does this to enable `/cast 5019`-style macros).
+    // path AND the macro-tagging path — `Spell::NameResolve` owns that
+    // hook and uses it for the two macro name forms the engine never
+    // learned: a numeric spellID (`/cast 5019`) and the `!Name` prefix.
     FUN_RESOLVE_SPELL_NAME_TO_SLOT = 0x004B3950,
 
     // `__fastcall(uint slot, int bookType) -> int isActive`. Returns 1
@@ -3891,9 +5526,12 @@ enum Offsets {
 
     // MacroEntry struct offsets (verified by tracing FUN_004EFE00).
     // The macro body is an inline null-terminated string at `+0x164`;
-    // line breaks are `\n`. The primary-spell cache (what
-    // `IsAutoRepeatAction` ultimately reads via the spell-state hash
-    // lookup at `[0x00C0E2A0]`) is at `+0x564`.
+    // line breaks are `\r\n` / `\n` (VAR_MACRO_LINE_DELIMS). The
+    // primary-spell cache is at `+0x564` (its spellbook flag at
+    // OFF_MACRO_PRIMARY_SPELL_IS_PET); FUN_ACTION_SLOT_TO_SPELL returns it
+    // for every macro slot, so cooldown / usable / range / current /
+    // auto-repeat all follow it — and `Macro::ShowTooltip` writes the
+    // `#showtooltip`-resolved spell into it for exactly that reason.
     OFF_MACRO_BODY = 0x164,
     OFF_MACRO_PRIMARY_SPELL = 0x564,
 
@@ -4089,6 +5727,11 @@ enum Offsets {
     OFF_GROUP_MEMBER_STATUS_FLAGS = 0x08,
     GROUP_MEMBER_STATUS_ONLINE = 0x1,
     FUN_GROUP_MEMBER_SLOT_LOOKUP = 0x00496420,
+    // Inline member name in the slot record — `Script_UnitName` (0x00517020)
+    // pushes `slot + 8` for a GUID with no live object, as does the unit
+    // tooltip builder's no-object branch (0x00529FE0). This is why
+    // `UnitName("partyN")` answers for an offline member.
+    OFF_GROUP_MEMBER_SLOT_NAME = 0x08,
 
     // Health/power fields within the two group-member blocks — the
     // out-of-range fallback the engine's UnitHealth/UnitMana (and their Max
@@ -4171,6 +5814,17 @@ enum Offsets {
 
     VAR_LOCALE_INDEX = 0x00C0E080,             // 0..8, picks one of the 9 localized strings
 
+    // Locale-name string table — a parallel `const char *[8]` indexed by
+    // VAR_LOCALE_INDEX, holding the exact codes `GetLocale()` returns:
+    // enUS / koKR / frFR / deDE / zhCN / zhTW / esES / xxYY. This is the
+    // source `Script_GetLocale` (FUN_0048d8b0) reads:
+    //   lua_pushstring(L, (&PTR_DAT_008558a4)[DAT_00c0e080]);
+    // Verified by resolving all 8 entries from the binary. Index range is
+    // 0..7 (VAR_LOCALE_INDEX is documented 0..8, but slot 8 overreads into
+    // the string pool — clamp to 0..7 before reading). Used by the TOC
+    // `[TextLocale]` / `[AllowLoadTextLocale]` directives (AddOns::TocRewrite).
+    VAR_LOCALE_NAME_TABLE = 0x008558A4,
+
     LUA_IS_NUMBER = 0x6F34D0,
     LUA_IS_STRING = 0x6F3510,
     LUA_TO_NUMBER = 0x6F3620,
@@ -4226,6 +5880,20 @@ enum Offsets {
     // CObjects — which is exactly why the engine pushes handler/frame
     // through it rather than a plain rawget.
     LUA_RAWGETI = 0x6F3BC0,
+    // `lua_getmetatable(L, objindex)` — pushes the metatable of the value at
+    // objindex and returns 1, or pushes nothing and returns 0 when it has none.
+    // Verified in docs/LuaCAPI.md and by the getfenv/getmetatable base-lib
+    // functions that call it. Used by the `__environment` env-protection hook.
+    LUA_GET_METATABLE = 0x6F3CF0,
+    // `lua_setmetatable(L, objindex)` — pops the table at the top of the
+    // stack and installs it as the metatable of the value at objindex;
+    // returns 1. Catalogued (★-verified) in docs/LuaCAPI.md. Used by
+    // Table::Length to build its weak-keyed mark table from C.
+    LUA_SET_METATABLE = 0x6F4020,
+    // `lua_getfenv(L, idx)` — pushes the environment table of the function
+    // (or userdata/thread) at `idx`. The getfenv/setfenv base-lib code calls
+    // it to read a function's environment before the protection check.
+    LUA_GET_FENV = 0x6F3D50,
     LUA_SET_TABLE = 0x6F3E20,
     LUA_RAW_SET = 0x6F3EA0,
     LUA_INSERT = 0x6F31A0,
@@ -4292,6 +5960,183 @@ enum Offsets {
     // `rawset(nil)` clear leaves it stale and subsequent `table.insert`
     // appends past the wiped slots.
     LUAL_SETN = 0x6F4EA0,
+    // `luaL_getn(L, tableIndex)` — Lua 5.0 auxlib table-length getter,
+    // `int __fastcall(L /*ecx*/, idx /*edx*/)`, plain RET (no stack
+    // args), length in eax. Verified by disassembly: a negative idx is
+    // normalized via lua_gettop; tries the `t.n` field (rawget "n"),
+    // then the registry LUA_SIZES path, then falls back to a linear
+    // rawgeti scan for the first nil. Counterpart of LUAL_SETN above
+    // (named there since the table.insert trace). Used by the 5.1
+    // `unpack(list, i, j)` upgrade for the default range end.
+    LUAL_GETN = 0x6F5050,
+    // `table.insert` (5.0 `luaB_tinsert`), `int __fastcall(L)`. Found two
+    // independent ways: the table-lib luaL_reg pair in .data (entry
+    // {name 0x008821B4 "insert", func} at 0x00822D70) and the LUAL_SETN
+    // caller trace above. Decompile matches 5.0.2 tinsert exactly:
+    // lua_gettop → luaL_checktype(1, TABLE) → n = luaL_getn(1)+1 →
+    // optional-pos shift-up loop (rawgeti/rawseti) → luaL_setn(1, n) →
+    // lua_pushvalue(value) → lua_rawseti(1, pos). Its ONLY xref is that
+    // luaL_reg entry — no engine C code calls it — and exactly two Lua
+    // values hold it: `table.insert` (lib open) and the global `tinsert`,
+    // bound by the engine's embedded compat snippet (`tinsert = tab.insert`,
+    // .data 0x008722E8, run by FUN_00703b80 right before
+    // FUN_LOAD_SCRIPT_FUNCTIONS). Table::Length registers its marking
+    // `table.insert` OVER both names (no hook) and calls this address
+    // directly for the engine behavior (#36/#39).
+    FUN_LUA_TABLE_INSERT = 0x7FB6B0,
+    // `luaV_gettable(L, t, key, loop)` — the VM's generic index resolver.
+    // __fastcall(L /*ecx*/, t /*edx*/, key /*stack*/, loop /*stack*/),
+    // RET 8. Returns the result TValue* in eax (Ghidra types it void; the
+    // table-hit path demonstrably reaches the epilogue with eax =
+    // luaH_get's return — `CALL 0x006fa7a0; CMP [EAX],0; JNZ epilogue` at
+    // 0x006F7D1D..25). Table case: luaH_get (0x006FA7A0); nil result →
+    // the metatable continuation FUN_006F7D60, which reads the TABLE'S
+    // OWN metatable (hvalue+0x08, fast-TM flag byte hvalue+0x06 — 5.0
+    // fasttm) and returns &nilobject (0x00811BC0) when there is none
+    // (miss = nil, never an error). Non-table case → the continuation
+    // below, loop+1. Depth-guarded at 100 ("loop in gettable").
+    FUN_LUA_V_GETTABLE = 0x006F7CF0,
+    // The non-table branch of luaV_gettable — stock Lua 5.0's "index a
+    // non-table value" continuation. Same convention/return as
+    // FUN_LUA_V_GETTABLE (result TValue* in eax, RET 8). Body: __index
+    // tag method via luaT_gettmbyobj (0x006F7BD0 — which HARDCODES
+    // &nilobject for anything but table/userdata; stock 5.0, nothing
+    // stripped); nil → luaG_typeerror "attempt to index" (0x006FC620);
+    // function TM → call it; table TM → recurse FUN_LUA_V_GETTABLE with
+    // `loop` passed through UNCHANGED (0x006F7F23). Exactly 3 call
+    // sites: luaV_gettable's else-branch + luaV_execute's OP_GETTABLE /
+    // OP_SELF non-table fallbacks (0x006F8A14 / 0x006F8C17 in
+    // FUN_006F8720) — so it fires ONLY when code indexes a non-table,
+    // which in stock 5.0 is always about to raise "attempt to index"
+    // (table `__index` dispatch goes through FUN_006F7D60's fasttm and
+    // never lands here). A cold, uncontested hook site. Prologue is
+    // plain PUSH/MOV — MinHook-relocatable. Co-hooked by
+    // LuaSyntax::StringMethods to backport Lua 5.1 string methods
+    // (`("x"):upper()`): strings get the `string` library table as their
+    // __index, exactly 5.1's shared-string-metatable mechanism.
+    FUN_LUA_INDEX_NONTABLE = 0x006F7EE0,
+    // `luaL_loadbuffer(L, buff, size, chunkname)` — compiles a source
+    // buffer into a Lua function on the stack (does NOT run it). Returns
+    // an int status (0 = ok) in eax; Ghidra types it void because the
+    // status flows through `lua_load`. __fastcall(L /*ecx*/, buff /*edx*/,
+    // size /*stack*/, chunkname /*stack*/); strips a leading UTF-8 BOM.
+    // This is the UNIVERSAL Lua compile chokepoint — every path that turns
+    // source text into bytecode funnels through it: `luaL_loadstring`
+    // (0x006F57C0, backs the `loadstring` global) and the three FrameScript
+    // execute/load funnels (0x00704AE0 / 0x00704C70 / 0x00703280, backing
+    // `RunScript`, XML `<OnLoad>`/`<OnClick>` handlers, and file-loaded
+    // addon chunks). Verified via xrefs to `lua_load` (0x006F4320) and its
+    // two callers (this = loadbuffer, 0x006F5490 = loadfile). Hooking here
+    // lets a source-level transform see every chunk before the 5.0 parser.
+    FUN_LUAL_LOADBUFFER = 0x006F5690,
+    // Return address of the `call luaL_loadbuffer` inside the compile-AND-run
+    // funnel FUN_00704AE0 (the CALL is at 0x00704B0C; next instruction, and so
+    // the pushed return address, is 0x00704B11). FUN_00704AE0 compiles a buffer
+    // then IMMEDIATELY `lua_pcall`s it (0x00704B42) — it is the funnel every
+    // addon/FrameXML FILE load reaches (FUN_006ede10 -> FUN_00704bc0 -> here)
+    // AND what `RunScript` runs through. LuaSyntax's `luaL_loadbuffer` hook
+    // reads `_ReturnAddress()` and arms the addon-args grant ONLY when the
+    // caller is THIS site — i.e. a chunk that will be run before anything else,
+    // so its preamble consumes the grant immediately. `loadstring` (0x00703280,
+    // returns to 0x007032B5) compiles WITHOUT running and takes a
+    // caller-forgeable chunkname, so it must NOT arm; the call-site check
+    // excludes it even when nested inside a RunScript body.
+    RET_LUA_FILE_COMPILE = 0x00704B11,
+    // That funnel itself: `int __fastcall(const char *source, uint32_t size,
+    // const char *chunkName, void *errCtx)`, returning 1 when the chunk both
+    // compiled and ran and 0 otherwise. It resolves the Lua state through
+    // FUN_007040D0 rather than taking one, so a single call site reaches
+    // whichever state is current -- the glue state during glue boot, the in-game
+    // state afterwards. It also pushes the FrameScript error handler
+    // (DAT_008722C8) as the pcall's errfunc, so a runtime error is reported the
+    // way any script error is even when `errCtx` is null; `errCtx`, when given,
+    // is an object whose vtable +0xC receives the message instead. `chunkName`
+    // follows the usual Lua convention: `@name` is shown as a filename, `=name`
+    // verbatim. This is what `RunScript` runs through.
+    FUN_LUA_RUN_STRING = 0x00704AE0,
+
+    // --- Lua 5.0 parser internals: the upvalue limit --------------------------
+    // Stock lparser.c compiled as-is (the `lua\src\lparser.c` path string is
+    // still in .rdata). The 32-upvalue limit is NOT just the `PUSH 0x20`
+    // immediate in indexupvalue: it is the size of a fixed `expdesc
+    // upvalues[32]` array inside the parser's FuncState, and the array ends
+    // exactly where the next field begins — 0x38 + 32 × 0x14 = 0x2B8 =
+    // OFF_LUA_FUNCSTATE_ACTVAR, the declared-variable stack. Raising the
+    // immediate alone makes the 33rd upvalue overwrite actvar[0] and miscompile.
+    // In 5.0 the array has exactly two readers, both below; everything past the
+    // parser is dynamic (nups and LClosure.nupvalues are bytes, OP_GETUPVAL's B
+    // field is 9 bits, closures are sized per instance, the debug-name array
+    // grows with luaM_growaux). LuaSyntax::Upvalues co-hooks the two readers and
+    // spills entries 33+ into side storage, raising the limit to Lua 5.1's 60.
+    // The structural ceiling is the byte, 255, if it is ever wanted.
+    //
+    // indexupvalue(fs, name, v) -> index. `__fastcall(ecx = FuncState*, edx =
+    // TString *name, [stack] expdesc *v)`, RET 4. Scans fs->upvalues for
+    // {k, info} equal to v's, else checklimit(nups+1, 32, "upvalues"), grows
+    // f->upvalues (names) via luaM_growaux(L, block, &f->sizeupvalues, 4,
+    // 0x7FFFFFFD, ""), stores the name and the expdesc, returns nups++.
+    FUN_LUA_PARSER_INDEXUPVALUE = 0x006FDF80,
+    // pushclosure(ls, func, v). `__fastcall(ecx = LexState*, edx = FuncState
+    // *func, [stack] expdesc *v)`, RET 4. Grows f->p via luaM_growaux(L, f->p,
+    // &f->sizep, 4, 0x3FFFF, "constant table overflow"), stores func->f at
+    // f->p[np++], emits OP_CLOSURE (0x22) with luaK_codeABx(fs, op, 0, np-1),
+    // init_exp(v, VRELOCABLE = 10, pc), then one luaK_codeABC(fs, k == VLOCAL
+    // (5) ? OP_MOVE (0) : OP_GETUPVAL (4), 0, info, 0) per func->upvalues[i].
+    FUN_LUA_PARSER_PUSHCLOSURE = 0x006FD980,
+    // luaY_checklimit(ls, value, limit, what). `__fastcall(ecx = LexState*,
+    // edx = value, [stack] limit, what)`, RET 8. Raises "too many %s (limit=%d)"
+    // through luaO_pushfstring(ls->L, …) when limit < value; never returns then.
+    // NOTE: takes the LexState in this build, not the FuncState stock 5.0 passes.
+    FUN_LUA_PARSER_CHECKLIMIT = 0x006FF440,
+    // init_exp(v, k, info): `__fastcall(ecx = expdesc*, edx = k, [stack] info)`.
+    FUN_LUA_PARSER_INIT_EXP = 0x006FD3E0,
+    // luaM_growaux(L, block, &size, elemSize, limit, errMsg) -> new block.
+    // `__fastcall(ecx = L, edx = block, [stack] int *size, elemSize, limit,
+    // msg)`, RET 0x10.
+    FUN_LUA_M_GROWAUX = 0x006FC900,
+    // luaK_codeABx(fs, op, A, Bx) -> pc and luaK_codeABC(fs, op, A, B, C) -> pc.
+    // `__fastcall(ecx = fs, edx = op, [stack] …)`; RET 8 / RET 0xC.
+    FUN_LUA_K_CODEABX = 0x00701910,
+    FUN_LUA_K_CODEABC = 0x007018E0,
+    // FuncState (lparser.h), verified from indexupvalue / pushclosure /
+    // new_localvar: f@+0, ls@+0xC, L@+0x10, np@+0x2C, nactvar@+0x34, then the
+    // fixed expdesc upvalues[32]@+0x38 (stride 0x14) running into
+    // actvar[200]@+0x2B8.
+    OFF_LUA_FUNCSTATE_F = 0x00,
+    OFF_LUA_FUNCSTATE_LS = 0x0C,
+    OFF_LUA_FUNCSTATE_L = 0x10,
+    OFF_LUA_FUNCSTATE_NP = 0x2C,
+    OFF_LUA_FUNCSTATE_UPVALUES = 0x38,
+    OFF_LUA_FUNCSTATE_ACTVAR = 0x2B8,
+    LUA_PARSER_NATIVE_UPVALUE_SLOTS = 32, // sizeof(fs->upvalues) / sizeof(expdesc)
+    SIZEOF_LUA_EXPDESC = 0x14,            // { k, info, aux, t, f }
+    // LexState: fs@+0x30, L@+0x34 (new_localvar reads both; checklimit reads L).
+    OFF_LUA_LEXSTATE_FS = 0x30,
+    OFF_LUA_LEXSTATE_L = 0x34,
+    // Proto (lobject.h). p/sizep and upvalues/sizeupvalues from pushclosure and
+    // indexupvalue; the four packed bytes at +0x44 are nups, numparams,
+    // is_vararg, maxstacksize — numparams/is_vararg were verified separately by
+    // Frame::ScriptArgs, which reads them to decide whether a handler declares
+    // parameters, and they pin nups to the byte before them.
+    OFF_LUA_PROTO_P = 0x10,
+    OFF_LUA_PROTO_UPVALUES = 0x1C, // TString **, the debug names
+    OFF_LUA_PROTO_SIZEUPVALUES = 0x24,
+    OFF_LUA_PROTO_SIZEP = 0x34,
+    OFF_LUA_PROTO_NUPS = 0x44,
+    OFF_LUA_PROTO_NUMPARAMS = 0x45,
+    OFF_LUA_PROTO_IS_VARARG = 0x46,
+    // Shared environment-protection predicate for `getfenv`/`setfenv`
+    // (`bool __fastcall(L /*ecx*/)`). Pushes the function-at-top's environment
+    // via `lua_getfenv(L, -1)`, then pushes the protection marker
+    // `env["__fenv"]` (a RAW field on the env table) and returns whether it is
+    // non-nil — net stack effect +2 (env, marker). `getfenv` (`0x00702AC0`)
+    // returns the marker in place of the real env when set; `setfenv`
+    // (`0x00702BF8`) raises "cannot change a protected environment" when set.
+    // We co-hook this ONE predicate to read `getmetatable(env).__environment`
+    // (raw) instead — the Lua 5.1 form (verified against 3.3.5's
+    // `FUN_0084F2F0`) — with the raw `__fenv` field kept as a fallback, so both
+    // consumers gain the 5.1 semantics with the 1.12 behavior preserved.
+    FUN_LUA_ENV_PROTECT_PREDICATE = 0x00702BA0,
     // `lua_checkstack(L, n)` — `int __fastcall(L /*ecx*/, n /*edx*/)`.
     // Ensures room for `n` more stack values, growing if needed; returns 0
     // (without growing) when `(top-base)/16 + n` would exceed LUA_MAXCSTACK
@@ -4315,6 +6160,28 @@ enum Offsets {
     // `BaseLib::StringLib` registers `string.gmatch` as a direct alias of
     // this function pointer — no wrapper.
     FUN_LUA_STR_GFIND = 0x007FCFA0,
+    // `str_gsub` — the Lua 5.0 `string.gsub` C function (strlib entry
+    // at `0x00822DE0`, name string "gsub" at `0x00882230` — the last
+    // entry before the registration table's NULL terminator, matching
+    // stock 5.0 order). Verified by decode: args (s, pat, repl, maxN),
+    // `^` anchor pre-strip, and the luaL_argerror(3) "string or
+    // function expected" gate. Its add_value helper (`FUN_007fd2a0`)
+    // matches stock 5.0: a FUNCTION replacement's non-string result is
+    // popped and NOTHING is appended (match → empty) — 5.1 instead
+    // keeps the original match for nil/false. That difference is why
+    // `BaseLib::StringLib`'s 5.1 table-replacement shim wraps the
+    // pattern in an outer capture (arg 1 = whole match) so its adapter
+    // closure can hand the match back for missing keys.
+    FUN_LUA_STR_GSUB = 0x007FD0E0,
+    // `str_format` — the Lua 5.0 `string.format` C function (`int
+    // __fastcall(void *L)`), strlib entry at `0x00822dc0`. Verified by decode:
+    // reads the format at arg 1, handles `%%`, `%d/i/c`, `%e/E/f/g/G`,
+    // `%o/u/x/X`, `%s`, `%q`, with the "invalid option to 'format'" / "invalid
+    // format (width or precision too long)" errors. FontString:SetFormattedText
+    // pushes THIS directly and pcalls it, rather than resolving `_G.string.format`
+    // — so an addon replacing `string.format` cannot hijack or break it (matches
+    // retail, whose SetFormattedText formats in C).
+    FUN_LUA_STR_FORMAT = 0x007FD3D0,
     // `math_fmod` — the Lua 5.0 `math.mod` C function (mathlib entry at
     // `0x00822cb0`): `luaL_checknumber(1/2)` → `fmod(x, y)` → `lua_pushnumber`.
     // 5.1 renamed the Lua-facing name to `math.fmod` with the identical C
@@ -4420,11 +6287,29 @@ enum Offsets {
 
     // `Frame::RegisterEvent` — the C++ helper called by the Lua
     // `frame:RegisterEvent(eventName)` method (`Script_RegisterEvent` at
-    // `0x00774A40`). `__thiscall` with `(this=frame, eventName)`. Walks
-    // the entry array at `[VAR_EVENT_TABLE_BASE_PTR]`, case-insensitively
-    // strcmps against each entry's name, and appends `frame` to the
-    // matching entry's chain.
+    // `0x00774A40` = FUN_SCRIPT_FRAME_REGISTEREVENT). `__thiscall` with
+    // `(this=frame, eventName)`. Walks the entry array at
+    // `[VAR_EVENT_TABLE_BASE_PTR]`, case-insensitively strcmps against each
+    // entry's name, appends `frame` to the matching entry's chain, and appends
+    // the event index to the frame's own registered-event list (`+0x14` cap,
+    // `+0x18` count, `+0x1C` int[]). Returns 1 when the frame was ALREADY on
+    // that chain (no-op), 0 after appending.
     FUN_FRAME_REGISTER_EVENT = 0x00702140,
+    // `Frame::UnregisterEvent` — `__thiscall(this=frame, eventName)`. Walks
+    // the frame's registered-event list backwards for the entry whose name
+    // matches (SStrCmpI), unlinks + frees the frame's `__AUEVENTLISTENERNODE__`
+    // from that chain, and compacts the list. Sole caller is the Lua wrapper
+    // `Script_UnregisterEvent` (0x00774B30). `Frame::UnitEvent` co-hooks it to
+    // drop the (frame, event) unit filter exactly when the engine drops the
+    // node — mirroring 5.4.8, where the filter LIVES on the node.
+    FUN_FRAME_UNREGISTER_EVENT = 0x00702280,
+    // `Frame::UnregisterAllEvents` — `__fastcall(frame)`. Unlinks the frame's
+    // node from every chain in its registered-event list, frees the list, and
+    // zeroes `+0x14/+0x18/+0x1C`. Callers: the Lua wrapper
+    // `Script_UnregisterAllEvents` (0x00774CF0) and the CScriptObject
+    // destructor FUN_00701B40 — so a hook here also sees frame destruction.
+    // `Frame::UnitEvent` co-hooks it to drop all of the frame's unit filters.
+    FUN_FRAME_UNREGISTER_ALL_EVENTS = 0x007024F0,
 
     // `RebuildEventTable` — the engine's bulk event-table population
     // routine. `__fastcall(const char **names, int count) -> void`
@@ -4467,6 +6352,14 @@ enum Offsets {
     // No `%b` for boolean — pass `%d` with 0/1; the engine has no native
     // bool concept here. No bounds check on eventID; pass valid indices.
     FUN_FIRE_EVENT = 0x00703F50,
+    // Per-token unit-event broadcast. Fires unit event `eventCode` for every
+    // unit token currently mapping to `*guid` (target / party / raid /
+    // nameplateN / mouseover / focus), via the engine's own GUID->token reverse
+    // map -- the same path the descriptor-field observers drive on a real field
+    // change. `void __fastcall(uint64_t *guid, uint32_t eventCode)`; verified
+    // against nampower's SendUnitSignal (0x00515e50). `eventCode` is the unit
+    // field index, which doubles as the event id (see UNIT_EVENT_UNIT_AURA).
+    FUN_UNIT_EVENT_BROADCAST = 0x00515E50,
     // Event name strings live in `.data` (mostly clustered around
     // 0x00851000..0x00855000); event-name string pointers also reach into
     // `.rdata` (starts at 0x007FF000) for some entries. Bound the dereference
@@ -4567,6 +6460,207 @@ enum Offsets {
     // disk/MPQ roles swapped; this entry is the authoritative note.
     FUN_MPQ_ENUM_FILES = 0x00401470,
 
+    // ...and the `archiveSelector` is NOT "an archive set" — it is an INDEX
+    // into a fixed 10-entry table of secondary archives. `FUN_00401470`
+    // walks the primary archives (`[0, DAT_00882740)`: the Data\patch-*.MPQ
+    // set plus speech2 sub-archives) and then exactly ONE more, at
+    // `archives[DAT_00882744 + selector]`. The mount function
+    // `FUN_00403740` builds that group from the name table at
+    // `0x0082E12C`, looping `uVar9 < 0x28` over 4-byte entries — so ten,
+    // in this order:
+    //
+    //   0 model    1 texture   2 terrain   3 wmo    4 sound
+    //   5 misc     6 interface 7 fonts     8 speech 9 dbc
+    //
+    // `DAT_00882740 == DAT_00882744` (both assigned the primary count), so
+    // the selector indexes that table directly and 0..9 are all in range;
+    // a failed open leaves a null the enumerator already skips.
+    //
+    // This bit us: passing 6 (copied from the macro-icon loader, which
+    // wants interface.MPQ) made `ExportInterfaceFiles` complete by
+    // coincidence while `ExportSoundFiles` saw neither sound.MPQ nor
+    // speech.MPQ — 6,561 of 9,535 listed sound files, silently. Anything
+    // enumerating content must sweep all ten selectors rather than guess
+    // which archive holds what; `Interface::Export::EnumAllArchives` does.
+    MPQ_SECONDARY_ARCHIVE_COUNT = 10,
+
+    // SoundEntries.dbc — the client's sound-file table, and the second
+    // source `ExportSoundFiles` enumerates from.
+    //
+    // The reason it needs one: an MPQ resolves a read by HASHING the
+    // path, so `(listfile)` is only an optional index, and this client's
+    // sound archives index a small fraction of what they hold. Measured
+    // on the 1.18.1 build: the listfile walk yields 3,184 files under
+    // `Sound\` while SoundEntries alone names 13,696 — including core
+    // entries like `Sound\Spells\DivineShield.wav` that demonstrably
+    // play. The two sets each carry files the other lacks (162 listfile
+    // files are in no SoundEntries row: doodad/model-referenced audio),
+    // so the export unions them, exactly as `ExportDBCFiles` unions the
+    // listfile with its `.text` path-getter scan.
+    //
+    // Standard 5-DWORD class instance at `0x00C0D8D4`; records-array
+    // pointer at `+0x08`, count at `+0x0C` (docs/DBCs.md). 29 fields,
+    // 116-byte records; string fields are fixed up to `char *` at load.
+    // Record layout (the columns we read; verified by parsing the
+    // extracted .dbc and rebuilding paths that match the exported tree):
+    //   +0x00 id
+    //   +0x08 Name
+    //   +0x0C `File[10]`      — bare file names, NULL for unused slots
+    //   +0x5C DirectoryBase   — e.g. "Sound\Spells"; one row in this
+    //                           build has a stray leading backslash
+    //                           ("\Sound\Creature\Ashbringer\"), so trim
+    //                           separators off both halves before
+    //                           joining them with a single '\'.
+    VAR_SOUND_ENTRIES_RECORDS = 0x00C0D8DC,
+    VAR_SOUND_ENTRIES_COUNT = 0x00C0D8E0,
+    OFF_SOUND_ENTRY_FILES = 0x0C,
+    OFF_SOUND_ENTRY_DIRECTORY = 0x5C,
+    SOUND_ENTRY_FILE_COUNT = 10,
+
+    // ---- Sound playback ------------------------------------------------
+    //
+    // `FUN_007A5450` is the ONE funnel every sound in this client passes
+    // through: `int *__fastcall(int category /*ecx*/, const char *path
+    // /*edx*/, uint flags, char deferStart)`. It returns the stream object,
+    // or NULL when the sound did not start — the engine's own "didn't
+    // play" answer, produced by its pre-play gate `FUN_007A66A0` (per
+    // category active-count limit, plus a by-path-hash dedup when
+    // `flags & 1`). Every caller already handles NULL, which is what makes
+    // muting expressible here: return NULL and nothing else changes.
+    //
+    // Six callers, and they are the whole surface: Script_PlaySoundFile
+    // (`FUN_00458780`, category 3), the SoundEntries player
+    // `FUN_SOUND_PLAY_ENTRY` (which is where `PlaySound` and every
+    // DBC-driven spell/creature/UI sound lands), and four music/ambience
+    // paths (`FUN_0045AE50`, `FUN_00460240`, `FUN_00461290`,
+    // `FUN_007A5620`, all category 0). There is no second route: the
+    // binary links only FMOD's FSOUND_Stream_* API — no
+    // FSOUND_Sample_Load, no FSOUND_PlaySound — so every sound, however
+    // short, is a stream opened by path.
+    //
+    // `category` indexes per-category state (`0x00CF553C[c]` active count
+    // against the cap at `0x0087CE60[c]`), and `FUN_007A66A0` rejects
+    // `c > 0xC`, so the valid range is 0..12.
+    FUN_SOUND_PLAY_BY_PATH = 0x007A5450,
+    SOUND_CATEGORY_MAX = 0x0C,
+
+    // SoundEntries player — `void *__fastcall(char orFlag4 /*ecx*/, char
+    // orFlag10 /*edx*/, int category, int soundEntryID, int variantIndex,
+    // int orFlag2)`, RET 0x10, returning the stream object or NULL.
+    // Resolves the row (`FUN_0045CDA0`), picks one of its up-to-10 file
+    // variants (`FUN_0045BB70`; `variantIndex = -1` takes the weighted
+    // random pick the engine uses), then calls FUN_SOUND_PLAY_BY_PATH.
+    //
+    // ABI verified by disassembly, NOT the decompile — Ghidra maps the
+    // arguments inconsistently against the call site. `FUN_00458850`, the
+    // tail of `PlaySound(name)`, calls it as `(0, 0, 0, id, -1, 0)` and
+    // coerces the result to a bool, which is exactly a by-ID play: the
+    // engine has always played by SoundEntries ID internally, it simply
+    // never exposed that to Lua (`PlaySound` takes only the row's name).
+    FUN_SOUND_PLAY_ENTRY = 0x0045CE60,
+
+    // Head of the live stream list, walked by `FUN_007A66A0`'s dedup pass:
+    // an intrusive list with `next` at `+0x04` and the Storm tagged-pointer
+    // sentinel (low bit set, or null, ends it). Membership is how
+    // `C_Sound.IsPlaying` validates a handle — a stream object is freed
+    // when it finishes, so the handle must never be dereferenced directly.
+    VAR_SOUND_STREAM_LIST_HEAD = 0x00CF557C,
+    OFF_SOUND_STREAM_NEXT = 0x04,
+    // VocalUISounds.dbc — the player's spoken error lines ("my bags are
+    // full"), one row per (error, race), each naming a male and a female
+    // recording. Standard 5-DWORD class instance at `0x00C0D604`.
+    //
+    // Record layout, verified by resolving a row's sound ids to their
+    // SoundEntries names: row `{9, 0, 1, 1875, 1999, 626, 626}` is error 0
+    // for race 1, whose normal sounds are `HumanMale_InventoryFull` and
+    // `HumanFemale_InventoryFull`.
+    //   +0x00 id
+    //   +0x04 vocal error enum — matches the modern
+    //         `Enum.Vocalerrorsounds` values, and this build carries ALL
+    //         68 of them (0..67) for 11 races
+    //   +0x08 ChrRaces id
+    //   +0x0C normal sound id [male, female]  (-1 where unrecorded)
+    //   +0x14 "pissed" sound id [male, female] — the escalated take; many
+    //         of these ids name no SoundEntries row, so they are not used
+    //
+    // NOTE the engine loads this table and never reads it: the only xrefs
+    // to the records/count globals are the loader's own writes. So the
+    // row lookup has no engine function to borrow, and `Sound::VocalError`
+    // does it directly — the play itself still goes through the engine's
+    // by-id player.
+    VAR_VOCAL_UI_SOUNDS_RECORDS = 0x00C0D60C,
+    VAR_VOCAL_UI_SOUNDS_COUNT = 0x00C0D610,
+    OFF_VOCAL_UI_ENUM = 0x04,
+    OFF_VOCAL_UI_RACE = 0x08,
+    OFF_VOCAL_UI_NORMAL_SOUND = 0x0C, // int[2], indexed by sex (0 male)
+
+    // SoundEntries row resolver — `void *__fastcall(uint soundEntryID)`,
+    // null for an id with no row. The by-id player calls it first; we need
+    // it too because the volume applicator below is a method ON the row.
+    FUN_SOUND_ENTRY_FOR_ID = 0x0045CDA0,
+
+    // Row volume applicator — `void __thiscall(void *row, void *stream,
+    // float scale)`. Computes the row's own volume times `scale`
+    // (`FUN_00458C60`) and stores it on the stream via `FUN_007A5DC0`,
+    // which writes `stream + OFF_SOUND_STREAM_VOLUME` and pushes it to
+    // FMOD. The by-id player already calls this with a scale of 1.0
+    // immediately after starting a sound, so calling it again with another
+    // scale REPLACES the volume rather than compounding — which is what
+    // makes a volume override expressible without touching FMOD directly.
+    // (It also re-rolls the random pitch for rows flagged 0x400 at
+    // `row + 0x7C`, exactly as the engine's own call does.)
+    FUN_SOUND_APPLY_ROW_VOLUME = 0x00458DA0,
+
+    // The stream's current volume, as written by `FUN_007A5DC0` — i.e. the
+    // row's volume after scaling, which is what "scaled volume" names.
+    OFF_SOUND_STREAM_VOLUME = 0x74,
+
+    // Hash of the path the stream was opened with, stamped at creation
+    // (`FUN_007A51D0`: `obj[0x20] = FUN_0064AF90(path)`) and compared by
+    // the dedup pass. Stream objects come from a pool and their addresses
+    // are reused, so this is what tells one instance from another at the
+    // same address — see `Sound::Play`'s finish tracking.
+    OFF_SOUND_STREAM_PATH_HASH = 0x80,
+
+    // Per-frame sound update, main thread: drains finished streams
+    // (`FUN_007A4B60`), updates the 3D listener, then calls FSOUND_Update.
+    // The drain matters for anything reporting completion: FMOD's own end
+    // callback (`FUN_007A53C0`) runs on the STREAMER thread and only moves
+    // the stream onto a deferred list under a critical section
+    // (`0x00CF55B4`) — so a finished sound must never be reported from
+    // there. `FUN_007A4B60` is where the engine reclaims those, on the main
+    // thread, which is the only safe side to notice completion from.
+    FUN_SOUND_UPDATE_FRAME = 0x007A4AD0,
+
+    // `Script_PlaySound` — the engine's `PlaySound(soundName)`: hashes the
+    // name to a SoundEntries row and calls `FUN_00458850`, whose tail is
+    // `FUN_SOUND_PLAY_ENTRY(0, 0, 0, id, -1, 0)`. `Sound::Play`
+    // re-registers `PlaySound` over it to also accept a SoundKitID, and
+    // tail-calls this with the stack untouched for every other argument
+    // shape. Contention checked before re-registering: no sibling DLL
+    // references it (UnitXP_SP3's "PlaySound" string is the winmm
+    // `PlaySoundW` import), and the one addon that reassigns the global
+    // (unitscan) does a temporary `PlaySound = pass` / restore around its
+    // own target calls, capturing whatever is registered at addon load.
+    FUN_SCRIPT_PLAY_SOUND = 0x004586D0,
+
+    // Item-sound player — `void __fastcall(int soundType /*ecx*/,
+    // int displayInfoID /*edx*/)`, the whole of `C_Sound.PlayItemSound`
+    // below the Lua edge. Bounds-checks the display id against
+    // ItemDisplayInfo (`[0x00C0DC10]` records, `[0x00C0DC14]` count), reads
+    // that row's ItemGroupSounds id at `+0x2C`, bounds-checks THAT against
+    // ItemGroupSounds (`[0x00C0DBFC]` / `[0x00C0DC00]`), and plays the
+    // SoundEntries id at `row + 0x04 + soundType * 4` via `FUN_00458850`.
+    //
+    // So an ItemGroupSounds row is four sound ids, and their column order
+    // is the modern `Enum.ItemSoundType` order — 0 Pickup, 1 Drop, 2 Use,
+    // 3 Close. Every bounds failure falls through silently, which is the
+    // behavior an unknown item should have at the Lua edge too.
+    //
+    // Note the key is the item's DISPLAY id (`OFF_ITEMSTATS_DISPLAY_INFO_ID`),
+    // not its itemID: items that share a display share a sound.
+    FUN_SOUND_PLAY_ITEM = 0x00457FF0,
+
     // Console-command registrar — the vanilla equivalent of 4.3.4's
     // `FUN_00654c90`. Registers a developer-console command (the `~`
     // console you get when launching with `-console`).
@@ -4597,6 +6691,83 @@ enum Offsets {
     // command's own registration in `FUN_006400E0`.
     FUN_CONSOLE_COMMAND_REGISTER = 0x0063F9E0,
 
+    // The registry that registrar fills: a Storm intrusive list plus a by-name
+    // hash. `Console::Commands` walks the list to back `C_Console.GetAllCommands`,
+    // mirroring the `help` handler (`FUN_0063FDC0`) exactly — it prints each
+    // command whose `+0x20` matches the requested category, stepping with
+    // `next = *(uint32_t *)(node + LINK_OFFSET + 4)` and stopping on a null or
+    // low-bit-tagged sentinel, the same tagged-pointer idiom as the addon
+    // registry. LINK_OFFSET is a value, not a pointer.
+    VAR_CONSOLE_COMMAND_LIST_HEAD = 0x00C4F854,
+    VAR_CONSOLE_COMMAND_LINK_OFFSET = 0x00C4F84C,
+    // Node fields, from the registrar's stores (`node[5..8]`) cross-checked
+    // against the help handler's reads. The registrar keeps `name` and `help`
+    // BY POINTER — it copies neither — so both outlive it only because every
+    // caller passes a literal.
+    OFF_CONSOLE_COMMAND_NAME = 0x14,
+    OFF_CONSOLE_COMMAND_HANDLER = 0x18,
+    OFF_CONSOLE_COMMAND_HELP = 0x1C, // may be null
+    OFF_CONSOLE_COMMAND_CATEGORY = 0x20,
+    // Every CVar is ALSO a console command: the CVar registrar's last act is
+    // `FUN_CONSOLE_COMMAND_REGISTER(cvar->name, 0x0063DDE0, categoryId, help)`,
+    // with this shared get/set handler. So the command list already contains
+    // every CVar — walking the CVar list too would double-count — and the
+    // handler pointer is an exact test for which kind a node is.
+    FUN_CONSOLE_CVAR_COMMAND_HANDLER = 0x0063DDE0,
+    // `{ int id; char name[0x14]; }` x 9, read by the bare `help` command to
+    // list the categories. Ids 0..8 are debug, graphics, console, combat, game,
+    // default, net, sound, gm, in that order — which is Enum.ConsoleCategory's
+    // own 0..8, so a category read off a command node needs no translation.
+    // This table is where that claim was checked; `Console::Commands` states
+    // the enum in full rather than deriving it, because the enum also carries
+    // Reveal (9) and None (10), which this client has no categories for.
+    VAR_CONSOLE_CATEGORY_TABLE = 0x008653A0,
+    CONSOLE_CATEGORY_COUNT = 9,
+    SIZEOF_CONSOLE_CATEGORY_ENTRY = 0x18,
+
+    // --- The rest of the console surface --------------------------------------
+    // Run a command line: `__fastcall(const char *line, int addToHistory)`. Skips
+    // leading spaces, resolves the name, and calls the node's +0x18 handler —
+    // the same field ConsoleGetAllCommands reports. Prints "Unknown command"
+    // when nothing matches. This is what replays each `SET` line of Config.wtf.
+    FUN_CONSOLE_EXEC = 0x0063CE00,
+    // `__fastcall(int keyCode)`, the whole body being a store to
+    // VAR_CONSOLE_TOGGLE_KEY.
+    FUN_CONSOLE_SET_KEY = 0x0063CB00,
+    // Console font init: reads VAR_CONSOLE_FONT_HEIGHT, releases the old font
+    // handle, creates `Fonts\ARIALN.ttf` at that size, and re-seeds
+    // VAR_CONSOLE_COLORS to its defaults.
+    //
+    // DO NOT CALL IT. It has no code callers — its single reference is one
+    // table entry at 0x0080E170 — so it runs exactly once at startup, before a
+    // console line exists. The null-check-and-free of the previous handle looks
+    // like re-entrancy but is not: every existing line holds a cached,
+    // font-dependent draw object at +0x20, and this frees the font without
+    // touching them, so the NEXT console render walks freed data and faults in
+    // the texture manager. The console's own shutdown frees the font and those
+    // per-line objects together, which is what the pairing is for. Verified by
+    // crashing this way; see console/Shell.cpp for why there is no font-height
+    // setter.
+    FUN_CONSOLE_FONT_INIT = 0x00639100,
+    // Toggled by the console key in the key handler FUN_0063C860, which acts
+    // only when VAR_CONSOLE_ENABLED is set: `visible = (visible == 0)`.
+    VAR_CONSOLE_VISIBLE = 0x00C4EAC8,
+    // Set at startup from the `-console` command-line switch (FUN_00419C10(0x22)
+    // in ConsoleDeviceInitialize). Without it the toggle key does nothing, so
+    // the console can never open.
+    VAR_CONSOLE_ENABLED = 0x00C4EC20,
+    VAR_CONSOLE_TOGGLE_KEY = 0x00864554,
+    // Nine ARGB uint32 colours indexed by a line's colour type — the second
+    // argument to FUN_CONSOLE_WRITE, stored per line at +0x1C and used to pick
+    // the colour at draw time. Seeded by FUN_00638A60 / FUN_CONSOLE_FONT_INIT
+    // (white, white, grey, red, yellow, white, white, half-alpha white, black),
+    // and the engine's own setter bounds the index with `< 9`. `help` writes
+    // type 4, "Unknown command" type 0.
+    VAR_CONSOLE_COLORS = 0x00C4EAD8,
+    CONSOLE_COLOR_COUNT = 9,
+    // Console font height as a fraction of screen height, 0.02 by default.
+    VAR_CONSOLE_FONT_HEIGHT = 0x0086455C,
+
     // `ConsoleWrite(const char *line /*ecx*/, int colorFlag /*edx*/)` —
     // appends a line to the developer console's output buffer. No-ops
     // cleanly when the console isn't active (gated on the console-init
@@ -4613,6 +6784,43 @@ enum Offsets {
     // embedded `!!!ClassicAPI` addon — the dedup behavior means our
     // call is a no-op when the user has the addon installed on disk.
     FUN_TOC_PARSER = 0x0051C9B0,
+
+    // Client interface version — `__cdecl() -> uint32` (no args), a bare
+    // `return 0x2BC0` (11200). The addon loadability resolver `FUN_0051e780`
+    // compares an addon's parsed `## Interface:` number (entry+0x1C) against
+    // this; a mismatch is the OUT_OF_DATE reason (code 7) that blocks loading
+    // while the `checkAddonVersion` cvar is on. `AddOns::TocRewrite` calls it
+    // to recognize the client version inside a multi-flavor comma-list.
+    FUN_ADDON_CLIENT_INTERFACE_VERSION = 0x0051D7D0,
+
+    // Per-addon file loader — `__fastcall(char *tocPath, int *bindingsCtx,
+    // int *progress) -> uint32`. `FUN_0051f240` calls it once per addon with
+    // `Interface\AddOns\<Name>\<Name>.toc`; it reads the TOC and runs each
+    // referenced Lua/XML file. Vanilla runs it BEFORE the addon's
+    // SavedVariables are loaded (files execute with SV nil), so
+    // `Addons::SavedVarsFirst` co-hooks it to honor `## LoadSavedVariablesFirst`
+    // by loading the SV first for flagged addons.
+    FUN_ADDON_LOAD_FILES = 0x006EDB90,
+
+    // Read + run a Lua file — `__fastcall(const char *path, void *checksumOut,
+    // void *errCtx) -> uint32`. Reads via `FUN_FILE_READ`, then compiles +
+    // pcalls; returns 0 (and fires errCtx's callback only when errCtx != null)
+    // if the file is missing, so it is safe to call on an absent path. How the
+    // engine loads each SavedVariables `.lua` (and how addon files run).
+    FUN_LUA_LOAD_FILE = 0x00704BC0,
+
+    // File-exists probe — `__stdcall(const char *path, int mode)` (RET 8);
+    // nonzero when the file exists. `mode = 1` on the addon / SavedVariables
+    // paths. Used to mirror the engine's SV path fallback (prefer the
+    // realm-scoped per-character file, else the realm-less one).
+    FUN_FILE_EXISTS = 0x00648A30,
+
+    // `realmName` CVar value reader — no-arg, `-> const char *` (last-connected
+    // realm's display name; lazily registers the cvar). The realm segment of
+    // the per-character SavedVariables path. (The character segment is
+    // FUN_GET_LOGIN_ACCOUNT_NAME, whose label is a misnomer — it returns the
+    // 0x00C27D88 buffer, NULL until a character is logged in.)
+    FUN_GET_REALM_NAME = 0x005AB7D0,
 
     // AddOn registry init — `__fastcall(accountName)`. Documented in
     // CLAUDE.md ("AddOn registry & hot-reload"). Hooked post-call so
@@ -4659,8 +6867,12 @@ enum Offsets {
     //
     // `VAR_ADDON_LIST_CTRL` is just the address of the control struct
     // (i.e., `0x00BE1B64`). Pass `&VAR_ADDON_LIST_CTRL` as the `this`
-    // arg to `FUN_INTRUSIVE_LIST_INSERT`.
+    // arg to `FUN_INTRUSIVE_LIST_INSERT`. `VAR_ADDON_LIST_HEAD` is the
+    // control's +0x08 head slot; walk entries via
+    // `next = *(entry + [VAR_ADDON_LIST_CTRL] + 4)` (= `entry+0x10`),
+    // stopping on a low-bit-1 sentinel or NULL.
     VAR_ADDON_LIST_CTRL = 0x00BE1B64,
+    VAR_ADDON_LIST_HEAD = 0x00BE1B6C,
 
     // `SStrDup(const char *src, const char *file, int line)`. `__stdcall`.
     // Storm's string-copy wrapper around `SMemAlloc` — used by the engine
@@ -4802,6 +7014,40 @@ enum Offsets {
     OFF_GAMETIME_MONTH = 0x10,
     OFF_GAMETIME_YEAR = 0x14,
 
+    // Server-clock skew, the engine's own `CMSG_QUERY_TIME` sync — and a
+    // strictly better server clock than `VAR_GAMETIME_STRUCT` above, which
+    // carries minute granularity, no timezone, and (on realms that set a
+    // per-map time offset) the ZONE clock rather than the server's.
+    //
+    // `FUN_004DE430` (quest-log enter-world setup) sends `CMSG_QUERY_TIME`
+    // (opcode `0x1CE`) unconditionally on every enter-world. The response
+    // handler `FUN_004DE400`, registered for `SMSG_QUERY_TIME_RESPONSE`
+    // (`0x1CF`) by `FUN_004DE390`, reads the body's single u32 — a raw
+    // `time(nullptr)` server-side — and `FUN_004DEEF0` stores the skew:
+    //
+    //   VAR_SERVER_TIME_DELTA   = FUN_SERVER_TIME_LOCAL_SECONDS() - serverEpoch
+    //   [0x00BB749C]            = FUN_SERVER_TIME_LOCAL_SECONDS() + 0xE10
+    //
+    // so `serverEpoch = FUN_SERVER_TIME_LOCAL_SECONDS() - delta`. That
+    // direction is confirmed by the engine's own use of it: the timed-quest
+    // expiry check in `FUN_004DE510` tests
+    // `(questEndTime + delta) - localNow - 1 < 0`, i.e. it converts a
+    // server timestamp into local-clock space by ADDING the delta.
+    //
+    // The second global is a re-query deadline (`0xE10` = 3600 s); the
+    // quest-log rebuild re-sends `CMSG_QUERY_TIME` once it passes. Both are
+    // zeroed by `FUN_004DE390`, and the handler substitutes 1 for a
+    // computed 0 — so **0 is the engine's own "never synced" sentinel** and
+    // must be checked before use.
+    VAR_SERVER_TIME_DELTA = 0x00BB7494,
+
+    // Local Unix epoch in seconds — the CRT `time(nullptr)`
+    // (`FUN_0073F049`) behind a 500 ms cache in an interlocked 64-bit slot
+    // at `DAT_00884048`. `__fastcall void → uint32_t`. This is the clock
+    // `VAR_SERVER_TIME_DELTA` is measured against, so the two must always
+    // be read together.
+    FUN_SERVER_TIME_LOCAL_SECONDS = 0x00429580,
+
     // AddOn registry. The engine keeps a flat 4-byte-stride array of
     // `AddOnEntry *` at `[VAR_ADDON_ARRAY]`, with the in-use count at
     // `[VAR_ADDON_COUNT]`. Each entry's first 12 bytes are an inline
@@ -4881,6 +7127,29 @@ enum Offsets {
     //     (0=SECURE, 1=INSECURE, 2=BANNED). Defaults to `1` (INSECURE)
     //     when the entry isn't in the override table.
     FUN_ADDON_IS_LOADED = 0x0051E6F0,
+
+    // The per-addon loader — `uint __fastcall(const char *name, char flag,
+    // void *progressCtx)`. Returns non-zero (low byte) once the addon is
+    // loaded, including the early-out when it already was.
+    //
+    // **It sets the entry's loaded byte (`+0x18`) BEFORE running anything**,
+    // then loads LoadWith + required deps (clearing the byte again if a
+    // required dep fails), runs the TOC files, `Bindings.xml` and the
+    // SavedVariables, fires `ADDON_LOADED`, and finally loads the entries
+    // that name this one in their LoadWith. So the byte means "load has
+    // begun", i.e. `loadedOrLoading` — NOT "load has finished". The window
+    // is observable from Lua, because the addon's own files (and every
+    // dependency pulled in during them) execute inside it.
+    // `AddOns::LoadState` co-hooks this to tell the two states apart.
+    FUN_ADDON_LOAD_ONE = 0x0051F240,
+
+    // `Script_LoadAddOn` — the stock `LoadAddOn(index or name)` global.
+    // Pushes two values either way: `(1, nil)` on success, or
+    // `(nil, "REASON")` with a locale-independent reason token
+    // ("DISABLED", "MISSING", … / "UNKNOWN_ERROR") on failure — already the
+    // modern `loaded, value` shape apart from `1` standing in for `true`.
+    // Standard Lua C ABI, so it re-registers under a namespace table as-is.
+    FUN_SCRIPT_LOAD_ADDON = 0x0048E980,
     FUN_ADDON_CAN_LOAD = 0x0051E780,
     FUN_ADDON_GET_SECURITY_INDEX = 0x0051E990,
 
@@ -4932,6 +7201,178 @@ enum Offsets {
     VAR_ADDON_ARRAY = 0x00BE1B94,
     VAR_ADDON_COUNT = 0x00BE1B90,
 
+    // AddOnEntry fields shared by `Addons::Embedded` and `Addons::Rescan`
+    // (the full per-field derivation lives in CLAUDE.md's AddOn registry
+    // section):
+    //   +0x14 — canonical name pointer (what the load pass passes to the
+    //           by-name loader `FUN_0051F240`).
+    //   +0x29 — filter-out byte; the flat display-array builder skips
+    //           entries where it's non-zero (how `!!!ClassicAPI` hides).
+    //   LoadWith desc@+0x58 (count@+0x5C, data@+0x60) — `## LoadWith:`
+    //           names, parsed by `FUN_TOC_PARSER` (append site writes
+    //           rec[0x16..0x19]).
+    //   reverse-LoadWith desc@+0x88 (count@+0x8C, data@+0x90,
+    //           quantum@+0x94) — `AddOnEntry *`s of every addon that
+    //           declared `## LoadWith: <this>`; built by the scan
+    //           `FUN_0051C760`'s tail loop (rec[0x22..0x25]), consumed by
+    //           the loader's post-ADDON_LOADED loop.
+    OFF_ADDON_ENTRY_NAME_PTR = 0x14,
+    OFF_ADDON_ENTRY_FILTER_OUT = 0x29,
+    OFF_ADDON_LOADWITH_COUNT = 0x5C,
+    OFF_ADDON_LOADWITH_ARRAY = 0x60,
+    OFF_ADDON_REVLOADWITH_DESC = 0x88,
+
+    // `## Secure:` flag byte. Parser write site verified in
+    // `FUN_TOC_PARSER`'s decompile (`*(bool *)(entry_dwords + 10)` =
+    // `+0x28`); also set by the SMSG_ADDON_INFO secure path at login.
+    // Entries with this set are SMSG-managed (Blizzard addons on stock
+    // clients) — never evict/re-register them: the parser cannot restore
+    // packet-delivered state (and their MPQ TOCs never change anyway).
+    OFF_ADDON_ENTRY_SECURE = 0x28,
+
+    // Complete single-`AddOnEntry` destructor — vtable slot 0 of the
+    // registry's node factory (`[0x00BE1B60]` = `&PTR_FUN_00808c7c`,
+    // installed by the boot init `FUN_0051C360`; the login teardown
+    // `FUN_0051FA40` dispatches per entry through it).
+    // `__stdcall(AddOnEntry *)`, RET 4 (arg read from `[EBP+8]`,
+    // verified by disassembly). Body (`FUN_005200A0` → field cleanup
+    // `FUN_005200D0`, both decompiled):
+    //   - frees EVERY owned allocation: name (+0x14), the +0x30 string,
+    //     all five dep/SV string arrays AND their buffers
+    //     (+0x38/+0x48/+0x58/+0x68/+0x78), the reverse-LoadWith buffer
+    //     (+0x88), and the per-entry `##` metadata hash table (+0x98 —
+    //     the Title/Notes/Author/X-* nodes `GetAddOnMetadata` reads);
+    //   - SELF-UNLINKS from both registry structures: the intrusive
+    //     list (link node +0xC via `FUN_00520A60`, which neighbor-
+    //     patches from the node alone and no-ops when already unlinked)
+    //     and the hash bucket chain (+0x4);
+    //   - frees the entry struct itself (`__AUUIADDON__` tag).
+    // What it does NOT clean: THIS entry's pointer inside OTHER
+    // entries' reverse-LoadWith lists — the caller must scrub those
+    // first (`Addons::Rescan`), or the loader's post-ADDON_LOADED loop
+    // (`FUN_0051F240` tail: reads +0x8C/+0x90, derefs each entry's
+    // +0x14) reads freed memory.
+    FUN_ADDON_ENTRY_DESTROY = 0x005200A0,
+
+    // `u8` set to 1 by `FUN_ADDON_INIT` after the login scan completes,
+    // cleared by the registry teardown `FUN_0051FA40`. Gates anything
+    // that touches the registry outside the login path.
+    VAR_ADDON_INITIALIZED = 0x00BE1C08,
+
+    // ── The frozen loose-file index (why new files need a restart) ────
+    //
+    // Every relative-path file open resolves through `FUN_00647E60`,
+    // which consults a HASH TABLE OF LOOSE FILES built ONCE per process:
+    // `FUN_00646EA0` (lazy, latched by `VAR_VFS_INDEX_READY`) walks the
+    // whole game directory tree via `FUN_VFS_INDEX_SUBTREE`, keying each
+    // file by its base-relative path and storing the joined on-disk path.
+    // Index hits open the mapped path LIVE from disk (edits to existing
+    // files take effect on /reload); index misses fall through to the
+    // MPQ search ONLY — the archive layer's live disk probe
+    // (`FUN_00654DD0` → GetFileAttributesA) is dead code at runtime
+    // because its enable global `DAT_00865B44` (ships as 1 in the image)
+    // is unconditionally cleared by early boot (`FUN_00402210` →
+    // `FUN_00648C20`). File WRITES (`FUN_0042A460` = raw CreateFileW)
+    // never register in the index either. Net effect on a stock client:
+    // any file created after boot — a new addon's TOC, a new .lua in an
+    // existing addon, even a freshly written SavedVariables file — is
+    // INVISIBLE to every relative-path read until the client restarts.
+    //
+    // `FUN_VFS_INDEX_SUBTREE` — the recursive indexer itself:
+    //   void __fastcall IndexSubtree(
+    //       const char *basePath,   // ecx — index keys are relative to
+    //                               //       this (the game dir)
+    //       const char *relSubdir,  // edx — subtree below basePath; ""
+    //                               //       for the boot-time full walk
+    //       void       *findHandle);// stack — from FUN_VFS_FIND_OPEN on
+    //                               //       join(basePath, relSubdir)
+    //   Dedup-safe: every insert is preceded by a hash lookup, so
+    //   re-running it on a subtree registers only genuinely new files —
+    //   which is exactly what `Addons::Rescan` does per /reload for
+    //   `Interface\AddOns` and `WTF\Account`.
+    //
+    // `FUN_VFS_FIND_OPEN` — `__stdcall(const char *dirPath) -> void*`
+    //   (RET 4). Allocates a find block, strips trailing backslashes,
+    //   requires the path to be an EXISTING DIRECTORY
+    //   (GetFileAttributes & 0x10) — returns NULL otherwise — then arms
+    //   it with "\*". Release with `FUN_VFS_FIND_CLOSE`
+    //   (`__stdcall(void*)`, RET 4; NULL-safe).
+    //
+    // `VAR_VFS_BASE_PATH` — the game base dir recorded at boot
+    //   (`FUN_006488B0`); `FUN_00646EA0` uses it as the walk base when
+    //   `FUN_VFS_FIND_OPEN` accepts it, else falls back to ".".
+    // `VAR_VFS_INDEX_READY` — `u8` latch; nonzero once the boot walk ran.
+    FUN_VFS_INDEX_SUBTREE = 0x00646910,
+    FUN_VFS_FIND_OPEN = 0x006674A0,
+    FUN_VFS_FIND_CLOSE = 0x006676A0,
+    VAR_VFS_BASE_PATH = 0x00C52418,
+    VAR_VFS_INDEX_READY = 0x00C5251C,
+
+    // ── Login scan walk #2 (loose-addon discovery) — replayed per /reload
+    //
+    // `FUN_ADDON_SCAN_DISK_DIRS` — generic disk directory walker
+    // (resolves to kernel32 FindFirstFileW; the DISK sibling of
+    // `FUN_MPQ_ENUM_FILES`):
+    //   int __fastcall ScanDiskDirs(
+    //       const char *basePath,    // ecx — e.g. "Interface\AddOns\"
+    //       const char *pattern,     // edx — appended to basePath; the
+    //                                //       scan passes the "*" at
+    //                                //       VAR_ADDON_SCAN_PATTERN
+    //       Callback    cb,          // stack — see below
+    //       void       *userParam,   // stack — passed to cb in edx
+    //       int         includeHidden); // stack — 0 skips hidden files
+    //   RET 0xC. Callback: `int __fastcall(FindInfo * /*ecx*/,
+    //   void *userParam /*edx*/)` with FindInfo `{+0x4 attrs (0x10 =
+    //   directory), +0x8 char name[]}`; returning nonzero STOPS the walk
+    //   (note: OPPOSITE of `FUN_MPQ_ENUM_FILES`' convention).
+    //
+    // `FUN_ADDON_DISK_DIR_CB` — the engine's own per-entry callback for
+    // this walk (defined + verified in Ghidra): for every directory not
+    // starting with '.', calls `FUN_TOC_PARSER` on the name; returns 0.
+    // `Addons::Rescan` replays the scan's exact call —
+    // `ScanDiskDirs(VAR_ADDON_PATH_PREFIX, VAR_ADDON_SCAN_PATTERN,
+    // FUN_ADDON_DISK_DIR_CB, 0, 0)` — so new-folder discovery is 100%
+    // engine code; the parser's dedup guard makes it a no-op per
+    // already-registered addon.
+    FUN_ADDON_SCAN_DISK_DIRS = 0x0042AD10,
+    FUN_ADDON_DISK_DIR_CB = 0x0051D7B0,
+    VAR_ADDON_SCAN_PATTERN = 0x00833180,  // "*" (walker config block)
+    VAR_ADDON_PATH_PREFIX = 0x00853724,   // "Interface\AddOns\"
+
+    // ── Flat display array + descriptor grow helpers ──────────────────
+    //
+    // The `GetNumAddOns`/`GetAddOnInfo(i)` array (`VAR_ADDON_ARRAY` /
+    // `VAR_ADDON_COUNT` above) is a full `{cap, count, data, quantum}`
+    // descriptor at `VAR_ADDON_ARRAY_CAP` (cap@0x00BE1B8C,
+    // count@0x00BE1B90, data@0x00BE1B94, quantum@0x00BE1B98) holding
+    // NAME POINTERS (entry+0x14), rebuilt from scratch and qsorted by
+    // `FUN_0051DA70` phase 2 whenever SMSG_ADDON_INFO lands.
+    // `Addons::Rescan` mirrors that phase (never calls `FUN_0051DA70`
+    // itself — its phase 1 consumes the packet) so newly appended
+    // registry entries show up in the by-index Lua surface.
+    //
+    // Grow helpers (one template instantiation per desc — use each at
+    // its verified site): `__thiscall(desc /*ecx*/, uint newCap)`,
+    // RET 4 — Storm-reallocs `desc->data` to newCap*4 and writes
+    // `desc->cap = newCap`.
+    //   FUN_ADDON_ARRAY_GROW      — flat display array (used by
+    //                               `FUN_0051DA70` phase 2)
+    //   FUN_ADDON_REVLOADWITH_GROW — reverse-LoadWith descs (used by the
+    //                               scan tail loop)
+    // `FUN_DESC_QUANTUM_CALC` — `__thiscall(desc /*ecx*/, uint needed)`,
+    //   RET 4: returns the append-rounding quantum (highest power of two
+    //   ≤ needed, min 1; ≥ 0x40 caps at 0x40 and stores desc->quantum).
+    // `FUN_CRT_QSORT` — the CRT `qsort` (`__cdecl(base, num, width,
+    //   cmp)`); `FUN_ADDON_NAME_COMPARE` is the engine's `__cdecl`
+    //   name-pointer comparator `FUN_0051DA70` sorts the array with.
+    VAR_ADDON_ARRAY_CAP = 0x00BE1B8C,
+    VAR_ADDON_ARRAY_QUANTUM = 0x00BE1B98,
+    FUN_ADDON_ARRAY_GROW = 0x004755F0,
+    FUN_ADDON_REVLOADWITH_GROW = 0x005213C0,
+    FUN_DESC_QUANTUM_CALC = 0x00521C50,
+    FUN_CRT_QSORT = 0x0073F727,
+    FUN_ADDON_NAME_COMPARE = 0x0051DEB0,
+
     // NOTE: an earlier revision defined OFF_PLAYER_FIELD_VIS_BYTES /
     // PLAYER_VIS_BIT_STEALTH here at 0x17C, believing bit 0x02 was a
     // "stealth bit". That was wrong: 0x17C is UNIT_FIELD_AURALEVELS
@@ -4978,6 +7419,13 @@ enum Offsets {
     MOVEFLAG_FALLING = 0x2000,
     MOVEFLAG_FALLING_FAR = 0x4000,
     MOVEFLAG_SWIMMING = 0x200000,
+    // The player-movement bits that drop an in-progress cast — the exact mask
+    // the engine's CheckCast (FUN_006094f0) tests (0x200f). Spell::Cast uses it
+    // to tell a spurious movement drop of a movement-immune cast (grenades)
+    // from a real cancel/interrupt, which happens with the player stationary.
+    MOVEFLAG_MASK_CAST_DROP = MOVEFLAG_FORWARD | MOVEFLAG_BACKWARD |
+                              MOVEFLAG_STRAFE_LEFT | MOVEFLAG_STRAFE_RIGHT |
+                              MOVEFLAG_FALLING, // = 0x200f
 
     // CGPlayer-local pointer to the GameObject the current spell cast
     // is targeting. Holds a heap pointer (high bits in the user-mode
@@ -5128,6 +7576,31 @@ enum Offsets {
     // Calling convention: `__fastcall(int ecx, int edx, int stackArg)`,
     // `RET 0x4` (callee cleans the one stack arg).
     FUN_WORLD_TICK = 0x0066FD50,
+
+    // UI render root — the CSimpleTop singleton's (`DAT_00cf0bd8`) per-frame
+    // render callback. Registered at priority 1.0 into the global HLAYER list
+    // (`FUN_00442800`) and drained every frame by the master scene-render pump
+    // `FUN_00442350`; body is just `FUN_00765650(root, elapsed)` (the UI layout
+    // pass, which hands `elapsed` to every frame's vtable +0x38 per-frame update
+    // — the value OnUpdate receives as `%f`) then `FUN_007657d0(root)` (the
+    // strata walk that draws every UI frame). Unlike FUN_WORLD_TICK this fires
+    // in BOTH glue and world: the root ctor `FUN_00764180` runs from the
+    // world-init path (`FUN_0048FBF0`) AND the glue-boot path (`FUN_0046A7B0`),
+    // so the UI renders — and this callback fires — on the login/character-
+    // select screens too. This is the tick to drive UI-object upkeep that must
+    // also run on glue (inline-texture icon regions), where FUN_WORLD_TICK is
+    // silent.
+    //
+    // ABI: `__stdcall(const float *bounds, float elapsed)`, `RET 0x8`. The drain
+    // calls every layer as `cb(layer + 0x18 /*rect*/, DAT_00885608)` and
+    // discards the return value. `DAT_00885608` is the frame delta: stored by
+    // the setter at 0x00442330, zeroed by the drain at 0x004426C3 once every
+    // layer has run. This callback never reads `bounds` ([EBP+8] is not
+    // loaded) and never reads ECX on entry, so it is not a `__thiscall` in
+    // disguise. Clean PUSH EBP / MOV EBP,ESP prologue (MinHook-safe). Single
+    // caller (the HLAYER drain), quiet render region — not a known collision
+    // target for the other Octo DLLs.
+    FUN_UI_RENDER_ROOT = 0x00764330,
 
     // SMSG_BINDPOINTUPDATE handler. The server sends this packet on
     // initial login (to sync the player's current bind) and again
@@ -5610,6 +8083,23 @@ enum Offsets {
     FUN_GET_OBJECT_BY_GUID = 0x00468460,
     OBJECT_TYPE_ITEM = 2,
 
+    // Melee auto-attack primitives (back StartAttack / StopAttack). 1.12
+    // exposes only the toggling AttackTarget (0x00489B50 -> FUN_006131A0);
+    // these are the non-toggling start/stop it calls internally.
+    //   START: __thiscall(player, const uint64_t *targetGuid). Validates
+    //     CanAttack on the target, sends CMSG_ATTACKSWING (opcode 0x141), and
+    //     stamps the victim GUID at [player+0xC48]. Idempotent / switch-aware
+    //     on a valid target (never stops an in-progress attack); an
+    //     unattackable target while attacking routes to STOP.
+    //   STOP: __fastcall(player). Clears the attack state; self-guards on the
+    //     attack flag, so it is a no-op (safe) when not attacking.
+    //   RESOLVE_TARGET: __thiscall(player, uint64_t *outGuid) -> int. Validates
+    //     the player's CURRENT target (charm/fear/confuse redirect + CanAttack)
+    //     and writes its GUID; returns 0 (and posts the UI error) if invalid.
+    FUN_ATTACK_START = 0x005ECB70,
+    FUN_ATTACK_STOP = 0x005ECAC0,
+    FUN_ATTACK_RESOLVE_TARGET = 0x00612DF0,
+
     // Inbox — array of mail-entry pointers behind a slot indirection.
     // The address itself holds a heap pointer (`MOV ECX, [imm32]` in
     // the engine), so reading the array requires one extra deref
@@ -5715,10 +8205,23 @@ enum Offsets {
     // ENCHANT_ITEM / _TEMPORARY (enchants), and LEARN_SPELL (Turtle's custom
     // recipes, e.g. "Steel Plate Boots" = effect 36).
     OFF_SPELL_RECORD_EFFECT = 0xF4,                   // int32[3]
+    SPELL_EFFECT_SCHOOL_DAMAGE = 2,                    // direct damage (verified vs server SpellDefines.h)
+    SPELL_EFFECT_APPLY_AURA = 6,                       // EffectApplyAuraName[i] then names the aura type
+    SPELL_EFFECT_TRIGGER_SPELL = 64,                   // casts EffectTriggerSpell[i] (Feral Charge 16979 → 19675)
+    // Kick / Pummel / Shield Bash / Counterspell / Earth Shock — 57 Spell.dbc
+    // rows carry it. The server's Spell::EffectInterruptCast is its handler.
+    SPELL_EFFECT_INTERRUPT_CAST = 68,
+    // EffectTriggerSpell[3] (columns 109-111): the spell an effect 64 casts.
+    // Verified in Spell.dbc: Feral Charge 16979 → [1] = 19675 "Feral Charge
+    // Effect" (the row that carries the druid's INTERRUPT_CAST).
+    OFF_SPELL_RECORD_EFFECT_TRIGGER_SPELL = 0x1B4,    // int32[3]
     SPELL_EFFECT_CREATE_ITEM = 24,
     SPELL_EFFECT_LEARN_SPELL = 36,
     SPELL_EFFECT_ENCHANT_ITEM = 53,
     SPELL_EFFECT_ENCHANT_ITEM_TEMPORARY = 54,
+    // Verified from Spell.dbc: 13262 "Disenchant" has Effect[0] = 99 (the
+    // only row carrying it). Effect 32 is TRIGGER_MISSILE, not disenchant.
+    SPELL_EFFECT_DISENCHANT = 99,
 
     // EffectBasePoints[3] — the base magnitude of each effect, stored as
     // (value - 1) for the fixed-die spells that back item stats (the
@@ -5736,6 +8239,26 @@ enum Offsets {
     // (Effect@61, DieSides@64, BaseDice@67, BasePoints@76) against 7468.
     OFF_SPELL_RECORD_EFFECT_BASE_DICE = 0x10C,        // int32[3]
 
+    // The rest of the amount inputs, so a caller can reproduce the
+    // engine's full per-effect magnitude rather than only the fixed
+    // `BasePoints + BaseDice` case above. Same field run the BASE_DICE
+    // note verifies (Effect@61, DieSides@64, BaseDice@67, BasePoints@76),
+    // continued: DicePerLevel@70, RealPointsPerLevel@73.
+    //
+    // The magnitude is
+    //   level  = clamp(charLevel, spellLevel..maxLevel) - spellLevel
+    //   points = BasePoints + level * RealPointsPerLevel
+    //   random = DieSides   + level * DicePerLevel
+    //   value  = points + (random <= 1 ? BaseDice : roll(BaseDice, random))
+    // so `DieSides > 1` marks an effect whose amount is a server-side die
+    // roll no client can reproduce. Read by C_Spell.GetSpellEffectInfo.
+    OFF_SPELL_RECORD_EFFECT_DIE_SIDES = 0x100,        // int32[3]
+    // Both per-level fields are FLOAT, not int — verified by reading
+    // field 73 on spells 10 / 17 / 43 / 91 / 122, which decode as
+    // 0.1 / 0.8 / 1.0 / -1.0 / 0.5 as float and as garbage as int32.
+    OFF_SPELL_RECORD_EFFECT_DICE_PER_LEVEL = 0x118,   // float[3]
+    OFF_SPELL_RECORD_EFFECT_REAL_POINTS_PER_LEVEL = 0x124, // float[3]
+
     // Per-effect EffectRadiusIndex[3] → SpellRadius.dbc. Verified by
     // FUN_006e6350, which reads spellRec[+0x160] (effect 0) and
     // spellRec[+0x164] (effect 1) as radius indices. 0 = effect has no
@@ -5746,14 +8269,116 @@ enum Offsets {
     // VAR_SPELLMOD_*). Verified from FUN_006e6b30: SpellFamilyName at
     // +0x280 (gates whether the player's class mods apply), 64-bit
     // SpellFamilyFlags at +0x284 (selects which familyFlagBit rows to
-    // sum). AttributesEx2 (+0x24) bit 0x20000000 disables spell mods.
+    // sum). AttributesEx3 (+0x24) bit 0x20000000 (IGNORE_CASTER_MODIFIERS)
+    // disables spell mods — the client reads [record + 0x24] in FUN_006e6b30.
     OFF_SPELL_RECORD_FAMILY_NAME = 0x280,             // u32
     OFF_SPELL_RECORD_FAMILY_FLAGS = 0x284,            // u64
     OFF_SPELL_RECORD_ICON_ID = 0x1D4,                 // u32 SpellIconID (→ SpellIcon.dbc)
-    OFF_SPELL_RECORD_ATTRIBUTES = 0x18,               // u32 (base Attributes)
+    OFF_SPELL_RECORD_ACTIVE_ICON_ID = 0x1D8,          // u32 activeIconID (→ SpellIcon.dbc) — shown while the spell's toggle is up (FUN_ACTION_SLOT_TEXTURE)
+    OFF_SPELL_RECORD_ATTRIBUTES = 0x18,               // u32 (column 6, base Attributes)
     SPELL_ATTR_PASSIVE = 0x40,                        // bit 6 — always-on aura
-    OFF_SPELL_RECORD_ATTRIBUTES_EX2 = 0x24,           // u32
-    SPELL_ATTR_EX2_NO_SPELL_MODS = 0x20000000,
+    // Attributes bits 2 (0x4) and 10 (0x400) — "on next melee swing" (the
+    // ability replaces the next white hit instead of sending its own attack,
+    // e.g. Heroic Strike / Maul / Raptor Strike). The CLIENT itself tests
+    // this exact combined mask: `FUN_006e3480`'s range resolver early-outs
+    // to a flat 100-yard max (`DAT_008118d4`) for any spell with `Attributes
+    // & 0x404` — verified in the disassembly. `Combat::Swing` uses the same
+    // mask on `SMSG_SPELL_GO` to know an on-next-swing cast replaced (and
+    // therefore reset) the main-hand white hit.
+    SPELL_ATTR_ON_NEXT_SWING = 0x4 | 0x400,
+
+    // PreventionType (column 165) — which control-loss flag stops the cast:
+    // 0 none, 1 SILENCE (UNIT_FLAG_SILENCED), 2 PACIFY (UNIT_FLAG_PACIFIED);
+    // the server's `Spell::CheckCast` gate. Verified against the extracted
+    // Spell.dbc with the column chain Name@120 → Rank@129 → Family@160 →
+    // FamilyFlags@161-162 → MaxAffectedTargets@163 → DmgClass@164 →
+    // PreventionType@165: Fireball 133 = 1, Power Word: Fortitude 1243 = 1,
+    // Heroic Strike 78 = 2, Kick 1766 = 2, Throw 2764 = 2, Attack 6603 = 0.
+    // Only 0/1/2 occur (20549 / 6201 / 1268 rows). Read by
+    // `LossOfControl::LockoutForSpell`.
+    OFF_SPELL_RECORD_PREVENTION_TYPE = 0x294,
+    SPELL_PREVENTION_TYPE_SILENCE = 1,
+    SPELL_PREVENTION_TYPE_PACIFY = 2,
+    OFF_SPELL_RECORD_ATTRIBUTES_EX = 0x1C,            // u32 (column 7)
+    OFF_SPELL_RECORD_ATTRIBUTES_EX2 = 0x20,           // u32 (column 8)
+    OFF_SPELL_RECORD_ATTRIBUTES_EX3 = 0x24,           // u32 (column 9)
+    // The client's spell-mod core (FUN_006e6b30) skips all mods when this bit
+    // is set: it reads [record + 0x24] & 0x20000000 — AttributesEx3 bit 29,
+    // SPELL_ATTR_EX3_IGNORE_CASTER_MODIFIERS (verified via disassembly; the
+    // server enum agrees). NOT AttributesEx2's bit 29 (that's CANT_CRIT).
+    SPELL_ATTR_EX3_IGNORE_CASTER_MODIFIERS = 0x20000000,
+    // AttributesEx3 bit 18 — the paladin judgement-debuff marker. The server's
+    // melee-swing judgement refresh selects auras by SPELLFAMILY_PALADIN +
+    // this bit (tortoise-wow SpellDefines.h SPELL_ATTR_EX3_ALWAYS_HIT,
+    // Unit::DealMeleeDamage). Verified in the client Spell.dbc: all 14
+    // Judgement of Light/Wisdom/Justice/Crusader debuff ranks carry it.
+    SPELL_ATTR_EX3_ALWAYS_HIT = 0x00040000,
+    // AttributesEx channel bits (CHANNELED_1 0x4 | CHANNELED_2 0x40) and the
+    // AttributesEx2 autorepeat flag (bit 5, Auto Shot / Shoot) — each shared
+    // by more than one module, so kept here rather than redefined locally.
+    SPELL_ATTR_EX_CHANNELED = 0x4 | 0x40,
+    SPELL_ATTR_EX2_AUTOREPEAT_FLAG = 0x20,
+    // AttributesEx2 bit 17 — "don't reset the caster's melee/ranged
+    // auto-attack timers" (tortoise-wow `SPELL_ATTR_EX2_NOT_RESET_AUTO_ACTIONS`).
+    // Suppresses the InterruptFlags-driven swing reset below for spells like
+    // Slam / Aimed Shot that have a cast time but are meant to weave with
+    // the swing timer rather than restart it.
+    SPELL_ATTR_EX2_NOT_RESET_AUTO_ACTIONS = 0x20000,
+    OFF_SPELL_RECORD_INTERRUPT_FLAGS = 0x54,          // u32 (column 21)
+    // Bit 0 of InterruptFlags: the cast is interrupted when the caster moves.
+    // Both the server (HandleMovementOpcodes → InterruptSpellsWithInterruptFlags,
+    // tortoise-wow) and the client's own CheckCast (FUN_006094f0 gates its MOVING
+    // failure on this bit) use it; thrown items (grenades — e.g. spell 4068)
+    // lack it, so movement must not end their cast. See Spell::Cast (issue #23).
+    SPELL_INTERRUPT_FLAG_MOVEMENT = 0x1,
+    // Bit 1: the bit the server's interrupt EFFECT tests on a cast before Kick /
+    // Pummel / Counterspell may stop it — tortoise `Spell::EffectInterruptCast`
+    // (vmangos names the same bit DAMAGE_PUSHBACK). Player casts carry 0x0F;
+    // creature casts with 0x00 / 0x08 / 0x09 / 0x0D (Shadow Flame, Frost
+    // Breath, …) cannot be interrupted by those abilities. Silence auras ignore
+    // the flags (PreventionType only). Read by Spell::Interruptible.
+    SPELL_INTERRUPT_FLAG_DAMAGE = 0x2,
+    // Bit 3 — server rule for "does casting this spell reset the caster's
+    // melee swing timer" (tortoise-wow `Spell::cast`:
+    // `IsMeleeAttackResetSpell() = !triggered && (InterruptFlags &
+    // SPELL_INTERRUPT_FLAG_AUTOATTACK)`, gated off by
+    // `SPELL_ATTR_EX2_NOT_RESET_AUTO_ACTIONS`). DBC-driven, so it tracks
+    // whatever spell data the server ships rather than a hardcoded spell
+    // list — verified against the client's own Spell.dbc: every plain
+    // cast-time spell (Fireball, …) carries it and resets the swing; the two
+    // vanilla exceptions that DON'T (Slam, Aimed Shot) both carry
+    // `SPELL_ATTR_EX2_NOT_RESET_AUTO_ACTIONS` instead. Read by
+    // `Combat::Swing`.
+    SPELL_INTERRUPT_FLAG_AUTOATTACK = 0x8,
+    // ChannelInterruptFlags (column 23). Bit 2 is the channel analog of the
+    // gate above (CHANNEL_FLAG_INTERRUPT in both cores). Verified in Spell.dbc:
+    // Blizzard / Arcane Missiles 0x7C0C, non-channels 0.
+    OFF_SPELL_RECORD_CHANNEL_INTERRUPT_FLAGS = 0x5C,  // u32 (column 23)
+    CHANNEL_FLAG_INTERRUPT = 0x4,
+
+    // Remaining Spell.dbc record fields — the single source of truth for the
+    // record layout (byte = column * 4). Modules must use these rather than
+    // redefining local copies.
+    // Single school id (column 1) — 0 physical … 6 arcane; a spell's school
+    // MASK is `1 << School` (the server's GetSpellSchoolMask). Verified in
+    // Spell.dbc: Kick 0, Fireball 2, Earth Shock 3, Shadow Bolt 5,
+    // Counterspell 6. Read by Spell::Interruptible.
+    OFF_SPELL_RECORD_SCHOOL = 0x04,                   // u32 (column 1)
+    OFF_SPELL_RECORD_CASTING_TIME_INDEX = 0x48,       // u32 → SpellCastTimes.dbc
+    OFF_SPELL_RECORD_MAX_LEVEL = 0x6C,                // u32 (scaling cap level)
+    OFF_SPELL_RECORD_SPELL_LEVEL = 0x74,              // u32 (this rank's effective level)
+    OFF_SPELL_RECORD_POWER_TYPE = 0x7C,               // i32 (0=mana,1=rage,2=focus,3=energy,4=happiness)
+    OFF_SPELL_RECORD_MANA_COST = 0x80,                // u32 base cost
+    OFF_SPELL_RECORD_RANGE_INDEX = 0x90,              // u32 → SpellRange.dbc
+    OFF_SPELL_RECORD_EFFECT_IMPLICIT_TARGET_A = 0x148,// i32[3] implicit target A
+    OFF_SPELL_RECORD_EFFECT_IMPLICIT_TARGET_B = 0x154,// i32[3] implicit target B
+    OFF_SPELL_RECORD_MANA_COST_PERCENT = 0x270,       // i32 % of base resource (0 = flat)
+    OFF_SPELL_RECORD_RANK = 0x204,                    // char*[9] localized rank text
+    OFF_SPELL_RECORD_TOTEM = 0xA0,                    // i32[2] required totem/tool item IDs
+
+    // SpellIcon.dbc record's path string field (char* at +0x04). Distinct
+    // struct from Spell.dbc — reached via SpellIcon.dbc[Spell.SpellIconID].
+    OFF_SPELLICON_PATH = 0x04,
 
     // Spell.dbc Mechanic field — the spell-level SpellMechanic ID (→
     // SpellMechanic.dbc), 0 = none. Field 5 of the record
@@ -5763,6 +8388,12 @@ enum Offsets {
     // reads `spellRec[+0x14]` as the spell's mechanic when the per-
     // effect EffectMiscValue is 0. Read by C_Spell.GetSpellMechanicByID.
     OFF_SPELL_RECORD_MECHANIC = 0x14,
+    // SpellMechanic.dbc ids (server SpellDefines.h `Mechanics`). Every
+    // interrupt ability carries 26 — per effect (Kick / Pummel / Shield Bash /
+    // Earth Shock EffectMechanic[1]) or spell-level (Counterspell Mechanic) —
+    // so MECHANIC_IMMUNITY of 26 is what makes a caster unkickable.
+    MECHANIC_SILENCE = 9,
+    MECHANIC_INTERRUPT = 26,
     SPELL_AURA_MOD_STEALTH = 16,
     SPELL_AURA_MOD_SHAPESHIFT = 36,
     SPELL_AURA_MOUNTED = 78,
@@ -5775,11 +8406,24 @@ enum Offsets {
     SPELL_AURA_MOD_CHARM = 6,
     SPELL_AURA_MOD_FEAR = 7,
     SPELL_AURA_MOD_STUN = 12,
+    // Movement slow / snare. Not a loss-of-control (C_LossOfControl omits it),
+    // but the C_UnitAuras CROWD_CONTROL filter counts it — see
+    // Spell::CrowdControl::IsCrowdControl.
+    SPELL_AURA_MOD_DECREASE_SPEED = 33,
     SPELL_AURA_MOD_PACIFY = 25,
     SPELL_AURA_MOD_ROOT = 26,
     SPELL_AURA_MOD_SILENCE = 27,
     SPELL_AURA_MOD_PACIFY_SILENCE = 60,
     SPELL_AURA_MOD_DISARM = 67,
+    // Immunity aura types (server SpellAuraDefines.h). EffectMiscValue: 37 = a
+    // SPELL_EFFECT id, 38 = a SPELL_AURA id, 39 = a school MASK (Divine Shield
+    // rows carry 39 with 1 and 126; verified in Spell.dbc), 77 = a SpellMechanic
+    // id. The 3.3.5 client's not-interruptible walk tests exactly these four;
+    // read by Spell::Interruptible.
+    SPELL_AURA_EFFECT_IMMUNITY = 37,
+    SPELL_AURA_STATE_IMMUNITY = 38,
+    SPELL_AURA_SCHOOL_IMMUNITY = 39,
+    SPELL_AURA_MECHANIC_IMMUNITY = 77,
 
     // SMSG_SPELL_COOLDOWN (0x134) handler, registered by the spell-opcode
     // boot registrar FUN_006e7150 exactly like the failure/channel handlers
@@ -6055,7 +8699,7 @@ enum Offsets {
     //   6/7 other drag-source items — itemID at
     //      `VAR_CURSOR_GENERIC_SLOT`. Type 7 is action-bar pickup
     //      (`FUN_004E6130`); type 6 is another drag path (mail/etc.).
-    //   8  macro — 1-based index at `VAR_CURSOR_MACRO_INDEX`
+    //   8  macro — macroID at `VAR_CURSOR_MACRO_ID`
     //   9  inventory item (equipped slot) — itemID stored at
     //      `VAR_CURSOR_GENERIC_SLOT`. Bare itemID rather than a GUID
     //      because the item is out of the descriptor stream while
@@ -6071,11 +8715,43 @@ enum Offsets {
     VAR_CURSOR_MONEY_COPPER = 0x00B4E2F0,
     VAR_CURSOR_SPELL_ID = 0x00B4E2F4,
     VAR_CURSOR_PETACTION_PACKED = 0x00B4E2F8,
-    VAR_CURSOR_MACRO_INDEX = 0x00B4E2FC,
+    // Holds the macro's **macroID**, not its slot — `Script_PickupMacro`
+    // (`0x004F1AE0`) turns the Lua 1-based index into a macroID via
+    // `FUN_004F0EB0` (`VAR_MACRO_SLOT_MAP[index]`) before storing it, so
+    // this reads as e.g. `0x01000003` rather than `4`. Convert back with
+    // `FUN_MACRO_ID_TO_SLOT(id) + 1` for anything that wants the slot
+    // `GetMacroInfo` takes.
+    VAR_CURSOR_MACRO_ID = 0x00B4E2FC,
     VAR_CURSOR_STABLEPET_INDEX = 0x00B4E300,
     VAR_CURSOR_GENERIC_SLOT = 0x00B4B41C,
     VAR_CURSOR_GENERIC_DISPLAY = 0x00B4D8EC,
     VAR_CURSOR_GENERIC_SOURCE = 0x00B4B420,
+    // Equipment set — 3.3.5's cursor type for it (`FUN_00520dc0` writes
+    // 0xD). Free in 1.12 (the engine uses 1..10); the setID lives in
+    // `EquipmentSet::Action`, not an engine global. FUN_CURSOR_CLEAR's
+    // switch has no case for it, so a clear only resets the type — the
+    // payload must be read gated on this type.
+    CURSOR_TYPE_EQUIPMENT_SET = 13,
+
+    // Cursor clear — `__fastcall(int returnItem, int fireMoneyEvent)`. The
+    // macro pickup passes (1, 1). Zeroes the current type's payload, plays
+    // the drop sound for the types it knows, hides the action-bar grid when
+    // `VAR_CURSOR_SHOWS_ACTION_GRID` is set, sets the type to 0 and fires
+    // CURSOR_UPDATE.
+    FUN_CURSOR_CLEAR = 0x00495190,
+    // `__fastcall(const char *texturePath)` — the drag icon under the cursor.
+    FUN_CURSOR_SET_TEXTURE = 0x00523A30,
+    // `__fastcall(const char *soundName)` — plays a SoundEntries row by name
+    // (the pickups pass "INTERFACESOUND_CURSORGRABOBJECT").
+    FUN_PLAY_SOUND_BY_NAME = 0x00458030,
+    // Fires ACTIONBAR_SHOWGRID; every action-bar-capable pickup calls it and
+    // then sets `VAR_CURSOR_SHOWS_ACTION_GRID = 1`, which FUN_CURSOR_CLEAR
+    // turns back into ACTIONBAR_HIDEGRID.
+    FUN_ACTIONBAR_SHOW_GRID = 0x004E58C0,
+    VAR_CURSOR_SHOWS_ACTION_GRID = 0x00B4DA24,
+    // `int __fastcall(int kind)` — the protected-action gate FUN_ACTION_PLACE
+    // opens with (kind 9). Returns 0 to refuse.
+    FUN_CURSOR_EDIT_ALLOWED = 0x00494A50,
 
     // GUID → CGObject resolver. `__fastcall(type_filter, guid_lo,
     // guid_hi) → CGObject *` at `0x00468460`. Type filter 0x2 = item,
@@ -6119,4 +8795,828 @@ enum Offsets {
     // `__fastcall(const char *name) -> definition node`, 0 if unregistered
     // (case-insensitive, hashed). See FUN_006ee6f0 in Templates.cpp notes.
     FUN_XML_TEMPLATE_LOOKUP = 0x006EE6F0,
+
+    // `CreateFrame(type [, name, parent, template])` — the global FrameScript
+    // function at table 0x00872E74 slot 3. Standard `int __fastcall(void *L)`
+    // shape. Vanilla accepts only a SINGLE template name; the hook in
+    // `Frame::CreateFrame` splits comma-separated inherits strings so modern
+    // multi-template calls work (e.g. "UIPanelButtonTemplate,
+    // SecureActionButtonTemplate"). It builds the frame with the first
+    // resolved template through the engine, then applies each remaining
+    // template onto the created object with the engine's OWN inherit
+    // primitive: `frameObj->vtable[+8](templateDefNode, status)` for content
+    // (FUN_00769820) and `(frameObj+0x24)->vtable[+8](...)` for the template's
+    // `<Frames>` children (FUN_0076a060) — exactly the two `__thiscall`
+    // recursion calls the builder FUN_006ee280 emits when resolving an
+    // `inherits=`. Finalize/OnLoad (`vtable[+0x24]`) runs once during the
+    // engine build and is NOT re-run.
+    FUN_SCRIPT_CREATEFRAME = 0x007060B0,
+
+    // XML-build "status" object — a printf-style error/warning accumulator the
+    // appliers log through (`status->vtable[+0xc](status, level, fmt, ...)`,
+    // __cdecl varargs). Script_CreateFrame builds one on its stack as the
+    // 5-dword `{PTR_TEXLOAD_DESC_VTBL, 8, &self+8, (&self+8)|1, 0}` (same shape
+    // the texture loader reuses; see PTR_TEXLOAD_DESC_VTBL). Reset/emptied by
+    // `FUN_FRAMESCRIPT_STATUS_RESET` (`__thiscall(this)`), which frees any
+    // accumulated message nodes and re-stamps the vtable.
+    FUN_FRAMESCRIPT_STATUS_RESET = 0x00419E30,
+
+    // --- Inline texture escape (`|Tpath:h:w:...|t`) backport -------------------
+    // See src/text/InlineTexture.cpp and docs/InlineTextureEscapes.md. The
+    // 1.12 text pipeline is a shared `|`-tokenizer feeding per-purpose loops.
+    // Slice 1 injects an inline-texture quad into the text PAINT pass.
+
+    // Text paint pass — flushes each text line's per-font-page glyph vertex
+    // batches to the GPU every frame. `__fastcall(layoutObj)`; gated on
+    // DAT_00c2b9d4. Co-hooked post-original: the flush walks the layout's node
+    // list and queues each recorded inline icon as a fontstring-anchored region
+    // placement (Text::InlineTexturePool). See FUN_005c8fe0.
+    // (The GxU raw-quad primitives this site once drew with — dynamic-VB
+    // lock/write/submit, texture bind/load/force-decode, colorop state — were
+    // removed with the quad render mode; VAs are preserved in
+    // docs/InlineTextureEscapes.md and git history if ever needed again.)
+    FUN_TEXT_PAINT = 0x005C8FE0,
+
+    // Default texture-load blend arg (DAT_00878cf0) — passed to the engine's
+    // SetTexture-by-path (FUN_SIMPLETEXTURE_SET_TEXTURE) exactly as
+    // Script_Texture_SetTexture's own call site does.
+    VAR_TEXTURE_BLEND_DEFAULT = 0x00878CF0,
+
+    // --- Texture masking (`Texture:SetMask` backport) ---------------------------
+    // Mirrors the engine's own canonical masked-quad draw: the minimap BLIP mask
+    // FUN_004eae10 (a sibling of the disc FUN_004ec440; both fed by the mask that
+    // Minimap:SetMaskTexture at 0x004EE4A0 loads into DAT_00bc7968). FUN_004eae10
+    // is the exact template — bind base on unit 0, mask on unit 1, force each
+    // unit's combiner to MODULATE, submit with SEPARATE uv0/uv1, then unbind
+    // unit 1:
+    //   GxRs(0x17, base);  GxRs(0x1F, 1);      // unit 0: bind + MODULATE preset
+    //   GxRs(0x18, mask);  GxRs(0x20, 1);      // unit 1: bind + MODULATE preset
+    //   FUN_0058a2a0(4, corners, …, uv0, uv1); // explicit second UV stream
+    //   GxRs(0x18, 0);                         // unbind unit 1
+    // Unit 1's MODULATE combiner multiplies the mask's alpha into the base's
+    // alpha, so a white-with-alpha mask clips the base to the mask's shape.
+    //
+    // The recipe was also pinned by an in-game probe (git history's
+    // MaskProbe.cpp) on the live backend — findings, load-bearing:
+    //   * The COMBINER PRESET selectors are 0x1F+unit (GXRS_COMBINER0), value 1 =
+    //     MODULATE/MODULATE (the .rdata preset tables at 0x0080a25c/0x0080a274,
+    //     consumed by the D3D9 combiner apply FUN_005a2dd0: COLOROP table
+    //     {4,4,13,7,5,12}, ALPHAOP {3,4,3,7,5,3} — value 1 is the only preset
+    //     that MODULATEs the alpha channel too, which is what masking rides).
+    //     Binding a texture on unit 1 alone happens to give MODULATE by default,
+    //     but FUN_004eae10 sets it EXPLICITLY — we mirror that.
+    //   * The SECOND vertex UV stream (uv1) DOES feed unit 1 (FUN_004eae10
+    //     passes a distinct uv1 = this+0x50), so uv1 = uv0 makes unit 1 sample
+    //     the mask at the base's own texcoords. SetMask originally rode this
+    //     recipe but was moved to texgen (below): texcoord-relative sampling
+    //     breaks for SetTexCoord'd sprites (the mask gets sampled at the same
+    //     sub-rect OF THE MASK IMAGE), and uv1 is the LAST explicit UV slot
+    //     that exists — the vertex-format component table at 0x008097A8
+    //     (13 formats × 13 components) has no format with a third UV set, so
+    //     masks past the first cannot ride an explicit stream anyway.
+    GXRS_TEXTURE0 = 0x17,  // texture bind, +unit 0..7 (via FUN_GX_RS_SET_PTR)
+    GXRS_COMBINER0 = 0x1F, // combiner preset, +unit 0..7 (via FUN_GX_RS_SET)
+    GXRS_COMBINE_MODULATE = 1, // preset value: COLOROP=MODULATE, ALPHAOP=MODULATE
+    // GxRs setters — `__fastcall(selector, value)`. The int form (0x00589E60)
+    // writes combiner presets and the like; the pointer form (0x00589E80) writes
+    // texture binds.
+    FUN_GX_RS_SET = 0x00589E60,
+    FUN_GX_RS_SET_PTR = 0x00589E80,
+
+    // --- Texgen + per-unit texture matrices (multi-mask / rotated masks) -------
+    // Decoded from the D3D9 backend's draw-time state flush FUN_005a2f00 (the
+    // selector → SetTextureStageState/SetTransform Rosetta stone) and the
+    // minimap DISC draw FUN_004ec440, which is the engine's own texgen-mask
+    // template (it submits positions+colors ONLY and feeds BOTH units via
+    // texgen + a per-unit texture matrix). Selector namespace is five per-unit
+    // families, each 8 units wide (device supports 8 fixed-function stages;
+    // live cap at [VAR_GX_DEVICE]+OFF_GXDEV_STAGE_CAP):
+    //   0x17+u bind   0x1F+u combiner   0x27+u mip-bias   0x2F+u texgen
+    //   0x37+u coord-transform mode
+    // Texgen values (FUN_005a2b40): 0 = passthrough (stage reads vertex UV set
+    // #u — the default; why stage 1 sees the explicit uv1 stream), 1 = OBJECT-
+    // space position (D3D TCI_CAMERASPACEPOSITION + an auto inv(view)·inv(model)
+    // basis matrix — UV becomes a pure function of the RAW vertex position,
+    // immune to whatever model/view the pass set), 2 = world-space position,
+    // 3 = camera-space position (identity basis; what the disc draw uses),
+    // 5/4/6 = normal/reflection.
+    // Coord-transform values (FUN_005a14e0): 0 = off, 1 = apply the unit's
+    // texture matrix (basis × user matrix, D3DTTFF_COUNT3), 2 = projected.
+    // Per-unit texture-matrix STACKS (4 levels, base ctx+0xFD0+unit*0x118;
+    // slot 8 = model, 10 = view) — the disc draw's push/translate/scale/pop:
+    GXRS_TEXGEN0 = 0x2F,      // texgen mode, +unit (int form)
+    GXRS_TEXGEN_OBJECT_POS = 1,
+    GXRS_TEXXFORM0 = 0x37,    // coord-transform mode, +unit (int form)
+    GXRS_TEXXFORM_MATRIX = 1,
+    // Texture-matrix stack ops — `__fastcall(int unit, ...)`. PUSH duplicates
+    // the top (max depth 4); PUSH_LOAD pushes then loads an arbitrary 4×4
+    // (row-vector D3D layout: out = pos·M, translation in row 3). POP restores.
+    // (PUSH/POP were previously mislabeled FUN_GX_TEXUNIT_ENABLE/_DISABLE —
+    // they never enabled anything; binding a texture is what enables a stage,
+    // binding null disables it, per FUN_005a29d0.)
+    FUN_GX_TEXMTX_PUSH = 0x0058B200,      // (unit)
+    FUN_GX_TEXMTX_PUSH_LOAD = 0x0058B210, // (unit, const float m[16])
+    FUN_GX_TEXMTX_POP = 0x0058B220,       // (unit)
+    // Gx render-state journal push/pop — brackets a state scope; pop replays
+    // every selector written since the push back to its prior value. The engine
+    // wraps each region-layer draw (FUN_0076fb00) and the disc draw in a pair.
+    FUN_GX_STATE_PUSH = 0x00589F40,
+    FUN_GX_STATE_POP = 0x00589F50,
+    // The indexed submit that actually queues the draw for the verts staged by
+    // FUN_GX_PRIM_STREAMS — `__fastcall(int primType, int indexCount, const
+    // void *indices)`. Every FUN_GX_PRIM_STREAMS caller invokes it immediately
+    // after (region layer: FUN_0076fb00; disc: FUN_004ec440). State/matrix
+    // RESTORES must run AFTER this call, not after the stream call — the disc
+    // draw pops its matrices/state only past this point, and restoring earlier
+    // reverts the state the queued draw will be flushed with.
+    FUN_GX_PRIM_INDEXED = 0x0058A2E0,
+    // The device/context singleton the Gx wrappers route through (set at
+    // backend creation, FUN_00589ac0). +0x23C holds the live texture-stage cap
+    // the per-stage applies clamp against (FUN_005a29d0/FUN_005a2b40).
+    VAR_GX_DEVICE = 0x00C0ED38,
+    OFF_GXDEV_STAGE_CAP = 0x23C,
+    // The vertex-stream primitive every textured region draws through
+    // (FUN_0076fb00 calls it per region). Decompiler signature (13 params):
+    // (count, positions, posStride, s3, s3Stride, colors, colorStride, drop8,
+    // drop9, uv0, uv0Stride, uv1, uv1Stride); RET 0x2C. The inner FUN_0058a3d0
+    // builds an interleaved vertex from whichever of {s3, colors, uv0, uv1} are
+    // non-null — so uv1 is a real, buildable second UV slot no engine caller
+    // populates. `positions` for a region draw is the region's corner array
+    // (region + OFF_SIMPLETEXTURE_CORNERS), which is how the mask co-hook
+    // recovers the owning region: region = positions - OFF_SIMPLETEXTURE_CORNERS
+    // (verified: FUN_00772fd0 appends the batch entry with positions =
+    // region+0xD4, and FUN_0076fb00 forwards that pointer here).
+    FUN_GX_PRIM_STREAMS = 0x0058A2A0,
+    // Path → HTEXTURE loader trio (re-adds of the quad-era offsets removed in
+    // 56c2670, with the same derivations — see docs/InlineTextureEscapes.md):
+    // FUN_TEXTURE_LOAD_BY_PATH(path, &desc, flags, 0, 1) __fastcall, desc =
+    // the 5-dword {PTR_TEXLOAD_DESC_VTBL, 8, &self8, (&self8)|1, 0} on-stack
+    // node FUN_00770200 builds; flags via FUN_GX_TEXFLAGS_INIT(&flags, blend,
+    // 0,0, 0,0,0, 1, 0) __thiscall. Never returns null (engine substitutes a
+    // fallback texture). FUN_TEXTURE_GET_RENDERABLE(hTex, 1, 0) __fastcall
+    // returns the bindable CGxTex at [hTex+0x140] and drives the streaming
+    // load — calling it each frame IS the residency reference (what the
+    // minimap's masked draw does for its mask at 0x004ec65c).
+    FUN_TEXTURE_LOAD_BY_PATH = 0x00449D90,
+    PTR_TEXLOAD_DESC_VTBL = 0x007FFA10,
+    FUN_GX_TEXFLAGS_INIT = 0x0058A980,
+    FUN_TEXTURE_GET_RENDERABLE = 0x0044ACF0,
+
+    // --- Texture desaturation (`Texture:SetDesaturation` backport) --------------
+    // The engine desaturates by binding ONE pixel shader per region: the UI
+    // shader loaded at CSimpleTop construction (FUN_0076FDA0) from
+    // "Shaders\Pixel\Desaturate.bls" into VAR_UI_SHADER_DESATURATE, stored in the
+    // region slot OFF_SIMPLETEXTURE_SHADER and bound by the layer draw
+    // (FUN_0076FB00 → FUN_GX_RS_SET_PTR(0x3F, shader) → D3D SetPixelShader in
+    // FUN_005A0570). texture/Desaturation.cpp creates one shader object per
+    // desaturation level through the engine's own loader and writes it into the
+    // same slot — no draw hooks. Decoded stock ps_2_0 program: def c0 luma; dcl
+    // t0.xy; dcl v0; dcl_2d s0; texld r0,t0,s0; dp3 r0.rgb,r0,c0; mul
+    // r0.a,r0.a,v0.a; mov oC0,r0 — it drops the vertex-colour RGB.
+    //
+    // Loader chain (FUN_GX_SHADER_CREATE → device vmethod +0xDC = FUN_005A0370):
+    // FUN_00595240 dedups by path hash in the device's shader table (a hit
+    // returns the node, refcount++) and creates the node (vtable 0x00809EA8,
+    // zero-filled) on a miss; FUN_00595130 opens the path with the HANDLE file
+    // API (FUN_006477A0 — NOT FUN_FILE_READ, so the addon read hook never sees
+    // shader loads), reads the header + the block the device profile selects,
+    // and lets the node parse it (CGxShader vtable slot 0 = FUN_00598320). A
+    // MISSING file returns silently, leaving the registered node with valid = 0.
+    // The D3D loader then compiles eagerly (FUN_GX_D3D_COMPILE_PIXEL_SHADER). A
+    // node whose compile failed binds a NULL shader in FUN_005A0570 — the region
+    // draws fixed-function, never black. The device is created once per process
+    // (ConsoleDeviceInitialize 0x0063A230 is the factory's only caller) and the
+    // reload-from-file vmethod (+0xE8, wrapper 0x0058B390) has no callers, so
+    // shader pointers are process-lifetime.
+    //
+    // .bls container (magic 'SPXG'): u32 version, u32, 12 block offsets (0..4 =
+    // ps_1_1/1_2/1_3/1_4/2_0 D3D bytecode, 5..8 nv binary, 10 ARBfp text);
+    // block = u32 constCount, entries, u32 samplerCount, entries, u32 codeType
+    // (2 = D3D bytecode), u32 codeSize, code. Param entry = 0x90 bytes {char
+    // name[0x40]; u32 register; float default[16]; u32 type; u32; u32} →
+    // CGxShaderParam node (+0x4c register, +0x54 data, +0x40 type, +0x50 dirty).
+    // The per-draw state flush FUN_00594210 re-uploads a bound shader's dirty
+    // params (FUN_005955F0 → FUN_005A0420 → SetPixelShaderConstantF) — stock
+    // data only exercises that for vertex shaders, which is why the backport
+    // bakes the amount into a `def` constant instead of a param.
+    FUN_SIMPLETEXTURE_SET_SHADER = 0x00770650, // __thiscall(region, CGxShader*): writes the slot, FUN_0077FDF0 re-batch iff changed
+    VAR_UI_SHADER_DESATURATE = 0x00CF4CD4,     // DAT_00CF4CD0[1]: stock Desaturate.bls CGxShader*; released by FUN_0076FDD0 at shutdown
+    FUN_SCRIPT_TEXTURE_SET_DESATURATED = 0x0079C1E0, // Texture method batch entry 20; flag via FUN_LUA_TO_BOOLEAN_LOOSE(L, 2, 1)
+    FUN_GX_SHADER_CREATE = 0x0058B2B0,         // __fastcall(type /*ecx*/, CGxShader **out /*edx*/, const char *path)
+    FUN_GX_D3D_COMPILE_PIXEL_SHADER = 0x005A0250, // __thiscall(dev, shader): +0x2c = 0, CreatePixelShader iff +0x50 == 2 && +0x58 → +0x20, +0x2c = 1
+    FUN_GX_ARRAY_GROW_BYTES = 0x005268B0,      // __thiscall({cap,size,data,quantum}*, newCap): sets cap, SMemReAllocs data; size is the caller's
+    PTR_GXDEVICE_D3D_VTBL = 0x00809EF8,        // CGxDeviceD3d vtable (ctor FUN_00598CE0); the OpenGL device's (0x00809AF8) has another layout
+    OFF_GXDEVD3D_DEVICE9 = 0x38A8,             // IDirect3DDevice9* (every D3D call in FUN_005A2F00 / FUN_005A0250 goes through it)
+    OFF_GXDEVD3D_ALIVE = 0xF2C,                // 1 after CreateDevice / a successful Reset (FUN_005995C0 / FUN_005A1680), 0 after a failed Present (FUN_005A1910); gates draws and compiles
+    OFF_GXDEV_PS_PROFILE = 0x2D4,              // dev+0x2D0+type*4, from D3DCAPS9.PixelShaderVersion in FUN_00598EE0: 4 = ps_2_0+, 3/2/1/0 = ps_1_4/1_3/1_2/1_1, -1 none
+    OFF_GXSHADER_D3D_OBJECT = 0x20,            // IDirect3DPixelShader9* (created by the compile)
+    OFF_GXSHADER_TYPE = 0x24,                  // 0 = vertex, 1 = pixel
+    OFF_GXSHADER_VALID = 0x2C,
+    OFF_GXSHADER_CODE_TYPE = 0x50,             // GXSHADER_CODE_D3D for bytecode blocks
+    OFF_GXSHADER_CODE_DESC = 0x54,             // {cap, size, data, quantum}
+    OFF_GXSHADER_CODE_SIZE = 0x58,
+    OFF_GXSHADER_CODE_DATA = 0x5C,
+    GXSHADER_TYPE_PIXEL = 1,
+    GXSHADER_CODE_D3D = 2,
+    GXRS_PIXEL_SHADER = 0x3F,                  // pointer-form selector (0x40 = vertex shader); doc only — the engine's draw binds it
+    FUN_LUA_TO_BOOLEAN_LOOSE = 0x006F1C10,     // __fastcall(L, idx, default): nil→0, boolean, number→int, "1/t/y…"→1, "0/f/n…"→0, "enabled"→1, "disabled"→0, other→default
+
+    // --- Texture memory accounting: the zero-dimension hang -------------------
+    // FUN_GX_TEXTURE_MIP_BYTES totals a texture's bytes across its mip chain:
+    // `__thiscall(device, GxTexture, width, height)` (RET 0xC), where a width or
+    // height of -1 means "read the texture's own". Both dimensions are shifted
+    // right by OFF_GXDEV_TEXTURE_REDUCE, then divided into format blocks
+    // (DAT_00809D48 = block side, DAT_00809D6C = bytes per block, both indexed by
+    // OFF_GXTEXTURE_FORMAT * 4). A single-level texture returns after the base
+    // level; a mipmapped one (OFF_GXTEXTURE_FLAGS & 7 >= 2) enters the halving
+    // loop at 0x00594D47.
+    //
+    // THAT LOOP HANGS ON A ZERO DIMENSION — the engine bug Texture::MipAccounting
+    // guards. Its only exit is both dimensions reaching exactly 1 (`CMP EBX,1 /
+    // JNZ` then `CMP EDI,EBX / JNZ`), and each halving is gated by `JBE`, so a 0
+    // never shifts and never reaches 1:
+    //     00594D47 CMP EBX,1     ; width == 1?
+    //     00594D4A JNZ 00594D59
+    //     00594D4C CMP EDI,EBX   ; height == 1 too? -> return
+    //     00594D4E JNZ 00594D60
+    //     00594D59 JBE 00594D60  ; width <= 1 -> skip the SHR (0 stays 0)
+    // The spin does no allocation and no I/O, so it presents as a hard freeze at
+    // 100% of one core rather than a crash. Caught live at 0x00594D78 by a
+    // SIGSEGV-forced backtrace: the frame's four printed stack slots are this
+    // function's own reused parameter slots, which read back as 4 bytes/block
+    // (uncompressed 32-bit) with both dimensions 0.
+    //
+    // Reachable from two callers. FUN_00594D90 (the per-frame bind stamp, run
+    // once per texture per frame from the texture-stage apply FUN_005A29D0) passes
+    // -1/-1 for a whole texture; FUN_00594C80 (lock / dirty-rect accounting)
+    // passes a RECT's width and height, so an empty-but-flagged rect hangs it just
+    // the same. The guard covers both by clamping at the entry.
+    FUN_GX_TEXTURE_MIP_BYTES = 0x00594CE0,
+    // Device-relative global texture-reduction level, consumed here as `SHR
+    // dimension, CL` (so the CPU masks it to 5 bits). Its writer has not been
+    // identified; the guard needs only the value this accounting itself applies,
+    // and reads it from the same field for exactly that reason.
+    OFF_GXDEV_TEXTURE_REDUCE = 0x31C,
+    // GxTexture fields, every one written verbatim by the constructor
+    // FUN_00591600 with no validation of any kind — which is how a 0x0 texture
+    // comes to exist in the first place.
+    OFF_GXTEXTURE_WIDTH = 0x24,
+    OFF_GXTEXTURE_HEIGHT = 0x28,
+    OFF_GXTEXTURE_FORMAT = 0x34,
+    OFF_GXTEXTURE_FLAGS = 0x3C, // bits 0..2 = mip mode; >= 2 means a mip chain
+
+    // --- Texture dimension gates (power-of-two / max size) --------------------
+    // 1.12 rejects a non-power-of-two texture TWICE, and both are plain software
+    // checks — no device caps are consulted for the POT rule at either site:
+    //   1. the allocator/recycler FUN_00448450, which returns NULL outright
+    //      (`TEST w,w-1 / JNZ reject` per axis, then `CMP dim,0x400 / JAE`);
+    //   2. the GX create validator FUN_0058AB10, which re-tests POT for every
+    //      texture type but 2 (type 0 = 2D, 1 = cubemap — the BLP loader passes
+    //      `width == height*6` as the type, and FUN_00542180-style atlas creates
+    //      pass 0).
+    // Verified unchanged in both later clients: 3.3.5 FUN_00681d90 and 4.3.4
+    // FUN_00840d30 carry the validator's POT test verbatim, same type-2
+    // exemption. What they DO change is the allocator: its dimension test is
+    // demoted to a pool-eligibility window (`dim - 0x20 < 0x1e1`, i.e. [32,512]),
+    // so an out-of-range dimension skips the recycle pool and allocates fresh
+    // rather than failing. That demotion is only safe there because 3.3.5 clamps
+    // its device-caps max to the scratch size (1024) and lets the validator carry
+    // the bound. 1.12's validator ALSO compares against the per-type caps max
+    // (`caps + 0x60 + type*4`, caps via FUN_0058A230) — but that value is raw
+    // hardware (a 2560x1080 passed it), so in 1.12 the allocator's hardcoded
+    // 0x400 is the ONLY thing protecting the decode scratch described below. It
+    // is not redundant. Do not port the demotion without porting a bound.
+    //
+    // The recycle pool is indexed by log2(dim >> 5) and its hit test compares
+    // only flags/type/miplevels — never width/height — so an NPOT texture must
+    // never reach it or it recycles a bucket of unrelated dimensions. Any patch
+    // relaxing the POT rule therefore has to route the failures through a bound
+    // check and THEN to the pool-skip site — never simply delete them, and never
+    // straight to pool-skip (see CODE ORDER MATTERS below).
+    FUN_GX_TEXTURE_ALLOC = 0x00448450,
+    PATCH_TEXALLOC_POT_W_JMP = 0x004484AE,  // 0F 85 rel32 -> VA_TEXALLOC_REJECT
+    PATCH_TEXALLOC_POT_H_JMP = 0x004484B9,  // 0F 85 rel32 -> VA_TEXALLOC_REJECT
+    // `CMP EBX,imm32` (81 FB) / `CMP EAX,imm32` (3D) — the size bound per axis,
+    // 0x400 stock. VanillaHelpers.dll leaves these and flips the jumps below
+    // from 0F 83 (JAE) to 0F 87 (JA) so exactly-1024 passes.
+    PATCH_TEXALLOC_SIZE_W_IMM = 0x004484C1,
+    PATCH_TEXALLOC_SIZE_H_IMM = 0x004484CC,
+    PATCH_TEXALLOC_SIZE_W_JMP = 0x004484C5, // 0F 83 rel32 -> VA_TEXALLOC_REJECT
+    PATCH_TEXALLOC_SIZE_H_JMP = 0x004484D0, // 0F 83 rel32 -> VA_TEXALLOC_REJECT
+    VA_TEXALLOC_POOL_SKIP = 0x0044864B,     // "skip the pool, create fresh"
+    VA_TEXALLOC_REJECT = 0x00448665,        // XOR EAX,EAX; RET 0x14
+    // CODE ORDER MATTERS: the POT jumps sit ABOVE the size CMPs, so a POT
+    // failure retargeted straight to VA_TEXALLOC_POOL_SKIP jumps OVER the size
+    // bound — an NPOT 3000x3000 would reach the decoder unbounded. Any NPOT
+    // relaxation must route POT failures through a bound check first
+    // (Texture::DimensionGate does it with a code cave). At the jump sites EBX =
+    // width and EAX = height, EDI = 0 and the 9-dword descriptor at [EBP-0x2C]
+    // is complete, so the pool-skip tail is enterable from any of them.
+    //
+    // Recycle-pool index arithmetic, `index = h_log + w_log * SIDE`, SIDE = 5
+    // for the stock 5x5 (32..512) table. VanillaHelpers grows the table to 6x6
+    // (its init-count immediate below reads 36 instead of 25) but leaves BOTH of
+    // these at stride 5, so a log of 5 on either axis collides: 32x1024 shares a
+    // bucket with 64x32, 64x1024 with 128x32 — and the bucket match never
+    // compares w/h, so the wrong-size texture is silently recycled. Fix = rewrite
+    // each 5-byte pair to `IMUL r,r,6; ADD r,other` (6B F6 06 03 F3 at the
+    // allocator, 6B DB 06 03 D8 at free), which preserves whichever operand
+    // stock treats as the row and only changes the stride. Stock's alloc and
+    // free agree with each other, so the fixed pair does too.
+    PATCH_TEXPOOL_INDEX_STRIDE_ALLOC = 0x00448529, // 8D 04 B3 03 F0  LEA EAX,[EBX+ESI*4]; ADD ESI,EAX
+    PATCH_TEXPOOL_INDEX_STRIDE_FREE = 0x004487AD,  // 8D 0C 98 03 D9  LEA ECX,[EAX+EBX*4]; ADD EBX,ECX
+    PATCH_TEXPOOL_INIT_COUNT = 0x00447C45,         // B9 imm32 — bucket count: 25 stock, 36 VanillaHelpers
+    // The stock table lives at 0x00B05BE8 (25 x 12 bytes) and ends EXACTLY at
+    // VAR_TEXTURE_DECODE_SCRATCH — an out-of-range bucket index reads the scratch
+    // pointer as a list head. So the size gate may never admit a dimension the
+    // pool can't index unless that dimension is also routed around the pool.
+    FUN_GX_TEXTURE_VALIDATE = 0x0058AB10,
+    // The recycle-pool FREE path — the mirror of the allocator, and the other
+    // half the size relaxation has to cover. It files a freed texture into a
+    // bucket indexed by `tz(w>>5) + tz(h>>5)*stride` (tz = power-of-two factor),
+    // gated ONLY by `w>31 && h>31 && mips<8` — there is NO upper bound. Stock
+    // never overran because the allocator refused anything >=1024, so an
+    // oversized texture never existed to be freed; the cave breaks that
+    // invariant, so a 2048x2048 (tz 6 per axis) files at bucket 36-42, past the
+    // 36-entry table, and writes through a garbage list head (verified crash:
+    // MOV [EAX],ECX at 0x004487D9, EAX = out-of-table pointer + 4). Fix
+    // (Texture::DimensionGate): route a texture larger than the pool can index to
+    // the engine's own non-pooled free FUN_TEXTURE_FREE_RAW — exactly what the
+    // guard's else-branch already does for too-small / too-many-mip textures.
+    FUN_TEXTURE_POOL_FREE = 0x00448670,   // __fastcall(tex); the pool free path
+    FUN_TEXTURE_FREE_RAW = 0x0058AD60,    // __fastcall(tex); non-pooled free (device release)
+    FUN_TEXTURE_GET_DESC = 0x0058ADA0,    // __fastcall(tex, out*) — fills width@+4, height@+8
+    OFF_TEXDESC_WIDTH = 0x04,
+    OFF_TEXDESC_HEIGHT = 0x08,
+    // THE ACTUAL SIZE CEILING. FUN_00448BD0 runs once at startup and allocates a
+    // SINGLE global decode scratch buffer, sized `FUN_005a4b80(2, 0x200, 0x200)`
+    // — one 512x512 texture's worth. Every loader points the decoder at it
+    // (`texObj + 0x120`; see FUN_0044A260's param_1==0 branch and FUN_0044A560),
+    // and the decoder writes rows with no bounds check, so a texture larger than
+    // this buffer overruns the heap. The allocator's `< 0x400` gate is therefore
+    // NOT redundant with the validator's device-caps max — the caps max runs to
+    // thousands, this buffer does not. VanillaHelpers.dll patches both 0x200
+    // immediates to 0x400 in the same function it relaxes the size limit in;
+    // the pairing is mandatory, not incidental. Verified by crash: a 2560x1080
+    // TGA faulted in the decoder's pixel writer at 0x004492E5 (ACCESS_VIOLATION,
+    // write) 2.6x past a 1024x1024 buffer.
+    // Single caller (boot, 0x00402862); the matching free + NULL is the exit
+    // teardown FUN_00448D30. No mid-session re-init path exists, and the five
+    // readers all re-read the global at use time, so the pointer can be swapped
+    // for a larger engine-allocated buffer without a hook.
+    FUN_TEXTURE_DECODE_SCRATCH_ALLOC = 0x00448BD0,
+    VAR_TEXTURE_DECODE_SCRATCH = 0x00B05D14, // void* — the buffer itself
+    // The two size immediates the boot alloc feeds FUN_GX_FORMAT_IMAGE_BYTES:
+    // `MOV EDX,imm32` is width (BA imm32), `PUSH imm32` is height (68 imm32).
+    // Read them back (+1) to learn what the buffer was ACTUALLY sized to on this
+    // DLL stack — 0x200 stock, 0x400 once VanillaHelpers has run.
+    PATCH_TEXDECODE_SCRATCH_DIM_W = 0x00448BE1,
+    PATCH_TEXDECODE_SCRATCH_DIM_H = 0x00448BDC,
+    // __fastcall(ecx = format, edx = width, [stack] = height) -> total bytes for
+    // the image plus its mip chain plus the per-level row-pointer table.
+    FUN_GX_FORMAT_IMAGE_BYTES = 0x005A4B80,
+    // The engine's own decode-buffer constructor: `__fastcall(ecx = format,
+    // edx = width, [stack] height, file, line) -> void*` (RET 0xC). Exactly
+    // `SMemAlloc(FUN_GX_FORMAT_IMAGE_BYTES(fmt,w,h), file, line, 0)` followed by
+    // the row-pointer-table init FUN_005A4BB0 performs per decode. Both decoders
+    // call it (via the small-texture recycle front FUN_0044AF90, which falls
+    // through to it above 256px) when the scratch is NULL, so a buffer it
+    // returns is precisely what the scratch slot expects — and SMemAlloc-backed,
+    // so the exit teardown's SMemFree on it is valid.
+    FUN_TEXTURE_DECODE_BUFFER_ALLOC = 0x005A4AF0,
+    // Device-relative: the caps block at +0x23C (what FUN_0058A230 returns) plus
+    // the type-0 (2D) max-texture-dimension slot at +0x60 — the exact field the
+    // create validator FUN_0058AB10 compares width and height against
+    // (`CMP EDI,[EAX + ESI*4 + 0x60]`, ESI = type). This is the GPU's own limit,
+    // and the only size ceiling the dimension gate enforces: reading it before
+    // growing the decode scratch means we never allocate for a texture the
+    // validator would refuse a moment later. Raw hardware max on modern cards
+    // (a 2560x1080 passed it) — 3.3.5 clamps the equivalent to 1024, 1.12 does
+    // not.
+    OFF_GXDEV_CAPS_MAX_TEX_DIM = 0x29C,
+    // --- Async texture I/O: the force-load path and its 512 KiB trap ----------
+    // FUN_TEXTURE_GET_RENDERABLE(hTex, force=1) calls this when the GxTex does
+    // not exist yet — i.e. for every UI texture on first draw. `__fastcall(ecx =
+    // HTEXTURE)`. If the pending read at [hTex + OFF_HTEXTURE_ASYNC_REQUEST] was
+    // never dispatched (request byte +0x1D == 0: it didn't fit the 2 MiB shared
+    // buffer at 0x00905BE4, or the buffer was busy), it unlinks the request,
+    // points it at a STATIC fallback buffer, dispatches, and blocks until the
+    // read completes. There is no size check. The fallback spans
+    // 0x00885804..0x00905804 — 0x80000 bytes, bounded exactly by the first live
+    // global after it — so a file larger than 512 KiB read through this path
+    // overruns the async list heads, the recycle-pool table and the shared
+    // buffer. That is VanillaHelpers' "crashes while loading textures bigger
+    // than 2 MiB"; its 32 MiB shared buffer makes the path rarer, not safe. The
+    // stock size gate hid the bug by keeping every BLP under ~1.4 MB. Guard
+    // (Texture::DimensionGate): refuse to force a request larger than the
+    // fallback — the texture stays blank instead of overrunning. Growing the
+    // fallback to fit was tried and reverted: the read runs on the engine's
+    // async reader thread (no crash handler), and a read into a right-sized heap
+    // buffer faulted where the same read into the oversized shared buffer does
+    // not — not yet isolated. TGA reads are synchronous and never on this path.
+    FUN_TEXTURE_FORCE_LOAD = 0x0044AD50,
+    OFF_HTEXTURE_ASYNC_REQUEST = 0x138, // async request node, or 0
+    OFF_ASYNCREQ_SIZE = 0x08,           // file size (FUN_006487F0 result)
+    OFF_ASYNCREQ_IN_SHARED = 0x1D,      // byte: 1 once assigned a buffer and dispatched
+    VAR_ASYNC_FALLBACK_BUFFER = 0x00885804,
+    ASYNC_FALLBACK_BUFFER_SIZE = 0x80000,
+    // --- BLP decompresses BEFORE it allocates -----------------------------------
+    // The .blp loader FUN_0044A560 copies the shared scratch pointer into
+    // texObj+0x120, calls this decompressor to write the decoded image THROUGH
+    // THAT COPY, and only then calls the allocator FUN_00448450. TGA does it the
+    // other way round (allocate, decode later at upload), which is why the
+    // allocator's gate protects TGA but never sees a BLP's dimensions in time; a
+    // 2048x2048 BLP has always overrun the scratch on this client. The other
+    // caller, the IMG path FUN_00449840 (completion FUN_004497F0), does NOT use
+    // the scratch: it allocates a private buffer sized for the image through
+    // FUN_0044AF90, stores it in the same slot, and its release frees whatever
+    // the slot holds — so a hook here must act only when the slot equals
+    // VAR_TEXTURE_DECODE_SCRATCH, and must repoint that slot after growing. (The BLP pre-scale FUN_00448B60 halves against caps+0x60, the
+    // raw hardware max, so it never fires on a modern GPU and protects nothing.)
+    // `__thiscall(reader, format, int *scratchSlot, mipBase, flag)`, RET 0x10;
+    // the reader carries the level-0 dimensions, `>> mipBase` is the level
+    // actually written. Both callers are completion callbacks that the
+    // main-thread pump FUN_00443E70 runs, so a pre-hook here is main-thread and
+    // never inside another decode. Encoding 3 (uncompressed) only writes the row
+    // table into the scratch and points the rows at the file buffer; DXT and
+    // palettized decompress into it — the crash case.
+    FUN_BLP_DECOMPRESS = 0x005A8430,
+    OFF_BLPREADER_WIDTH = 0x10,
+    OFF_BLPREADER_HEIGHT = 0x14,
+    // The `NEG EAX; SBB EAX,EAX` (F7 D8 1B C0) pair inside the validator's isPOT
+    // idiom `(x & (x-1)) -> NEG/SBB -> INC -> TEST/JZ`, once per axis. The two
+    // axes share the final TEST/JZ with the type-2 branch, so the arithmetic is
+    // the surgical patch point — neutering the shared JZ would also disable the
+    // type-2 flags check.
+    PATCH_TEXVALIDATE_POT_W = 0x0058AB7C,
+    PATCH_TEXVALIDATE_POT_H = 0x0058AB8D,
+
+    // --- Inline-texture positioning (slice 1: measure/emit integration) --------
+    // The 1.12 text pipeline builds a layout as a list of render "nodes" (one
+    // per wrapped line); each node owns per-font-page glyph vertex batches and a
+    // screen origin, and the paint pass (FUN_005c8fe0) walks the layout's node
+    // list drawing each node's batches translated by that origin. See
+    // docs/InlineTextureEscapes.md and the decompiled map in InlineTexture.cpp.
+
+    // Per-line glyph emitter. `__thiscall(node, byte *text, int len, uint
+    // *colorState, float *penXYZ, uint *pageMask, int *linkState)`. Reads the
+    // pen start from penXYZ[0..2] (node-local), appends glyph quads to the
+    // node's page batches, and on return writes the final pen x (node-local,
+    // as a FLOAT via `FSTP dword` — read linkState[4] as float, not int) into
+    // linkState[4]. We co-hook it and, for a line that
+    // contains an inline `|T…|t`, render the plain runs by delegating to the
+    // original per segment (threading the pen via linkState[4]) and record an
+    // icon quad at the pen between segments. Safe to call repeatedly per line
+    // because the batch-clear at its top is gated on OFF_TEXT_NODE_FLAGS bit 3,
+    // which is clear during normal accumulation draw. See FUN_005ccbe0.
+    FUN_TEXT_EMITTER = 0x005CCBE0,
+    // Node flags. Bit 3 (0x08) gates the emitter's per-call batch-clear (set
+    // only in a rebuild mode we don't take); we segment only when it's clear.
+    // Bit 6 (0x40) = EDITABLE text (set on editbox content; verified in-game:
+    // the macro editbox is 0x4D, chat display 0x20D, FontStrings 0x0D). It rides
+    // in the tokenizer's flags argument, so we suppress inline rendering per node
+    // for editboxes — they show raw, editable `|T…|t` markup. This is the 1.12
+    // analog of 4.3.4's per-render texture-disable flag (tokenizer bit 0x1000).
+    OFF_TEXT_NODE_FLAGS = 0x5C,
+    // Node horizontal justify (int): 0 = left, 1 = centre, 2 = right — the draw
+    // builder's encoding. The emitter pre-shifts an inline icon's pen by the
+    // line's justify offset for centre/right nodes (left needs no shift).
+    // Verified in-game against centred/right-aligned text layout.
+    OFF_TEXT_NODE_JUSTIFY = 0x54,
+    // Node screen origin (float x, float y). The paint pass translates the
+    // node's node-local glyph verts by this; an inline icon recorded in
+    // node-local pen coords is drawn at (localX + originX, localY + originY).
+    OFF_TEXT_NODE_ORIGIN_X = 0x70,
+    OFF_TEXT_NODE_ORIGIN_Y = 0x74,
+    // Node → per-font-page vertex buffers. The glyph emitter (FUN_TEXT_EMITTER)
+    // bakes each glyph as a 4-vertex quad into one of up to TEXT_NODE_PAGE_COUNT
+    // font-page buffers hanging off the node; the paint copy-out (FUN_005c8710)
+    // reads them back TRANSLATE-ONLY (gpu.xy = local.xy + node origin). So a
+    // rotation baked into these node-local verts survives to the screen — the
+    // basis for fontstring:SetRotation (Texture::Transform::RotateFontStringNode).
+    //   node + OFF_TEXT_NODE_PAGE_BUFFERS + page*4 -> page buffer ptr (may be 0)
+    //   pageBuf + OFF_TEXT_PAGE_VERT_COUNT          -> int   vertex count
+    //   pageBuf + OFF_TEXT_PAGE_VERTS               -> float* vertex array
+    //   each vertex = 5 floats {x, y, z, u, v}, stride TEXT_VERT_STRIDE bytes.
+    // Cross-verified: the emitter (writes verts here), FUN_005c8710 (copies them
+    // to the GPU buffer), and FUN_005ce0c0 (indexes the page array) all agree.
+    OFF_TEXT_NODE_PAGE_BUFFERS = 0xA0,
+    TEXT_NODE_PAGE_COUNT = 8,
+    OFF_TEXT_PAGE_VERT_COUNT = 0xC,
+    OFF_TEXT_PAGE_VERTS = 0x10,
+    TEXT_VERT_STRIDE = 0x14, // bytes; 5 floats per vertex (x, y, z, u, v)
+    // Per-page baked PER-GLYPH colours (BGRA dword per vertex), parallel to the
+    // vertex array above. Written by the emitter's bit-3-clear path
+    // (`[pageBuf+0x20] + ([pageBuf+0x1C] + i)*4 = colorState` at 0x005CCC0x);
+    // the paint copy-out FUN_005c8710 uses them VERBATIM — but only when the
+    // colour count equals the vertex count, else it falls back to the node's
+    // uniform colour (OFF_TEXT_NODE_COLOR). No later modulation: whatever alpha
+    // is baked here is final, which is why InlineTexture's flush mirrors the
+    // node's live alpha into these entries per frame.
+    OFF_TEXT_PAGE_COLOR_COUNT = 0x1C,
+    OFF_TEXT_PAGE_COLORS = 0x20,
+    // Node uniform colour (BGRA). Seeded from fs colors[0] at block creation
+    // (FUN_007724a0 → FUN_0044d420) and rewritten on every colour/alpha change
+    // via the fs colour-changed vmethod (FUN_00772180 → FUN_0044d650 →
+    // FUN_005ccb40). Its alpha byte (+0x2F) is the FOLDED live opacity —
+    // SetTextColor alpha (fs+0xA8 array) × the owning frame's effective alpha
+    // (*(fs+0x9C)+0xC8), maintained by FUN_0077fac0 — so it tracks parent
+    // SetAlpha per change. The paint reads it per frame for uniform text; the
+    // emitter's |c splice (case 0) and the draw builder's colorState seed both
+    // copy it at bake time. NOTE: FUN_005ccb40 only invalidates (re-bakes) a
+    // node on colour change when bit 3 is CLEAR — a bit-3 (standalone
+    // FontString) node with baked per-glyph colours goes stale instead, hence
+    // the flush-side alpha mirror.
+    OFF_TEXT_NODE_COLOR = 0x2C,
+    // Layout node list — intrusive singly-linked list of render nodes. Head at
+    // [layout+0x24]; next = *(node + [layout+0x1c] + 4); the tail sentinel has
+    // its low bit set (mirrors the paint pass's own walk in FUN_005c8fe0).
+    OFF_TEXT_LAYOUT_NODE_HEAD = 0x24,
+    OFF_TEXT_LAYOUT_NODE_LINK = 0x1C,
+    // Node source-text pointer. The draw builder FUN_005cdc20 starts from
+    // [node+0x48] and advances it per wrapped line, calling the emitter once
+    // per line on the SAME node — so `emitterText == [node+0x48]` identifies
+    // the first wrapped line (used to clear the node's icon list once per
+    // build, then accumulate across lines). This buffer is a node-owned COPY of
+    // the DISPLAY text (SStrCopy'd in the node init FUN_005cd6d0, capacity
+    // [node+0x4c]) — the full source when it fits, or the ellipsized
+    // "<prefix>..." form when the display-text resolver truncated it. So
+    // comparing it against the fs source (OFF_FONTSTRING_TEXT) is the render-
+    // truth "displayed vs full" signal FontString:IsTruncated uses.
+    OFF_TEXT_NODE_TEXT = 0x48,
+    // Node font-size field (float), fed to the font-height helper.
+    OFF_TEXT_NODE_FONT_SIZE = 0x1C,
+    // Node's gxu font-face pointer. The emitter FUN_005ccbe0 reads *(node+0x44)
+    // as the `this` for every glyph call (glyph lookup FUN_005cabd0, the pair
+    // advance, the native-height getter below).
+    OFF_TEXT_NODE_FONT_FACE = 0x44,
+    // Font pixel-height helper. `__fastcall(int flag /*ecx = (nodeFlags>>7)&1*/,
+    // float fontSize /*stack = [node+0x1c]*/) -> float` (returns in ST0). The
+    // emitter calls it to size glyphs; we call it to derive the text's vertical
+    // extent so an inline icon can be centred on the line independent of font
+    // size. See FUN_005c6fa0.
+    FUN_TEXT_FONT_HEIGHT = 0x005C6FA0,
+    // Font-face NATIVE pixel height getter: `__fastcall(void *fontFace) -> int`
+    // (returns *(font+0x24C)). The emitter's pen scale is
+    // FUN_TEXT_FONT_HEIGHT(...) / (float)nativeHeight — glyph-record advances
+    // are in native-font units and multiply by that scale into pen units.
+    // See FUN_005cae90.
+    FUN_TEXT_FONT_NATIVE_HEIGHT = 0x005CAE90,
+    // Glyph PAIR advance: `__thiscall(void *fontFace, uint prevCh, uint curCh)
+    // -> float (ST0)`, native-font units = baseAdvance(prevCh) +
+    // kern(prevCh,curCh)·[font+0x188], memoized per pair. The emitter computes
+    // this at the top of each token iteration and places the CURRENT glyph at
+    // pen + pairAdvance(prev, cur) — i.e. the pen is LAZY: a glyph's own
+    // advance is only consumed when the NEXT token lands. Consequence
+    // (verified in FUN_005ccbe0's tail): the emitter's final pen write
+    // (linkState[4]) is x(lastGlyph) + pairAdvance(secondLast, last) — the
+    // last pair RE-ADDED as a stand-in for the last glyph's own advance. For a
+    // single-glyph run that stand-in is 0 (no pair ever computed) → the
+    // read-back reports the run as zero-width (the money-string "coin sits on
+    // the lone digit" bug). The emitter co-hook corrects the read-back with
+    // these helpers: pen = linkState[4] − pairAdvance(prev,last)·scale +
+    // baseAdvance(last)·scale. See FUN_005ca2d0.
+    FUN_TEXT_GLYPH_PAIR_ADVANCE = 0x005CA2D0,
+    // The flags&0x10 variant of the pair advance (same shape; the emitter
+    // selects it when node flags bit 4 is set). See FUN_005ca4b0.
+    FUN_TEXT_GLYPH_PAIR_ADVANCE_ALT = 0x005CA4B0,
+    // Glyph BASE advance: `__thiscall(void *fontFace, uint ch) -> float (ST0)`,
+    // native-font units, from the font's glyph cache (present for any glyph the
+    // emitter just drew; returns a default for uncached). This is the pair
+    // advance's first term — the terminal-glyph advance with no following
+    // kern, exactly what an inline icon following the glyph needs. See
+    // FUN_005ca240.
+    FUN_TEXT_GLYPH_BASE_ADVANCE = 0x005CA240,
+    // Hyperlink hit-rect registration (the GXUFONTHYPERLINKINFO append).
+    // `__thiscall(node, float yA, float xLeft, float yB, float xRight,
+    // char *linkStart, uint linkLen, char *escStart, uint escLen)` — 8 stack
+    // dwords, RET 0x20. Appends a 0x20-byte record to the node's link array
+    // (cap +0x7C, count +0x80, data +0x84): the four floats normalized to
+    // screen space ({yA,left,yB,right} — the engine's y-first rect order; the
+    // emitter's |H open writes linkState[2]=xLeft, |h close linkState[4]=
+    // xRight, the draw builder provides the line's yA/yB), then the four link
+    // dwords raw. Called from the emitter's |h close (case 5). The y extent is
+    // the TEXT band (fontH tall) — co-hooked so a link containing a tall
+    // inline icon gets its hit band expanded by the icon's overflow (the
+    // line-height-growth counterpart; without it only the text-high slice of
+    // a 32px emote link was hoverable). See FUN_005cd310.
+    FUN_TEXT_LINK_RECT_ADD = 0x005CD310,
+
+    // Shared `|`-escape tokenizer. `__fastcall(byte *text /*ecx*/, int
+    // *bytesConsumed /*edx*/, uint *colorOut, uint flags, uint *payloadOut) ->
+    // tokenType`. ~11 callers (measure loops, line-fit/wrap, the emitter, the
+    // draw builder). It has NO `|T` case, so `|T` falls through to a literal
+    // `|`. We co-hook it so an inline-texture span (`||T…||t` after the
+    // FontString pipe-doubling, or a clean `|T…|t`) is consumed as ONE
+    // near-zero-width token — this stops every measure/wrap caller from
+    // counting the path text and wrapping early. The emitter detects icons on
+    // its own (and delegates plain segments that never contain `|T`), so the
+    // draw path is unaffected by this hook. See FUN_005c2810.
+    FUN_TEXT_TOKENIZER = 0x005C2810,
+
+    // Shared wrap-stepper dispatcher — lays out ONE wrapped line per call.
+    // `__fastcall(gxuFont /*ecx*/, byte *text /*edx*/, float fontH, float
+    // wrapWidth, int *outBreak, float *outWidth, void *outNext, float indent,
+    // uint flags, byte *p10)`, callee cleans 0x20 (verified RET 0x20; prologue
+    // PUSH EBP; MOV EBP,ESP; FLD [EBP+8] — MinHook-safe). Thin validator that
+    // routes flags&0x80 to the no-wrap path (FUN_005C7300, ignores wrapWidth)
+    // and everything else to the real stepper FUN_005C7470. Its exactly 4
+    // callers are EVERY wrap consumer: the draw builder FUN_005CDC20 (render
+    // breaks), the height measure FUN_005C2070 (GetStringHeight), the
+    // chars-that-fit counter FUN_005C21C0 (ellipsis truncation), and the
+    // break-array computer FUN_005C2430 (behind FUN_00772B60) — so a co-hook
+    // here keeps render, height, truncation, and break arrays mutually
+    // consistent. Text::InlineTexture shrinks the wrapWidth arg by the line's
+    // inline-icon advances (the tokenizer hook hides them from the measure, so
+    // breaks otherwise land as if icons were 0 wide and the emitter's real
+    // advances overflow the right edge). UNITS: each caller passes
+    // fontH/wrapWidth in its OWN space (node text units from the builder, the
+    // small anchor-converted space from the fs-level callers — the path chat
+    // wraps through); a raw-pixel subtraction annihilates the small spaces
+    // (shredded chat lines into 2-glyph fragments on first flight). Convert
+    // px→caller units by (fontH / FUN_TEXT_FONT_HEIGHT(flag, fontH)) — the
+    // engine's own pixel realization of the fontH param (FUN_005C6940's final
+    // scale uses exactly that call), so the ratio is valid in every caller's
+    // space.
+    FUN_TEXT_WRAP_STEPPER = 0x005C7260,
+
+    // Focused-editbox global — holds the CSimpleEditBox that currently has
+    // keyboard focus (the one showing a cursor), or 0 when no input field is
+    // active. Written by EditBox SetFocus (`mov [0xcf4dc8],esi` @0x0077e3f8),
+    // cleared by ClearFocus (FUN_0077e410). We read it (plus the buffer offsets
+    // below) to identify the focused editbox's OWN text and suppress inline-icon
+    // rendering for JUST that text, so the input field shows raw, editable
+    // `|T…|t` markup while everything else (chat history icons/emotes) keeps
+    // rendering. See the editbox vtable at 0x0081c8c0 / FUN_0077e410.
+    VAR_FOCUSED_EDITBOX = 0x00CF4DC8,
+    // CSimpleEditBox text-buffer layout — the editbox lays out and measures its
+    // text IN PLACE from these buffers (no internal copy), so its layout node's
+    // text pointer ([node+0x48]) and every wrapped-line text pointer point INTO
+    // this buffer. Verified from the caret positioner FUN_0077da80: it selects
+    // the buffer via `(*(byte*)(fe+0x318) & 8) ? *(char**)(fe+0x334) :
+    // *(char**)(fe+0x32C)` and measures substrings of it directly with
+    // FUN_00772ae0(fs, feBuf+off, n). Used by Text::InlineTexture to correlate a
+    // node/token to the focused editbox by pointer range.
+    OFF_EDITBOX_BUFFER_SELECT = 0x318, // byte; bit 3 (0x08) picks the masked buffer
+    OFF_EDITBOX_BUFFER = 0x32C,        // char* — normal text buffer
+    OFF_EDITBOX_BUFFER_MASKED = 0x334, // char* — masked/password variant buffer
+    // The editbox's DISPLAY FontString ([fe+0x328], param_1[0xca] in FUN_0077da80).
+    // Its rendered text is a COPY of the input buffer, stored at
+    // *(fs + OFF_FONTSTRING_TEXT) — the editbox lays out (renders) from this copy,
+    // NOT from the input buffer above (which only the caret/measure path reads in
+    // place). So identifying the focused editbox's own render nodes needs BOTH
+    // buffers. Verified: FUN_00771d80 (FontString SetText) writes the copy to
+    // *(this+0xF0) via SStrDup.
+    OFF_EDITBOX_TEXT_FONTSTRING = 0x328, // CSimpleFontString* — the display text object
+
+    // CSimpleEditBox cursor / selection internals (backs EditBox::Methods'
+    // SetCursorPosition / GetCursorPosition). Verified from the engine's own
+    // HighlightText (FUN_00798870 → FUN_0077cca0) and Insert (FUN_00798400 →
+    // FUN_0077bee0) paths:
+    //   +0x31c dirty-flag dword — bit 2 = selection/highlight changed, bit 4 =
+    //          cursor changed (both trigger the next-paint relayout).
+    //   +0x338 text length in BYTES (the clamp bound below).
+    //   +0x35c / +0x360 selection start / end (byte offsets).
+    //   +0x36c cursor insertion point, a BYTE offset — matches modern WoW's
+    //          byte-based EditBox cursor (GetCursorPosition returns bytes; for
+    //          ASCII text byte == character).
+    OFF_EDITBOX_FLAGS = 0x31c,
+    OFF_EDITBOX_TEXT_LENGTH = 0x338,   // current text length in bytes
+    OFF_EDITBOX_CURSOR_BYTE = 0x36c,
+    // `void __thiscall(editbox, byteOffset)` — sets the cursor to a byte
+    // offset, clamping to [0, textByteLen] and OR-ing the +0x31c cursor-dirty
+    // bit. The engine's own "restore cursor" primitive (called from the insert
+    // path FUN_0077bee0 to put the caret back after splicing text).
+    FUN_EDITBOX_SET_CURSOR_BYTE = 0x0077e360,
+    // `void __thiscall(editbox)` — collapses the selection onto the cursor
+    // (selStart = selEnd = +0x36c). The engine's own "clear selection to the
+    // caret" helper (FUN_0077ccf0), used before extending a shift-selection.
+    FUN_EDITBOX_COLLAPSE_SELECTION = 0x0077ccf0,
+    // `int __thiscall(editbox, startByteIndex, byteCount)` — counts CHARACTERS
+    // (UTF-8 codepoints) in a byte range, walking the per-byte char-class table
+    // at +0x330 (a byte begins a codepoint when its class is 2/3/6). So
+    // `COUNT_CHARS(eb, 0, cursorByteOffset)` is the cursor's character index —
+    // backs GetUTF8CursorPosition. Verified from the arrow-key mover
+    // FUN_0077cb20's own `FUN_0077bc80(this, byteOff, cursorByte - byteOff)`.
+    FUN_EDITBOX_COUNT_CHARS = 0x0077bc80,
+    // Selection-highlight regions — three consecutive CSimpleTexture pointers
+    // (start-line +0x350, middle-block +0x354, end-line +0x358) the editbox
+    // shows/positions to paint the selection (FUN_0077d950). Their vertex
+    // color IS the highlight color — Set/GetHighlightColor read/write it via
+    // the generic region color accessors. The blinking caret is a SEPARATE
+    // region at +0x3d4, deliberately left alone.
+    OFF_EDITBOX_HIGHLIGHT_REGION = 0x350,
+    // Input-history ring buffer: max lines (ring capacity) at +0x388 (what
+    // GetHistoryLines reads), write position at +0x38c, container
+    // {size@+0x390, alloc@+0x394, data@+0x398} of {char* text, int exec}
+    // entries. AddHistoryLine writes at +0x38c and advances modulo +0x388.
+    OFF_EDITBOX_HISTORY_MAX = 0x388,
+    // `void __thiscall(editbox, int maxLines)` — the SetHistoryLines internal
+    // (FUN_0077cd90). Reallocates the history ring to maxLines; maxLines == 0
+    // frees the whole buffer and zeroes the container. ClearHistory calls it
+    // with 0 then the saved max — empties every entry and resets the write
+    // position while keeping the limit (so recording still works after).
+    FUN_EDITBOX_SET_HISTORY_MAX = 0x0077cd90,
+
+    // --- FontString measure internals (GetStringWidth icon fix + GetStringHeight) ---
+    // CSimpleFontString::GetStringWidthInternal — `float(__fastcall)(fs /*ecx*/)`,
+    // returns in x87 ST0. Lazily computes into the fs+0xFC cache (ANCHOR units,
+    // sentinel 0.0f = DAT_007ffd74): display-text getter FUN_00771EC0, then measure
+    // core FUN_0044D670(fontHandle fs+0xE0, text, len, fontH*[fs+0x7C], &out,
+    // fs+0x108, 0, flags fs+0x120), then `fs+0xFC = out / [fs+0x7C]`. Exactly 4
+    // callers: Script_GetStringWidth (0x0079E510), GameTooltip auto-size
+    // (0x00530640), the editbox caret positioner (0x0077DE70), and the layout
+    // effective-width vmethod (FUN_00772930 = fs+0x24 vtbl slot +0x1C: explicit
+    // rect width else string width). Prologue PUSH EBX; PUSH ESI; MOV ESI,ECX;
+    // FLD [ESI+0xFC] — MinHook-safe. Co-hooked by Text::InlineTexture to add
+    // inline |T icon advances; the hook must NEVER write the fs+0xFC cache (the
+    // original may serve the cached value — the icon sum is re-added per call).
+    FUN_FONTSTRING_STRING_WIDTH = 0x00772890,
+    // CSimpleFontString::GetStringHeightInternal — `float(__fastcall)(fs)`, ST0.
+    // Wrap-aware: FUN_0044D750 → FUN_005C2070 → wrap engine FUN_005C7260 (the
+    // same wrap math the render uses); returns lines*fontH + (lines-1)*spacing
+    // (spacing = fs+0xF4), cached at fs+0x100 (anchor units, 0.0 sentinel; empty
+    // text → 0). Wrap width = the effective-width vmethod (fs+0x24 vtbl +0x1C).
+    // Used internally by the tooltip auto-size (0x00530640), multi-line editbox
+    // height (0x0077D4D0), and ScrollingMessageFrame line stacking (0x00788750)
+    // — FontString::Metrics only CALLS it (the GetStringHeight backport), no hook.
+    FUN_FONTSTRING_STRING_HEIGHT = 0x007729B0,
+    // Per-fontstring font-height getter, ANCHOR units (reads fs+0xE4; with
+    // mode=1 and measure-flag 0x200 set, re-derives from the gxu font's native
+    // height). ECX = fs, mode on the STACK (`PUSH 0x1; MOV ECX,ESI; CALL` at
+    // 0x007728F4) → declare `__fastcall(fs, edx_unused, int mode)`. The ENGINE's
+    // width path multiplies its return by [fs+0x7C] (the layout UI SCALE) before
+    // handing it to the measure core. Our width hook instead converts it to UI
+    // PIXELS (× the anchor→px push factor VAR_UI_COORD_SCALE_DIV × 1024 /
+    // VAR_UI_COORD_SCALE_MUL, ≈1468) to resolve `:0` auto-sized icon dims —
+    // escape sizes are PIXELS, not fs+0x7C-scaled pen units; dividing a pixel
+    // advance by fs+0x7C (~0.68) inflated a 16px icon to +44k measured px on
+    // first flight. Distinct from FUN_TEXT_FONT_HEIGHT (0x005C6FA0), the
+    // node-level gxu helper.
+    FUN_FONTSTRING_FONT_HEIGHT = 0x007727B0,
+    // FontString measure-flags word (the `flags` arg the measure paths pass to
+    // FUN_0044D670/FUN_0044D750, and the justify field: bits 0-2). The measure
+    // core translates fs-level bits to gxu/tokenizer flags; bit 0x1000 → gxu
+    // bit 0x40 (OFF_TEXT_NODE_FLAGS bit 6 — the bit the tokenizer co-hook stands
+    // down on and the width hook tests).
+    //
+    // NOTE — bit 0x1000 is NON-SPACE-WRAP, not a dedicated "editable" flag: it is
+    // exactly what FontString:SetNonSpaceWrap toggles (verified in its setter
+    // FUN_0079E9F0: `fs+0x120 ^= 0x1000`). Text::InlineTexture uses gxu 0x40 as an
+    // EDITBOX PROXY — it works because the macro editor (the multi-line editbox
+    // the focused-buffer pointer test misses) enables non-space-wrap while chat/
+    // display text does not (observed node flags: macro editor 0x4D, chat 0x20D/
+    // 0x205). The correlation is not a guarantee: a DISPLAY fontstring with
+    // SetNonSpaceWrap(true) + inline |T icons would have its icons wrongly
+    // suppressed. Rare and never observed; the focused-buffer pointer test remains
+    // the primary editbox guard.
+    OFF_FONTSTRING_MEASURE_FLAGS = 0x120,
+
+    // CSimpleFontString::GetDisplayText — the engine's truncation MECHANISM (the
+    // reason FontString:IsTruncated has anything to detect). `char* __thiscall(fs
+    // /*ecx*/, float availW, float availH)` (dummy-EDX __fastcall form; RET 0x8).
+    // Reads the raw text at fs+0xF0 and, when the box is BOUNDED (availW>0 AND
+    // (maxLines fs+0x128 != 0 OR availH>0)), measures how much fits via the
+    // chars-that-fit counter FUN_0044D960; on overflow it writes "<prefix>...\0"
+    // into the shared scratch buffer VAR_TEXT_ELLIPSIS_BUFFER and returns THAT,
+    // else the fs+0xF0 pointer (or NULL). The rebuild FUN_007724A0 calls it with
+    // availW=(rect.right−rect.left)/[fs+0x7C], availH=(rect.bottom−rect.top)/
+    // [fs+0x7C] and lays out whatever it returns — the node then COPIES that
+    // string into OFF_TEXT_NODE_TEXT. IsTruncated does NOT call this (the rect at
+    // fs+0x64 is zero between frames, so a Lua-time re-call always sees an
+    // unbounded box); it reads the node copy instead. Kept for the availW/availH
+    // derivation + the bounded-box gate. Verified in the Octo binary: prologue
+    // 55 8B EC 83 EC 0C 53 56 8B F1, ellipsis literal "..." at 0x00800188.
+    FUN_FONTSTRING_DISPLAY_TEXT = 0x00771EC0,
+    // Shared 0x1000-byte BSS scratch buffer the display-text resolver above writes
+    // the truncated, "..."-suffixed string into (memset FUN_0064A5A0 at 0x00772054,
+    // suffix append at 0x00772086) and returns on truncation. Transient — every
+    // layout rebuild overwrites it, and the node keeps its OWN copy (see
+    // OFF_TEXT_NODE_TEXT), so it is not read directly by any live path.
+    VAR_TEXT_ELLIPSIS_BUFFER = 0x00CF0CC0,
+
+    // Per-fontstring MAX LINE COUNT. 0 = no cap. When non-zero, the display-text
+    // resolver forces availH = maxLines × lineHeight (verified in FUN_00771EC0:
+    // `if (fs+0x128 != 0) param2 = fs+0x128 * lineHeight`), so text past that
+    // many wrapped lines is ellipsized. Backs FontString:SetMaxLines/GetMaxLines
+    // — the truncation control 1.12 never exposed for fontstrings (SetMaxLines is
+    // ScrollingMessageFrame-only). Vanilla fontstrings always word-wrap, so this
+    // is the way to force a single-line, ellipsized label: SetMaxLines(1).
+    OFF_FONTSTRING_MAX_LINES = 0x128,
+    // Lazily-computed measure caches (anchor units, 0.0f = dirty sentinel):
+    // fs+0xFC = string width (GetStringWidth), fs+0x100 = string height
+    // (GetStringHeight). SetText (FUN_00771D80) zeroes BOTH when the content
+    // changes; SetMaxLines mirrors that so the getters recompute after the cap.
+    OFF_FONTSTRING_WIDTH_CACHE = 0xFC,
+    OFF_FONTSTRING_HEIGHT_CACHE = 0x100,
+    // Ref-counted handle DecRef (resolve via FUN_0041af30 → --refcount → dtor at
+    // 0). `__fastcall(void *handle)`. SetText releases the text-block handle
+    // (fs+0xF8) through it before nulling the field; SetMaxLines does the same to
+    // force a fresh node rebuild with the new line cap.
+    FUN_HANDLE_RELEASE = 0x0041AED0,
+    // VisibleRegion layout invalidate — marks the region (the fs+0x24 layout
+    // subobject) dirty and propagates to parent/children so it re-lays-out.
+    // SetText's tail calls it `FUN_007680e0(fs+0x24, 0)`. `__thiscall(region,
+    // int)` (dummy-EDX form; the int arg is on the stack).
+    FUN_FONTSTRING_LAYOUT_INVALIDATE = 0x007680E0,
 };

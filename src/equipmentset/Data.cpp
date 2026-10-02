@@ -75,7 +75,7 @@ uint32_t NextAvailableID() {
 }
 
 void FireChanged() {
-    const int slot = Event::Custom::Lookup(kEventName);
+    const int slot = kEvtSetsChanged.Slot();
     if (slot >= 0)
         Event::Custom::Fire(slot, "");
 }
@@ -143,6 +143,25 @@ int IndexOf(uint32_t setID) {
     return -1;
 }
 
+std::vector<const Set *> SetsContainingItem(uint64_t itemGuid) {
+    EnsureLoaded();
+    std::vector<const Set *> found;
+    // The sentinels are slot markers, not items — a set with an empty or
+    // ignored slot must not match a caller that hands us one of them.
+    if (itemGuid == GUID_EMPTY || itemGuid == GUID_IGNORED)
+        return found;
+
+    for (const Set &s : g_sets) {
+        for (int i = 0; i < SLOT_COUNT; ++i) {
+            if (s.items[i] == itemGuid) {
+                found.push_back(&s);
+                break; // one hit per set, however many slots match
+            }
+        }
+    }
+    return found;
+}
+
 uint32_t Create(const char *name, const char *icon) {
     EnsureLoaded();
     if (g_path.empty() || name == nullptr || name[0] == '\0')
@@ -208,6 +227,35 @@ bool Delete(uint32_t setID) {
     Persist();
     FireChanged();
     return true;
+}
+
+void SetActionSlot(int slot0, uint32_t setID) {
+    EnsureLoaded();
+    if (g_path.empty())
+        return;
+    bool changed = false;
+    for (Set &s : g_sets) {
+        auto &slots = s.actionSlots;
+        for (auto it = slots.begin(); it != slots.end();) {
+            if (*it == slot0 && s.setID != setID) {
+                it = slots.erase(it);
+                changed = true;
+            } else {
+                ++it;
+            }
+        }
+        if (s.setID == setID) {
+            bool present = false;
+            for (const int v : slots)
+                present = present || v == slot0;
+            if (!present) {
+                slots.push_back(slot0);
+                changed = true;
+            }
+        }
+    }
+    if (changed)
+        Persist();
 }
 
 void IgnoreSlot(int slot1Based) {

@@ -2,6 +2,21 @@ cmake_minimum_required(VERSION 3.10)
 
 project(ClassicAPI LANGUAGES CXX RC)
 
+# WoW.exe is x86, so the injected DLL must be x86 too — there is no valid
+# 64-bit configure of this project. Fail here rather than let one through:
+# a 64-bit build's first visible symptom is a static_assert deep in a
+# struct-layout check, which reads as an unrelated code fault. An IDE that
+# configures on its own (VS Code's CMake Tools picks an architecture from a
+# scanned kit) can flip an existing build directory this way, which is what
+# CMakePresets.json's `win32` preset exists to prevent.
+if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
+    message(FATAL_ERROR
+        "ClassicAPI builds 32-bit only. This configure uses "
+        "${CMAKE_SIZEOF_VOID_P}-byte pointers. Delete the build directory, "
+        "because CMake cannot switch platform in place. Then configure with "
+        "`cmake --preset win32` or `cmake -B build -A Win32`.")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
@@ -142,7 +157,29 @@ target_include_directories(
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "ClassicAPI")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MT")
-set(CMAKE_CXX_FLAGS_RELEASE "/MT /O2 /Ob2 /DNDEBUG")
+# /Zi retains full debug info (source file + line numbers, locals, types) in a
+# separate PDB WITHOUT disabling optimization — the DLL stays a fully optimized
+# /O2 release build; the symbols just live in ClassicAPI.pdb on the side. Feeds
+# the linker's /DEBUG below.
+set(CMAKE_CXX_FLAGS_RELEASE "/MT /O2 /Ob2 /DNDEBUG /Zi")
 set(CMAKE_SHARED_LINKER_FLAGS
-    "/OPT:REF /OPT:ICF /MERGE:.rdata=.text /MERGE:.pdata=.text /SECTION:.text,EWR /NODEFAULTLIB:MSVCRT"
+    # Two debug artifacts for triaging crashes from a SHIPPED DLL. Both are
+    # published as release artifacts, match this exact build, and have no effect
+    # on code layout:
+    #   /MAP   -> build/Release/ClassicAPI.map: a text symbol->address table
+    #             that resolves the `0001:offset` addresses in WoW's ERROR #132
+    #             crash log back to functions by hand (no debugger/dump needed).
+    #   /DEBUG -> build/Release/ClassicAPI.pdb: full symbols (paired with the
+    #             compiler's /Zi) so WinDbg/x64dbg/VS produce a line-level
+    #             symbolicated call stack from a crash dump. A SEPARATE file —
+    #             it is NOT embedded in the DLL, only a small signature record
+    #             linking the two is.
+    # /DEBUG implicitly disables /OPT:REF and /OPT:ICF (dead-code strip +
+    # identical-COMDAT fold); they are listed explicitly below so they stay ON
+    # and the shipped DLL does not grow. (/OPT:ICF folds identical functions, so
+    # a few map symbols share an address — harmless.)
+    # /DEF exports `Load` (VanillaFixes' post-injection entry point) undecorated
+    # so its GetProcAddress(module, "Load") resolves. See src/ClassicAPI.def and
+    # the loader-lock rationale in src/DllMain.cpp.
+    "/OPT:REF /OPT:ICF /MERGE:.rdata=.text /MERGE:.pdata=.text /SECTION:.text,EWR /NODEFAULTLIB:MSVCRT /MAP /DEBUG /DEF:${CMAKE_CURRENT_SOURCE_DIR}/src/ClassicAPI.def"
 )

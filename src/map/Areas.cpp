@@ -32,6 +32,7 @@
 #include "Game.h"
 #include "Offsets.h"
 #include "dbc/Lookup.h"
+#include "dbc/Names.h"
 
 #include <cstdint>
 
@@ -48,10 +49,8 @@ int __fastcall Script_GetAreaInfo(void *L) {
     }
     const int areaID = static_cast<int>(Game::Lua::ToNumber(L, 1));
     const char *name =
-        (areaID > 0) ? DBC::LocalizedField(Offsets::VAR_AREATABLE_RECORDS,
-                                           Offsets::VAR_AREATABLE_COUNT,
-                                           static_cast<uint32_t>(areaID),
-                                           Offsets::OFF_AREATABLE_NAMES)
+        (areaID > 0) ? DBC::AreaName(static_cast<uint32_t>(areaID),
+                                     /*resolveToParent=*/false)
                      : nullptr;
     if (name == nullptr) {
         Game::Lua::PushNil(L);
@@ -68,13 +67,10 @@ int __fastcall Script_GetAreas(void *L) {
     Game::Lua::SetTop(L, 0);
     Game::Lua::NewTable(L);
 
-    const int count =
-        *reinterpret_cast<const int *>(Offsets::VAR_AREATABLE_COUNT);
+    const int count = Game::Read<int>(Offsets::VAR_AREATABLE_COUNT);
     for (int id = 1; id <= count; ++id) {
-        const char *name = DBC::LocalizedField(Offsets::VAR_AREATABLE_RECORDS,
-                                               Offsets::VAR_AREATABLE_COUNT,
-                                               static_cast<uint32_t>(id),
-                                               Offsets::OFF_AREATABLE_NAMES);
+        const char *name =
+            DBC::AreaName(static_cast<uint32_t>(id), /*resolveToParent=*/false);
         if (name == nullptr)
             continue;
         Game::Lua::PushNumber(L, static_cast<double>(id));
@@ -101,18 +97,17 @@ int __fastcall Script_GetMapAreaIDs(void *L) {
     Game::Lua::SetTop(L, 0);
     Game::Lua::NewTable(L);
 
-    const int count =
-        *reinterpret_cast<const int *>(Offsets::VAR_WORLDMAP_AREA_COUNT);
+    const int count = Game::Read<int>(Offsets::VAR_WORLDMAP_AREA_COUNT);
     for (int id = 1; id <= count; ++id) {
         const uint8_t *rec = DBC::Record(Offsets::VAR_WORLDMAP_AREA_RECORDS,
                                          Offsets::VAR_WORLDMAP_AREA_COUNT,
                                          static_cast<uint32_t>(id));
         if (rec == nullptr)
             continue;
-        const int areaID = *reinterpret_cast<const int *>(rec + Offsets::OFF_WMA_AREA_ID);
+        const int areaID = Game::Read<int>(rec, Offsets::OFF_WMA_AREA_ID);
         if (areaID == 0)
             continue; // continent-spanning row, no zone id
-        const char *dir = *reinterpret_cast<const char *const *>(rec + Offsets::OFF_WMA_NAME);
+        const char *dir = Game::Read<const char *>(rec, Offsets::OFF_WMA_NAME);
         if (dir == nullptr || dir[0] == '\0')
             continue;
         Game::Lua::SetFieldNumber(L, dir, static_cast<double>(areaID));

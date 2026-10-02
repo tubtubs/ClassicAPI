@@ -18,7 +18,9 @@
 #include "item/Link.h"
 #include "item/Location.h"
 #include "item/QualityColor.h"
+#include "item/Record.h"
 #include "item/TooltipItem.h"
+#include "object/Resolve.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -138,21 +140,6 @@ static int __fastcall Script_GameTooltipSetInventoryItemByID(void *L) {
 }
 
 
-using GetItemRecord_t = const uint8_t *(__thiscall *)(void *cache, uint32_t itemID,
-                                                      const uint64_t *guid, void *callback,
-                                                      void *userData, int unused);
-
-static const uint8_t *PeekItemRecord(uint32_t itemID) {
-    auto fn = reinterpret_cast<GetItemRecord_t>(Offsets::FUN_DBCACHE_ITEMSTATS_GET_RECORD);
-    auto *cache = reinterpret_cast<void *>(Offsets::VAR_ITEMDB_CACHE);
-    const uint64_t zeroGuid = 0;
-    return fn(cache, itemID, &zeroGuid, nullptr, nullptr, 0);
-}
-
-using ResolveObjectByGuid_t = void *(__fastcall *)(int type, const char *debugName,
-                                                    uint32_t guidLo, uint32_t guidHi,
-                                                    int priority);
-
 // Resolves a stored item GUID into a CGItem via the engine's own
 // resolver. Same path Item::Count uses for direct bank reads — no
 // gating, no inventory walk, works for any object the engine has
@@ -161,8 +148,9 @@ using ResolveObjectByGuid_t = void *(__fastcall *)(int type, const char *debugNa
 static void *ResolveItemByGuid(uint32_t guidLo, uint32_t guidHi) {
     if (guidLo == 0 && guidHi == 0)
         return nullptr;
-    auto fn = reinterpret_cast<ResolveObjectByGuid_t>(Offsets::FUN_OBJECT_RESOLVE_BY_GUID);
-    return fn(Offsets::OBJ_TYPE_ITEM, "GameTooltip:GetItem", guidLo, guidHi, 0x172);
+    return Object::ByGuid(Offsets::TYPEMASK_ITEM,
+                          (static_cast<uint64_t>(guidHi) << 32) | guidLo,
+                          "GameTooltip:GetItem", 0x172);
 }
 
 // `GameTooltip:GetItem()` → (name, link, itemID) for whichever item
@@ -200,7 +188,7 @@ static int __fastcall Script_GameTooltipGetItem(void *L) {
         Game::Lua::Error(L, "Usage: GameTooltip:GetItem()");
         return 0;
     }
-    void *tooltipObj = Game::Lua::ResolveObject(L, 1);
+    void *tooltipObj = Game::Lua::ResolveTooltip(L);
     if (tooltipObj == nullptr)
         return 0;
     auto *base = static_cast<const uint8_t *>(tooltipObj);
@@ -248,21 +236,21 @@ static int __fastcall Script_GameTooltipGetItem(void *L) {
     // OFF_TOOLTIP_COMPARE_SUFFIX — include it (in the link's suffix field)
     // when the compare-descriptor flag is set, so the link round-trips the
     // suffix for stat comparison. Matches 3.3.5's auction GetItem.
-    const uint8_t *record = PeekItemRecord(static_cast<uint32_t>(itemID));
+    const uint8_t *record = Item::PeekRecord(static_cast<uint32_t>(itemID));
     if (record == nullptr) {
         Item::Data::WarmCache(static_cast<uint32_t>(itemID));
         return 0;
     }
-    const char *name = *reinterpret_cast<const char *const *>(
-        record + Offsets::OFF_ITEMSTATS_NAME);
+    const char *name = Game::Read<const char *>(
+        record, Offsets::OFF_ITEMSTATS_NAME);
     if (name == nullptr || *name == '\0')
         return 0;
-    const uint32_t quality = *reinterpret_cast<const uint32_t *>(
-        record + Offsets::OFF_ITEMSTATS_QUALITY);
+    const uint32_t quality = Game::Read<uint32_t>(
+        record, Offsets::OFF_ITEMSTATS_QUALITY);
 
     int suffix = 0;
-    if (*reinterpret_cast<const int *>(base + Offsets::OFF_TOOLTIP_COMPARE_FLAG) != 0)
-        suffix = *reinterpret_cast<const int *>(base + Offsets::OFF_TOOLTIP_COMPARE_SUFFIX);
+    if (Game::Read<int>(base, Offsets::OFF_TOOLTIP_COMPARE_FLAG) != 0)
+        suffix = Game::Read<int>(base, Offsets::OFF_TOOLTIP_COMPARE_SUFFIX);
 
     char link[256];
     std::snprintf(link, sizeof(link),
@@ -286,7 +274,7 @@ static int __fastcall Script_GameTooltipHasItem(void *L) {
         Game::Lua::Error(L, "Usage: GameTooltip:HasItem()");
         return 0;
     }
-    void *tooltipObj = Game::Lua::ResolveObject(L, 1);
+    void *tooltipObj = Game::Lua::ResolveTooltip(L);
     if (tooltipObj == nullptr) {
         Game::Lua::PushBool(L, 0);
         return 1;

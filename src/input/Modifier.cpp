@@ -11,6 +11,8 @@
 // You should have received a copy of the GNU General Public License along with
 // ClassicAPI. If not, see <https://www.gnu.org/licenses/>.
 
+#include "input/Modifier.h"
+
 #include "Game.h"
 #include "event/Custom.h"
 
@@ -102,11 +104,9 @@ void SetBit(int bitIdx, bool down) {
     if (down) g_modifierMask |= bit;
     else      g_modifierMask &= ~bit;
 
-    // Slot was assigned when the engine populated its event table; our
-    // hook on `RebuildEventTable` recorded the index. Lookup at fire
-    // time rather than caching because `/reload` re-runs the rebuild
-    // and the index may shift.
-    const int slot = Event::Custom::Lookup(kModifierStateChanged);
+    // Read the slot at fire time (never cache it) — `/reload` rebuilds the
+    // event table and the reservation re-claims, which may shift the index.
+    const int slot = _reserveModifierStateChanged.Slot();
     if (slot >= 0)
         Event::Custom::Fire(slot, "%s%d", kKeyName[bitIdx], static_cast<int>(down));
 }
@@ -242,5 +242,9 @@ void RegisterLuaFunctions() {
 const Game::ModuleAutoRegister _autoreg{&RegisterLuaFunctions};
 
 } // namespace
+
+uint32_t CurrentMask() {
+    return g_modifierMask;
+}
 
 } // namespace Input::Modifier

@@ -15,6 +15,7 @@
 
 #include "Game.h"
 #include "Offsets.h"
+#include "object/Resolve.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -25,25 +26,23 @@ namespace Unit::Flags {
 bool IsPlayerControlled(const uint8_t *unit) {
     if (unit == nullptr)
         return false;
-    auto *fields = *reinterpret_cast<const uint8_t *const *>(
-        unit + Offsets::OFF_UNIT_DESCRIPTOR);
+    auto *fields =
+        Game::Read<const uint8_t *>(unit, Offsets::OFF_UNIT_DESCRIPTOR);
     if (fields == nullptr)
         return false;
-    const uint32_t unitFlags = *reinterpret_cast<const uint32_t *>(
-        fields + Offsets::OFF_UNIT_FIELD_FLAGS);
+    const uint32_t unitFlags =
+        Game::Read<uint32_t>(fields, Offsets::OFF_UNIT_FIELD_FLAGS);
     return (unitFlags & Offsets::UNIT_FLAG_PLAYER_CONTROLLED) != 0;
 }
 
 bool IsPlayerObject(const uint8_t *unit) {
     if (unit == nullptr)
         return false;
-    return *reinterpret_cast<const int *>(unit + Offsets::OFF_CGOBJECT_TYPE_ID) ==
+    return Game::Read<int>(unit, Offsets::OFF_CGOBJECT_TYPE_ID) ==
            Offsets::OBJECT_TYPE_PLAYER;
 }
 
 namespace {
-
-using ResolveUnitToken_t = void *(__fastcall *)(const char *token);
 
 // Reads a PLAYER_FLAGS bit for a player. Path:
 //   - Resolve unit; gate on the object actually being a player
@@ -71,20 +70,19 @@ bool TestPlayerFlag(void *L, uint32_t flagMask) {
     if (token == nullptr)
         return false;
 
-    auto resolve = reinterpret_cast<ResolveUnitToken_t>(Offsets::FUN_RESOLVE_UNIT_TOKEN);
-    auto *unit = static_cast<const uint8_t *>(resolve(token));
+    auto *unit = static_cast<const uint8_t *>(Game::ResolveUnitToken(token));
     // PLAYER_FLAGS lives in the CGPlayer sub-struct — gate on the object
     // actually being a player, not merely player-controlled (pets/totems
     // set that flag but have no sub-struct → garbage +0xE68 deref).
     if (!IsPlayerObject(unit))
         return false;
 
-    auto *playerInfo = *reinterpret_cast<const uint8_t *const *>(
-        unit + Offsets::OFF_CGPLAYER_INFO);
+    auto *playerInfo =
+        Game::Read<const uint8_t *>(unit, Offsets::OFF_CGPLAYER_INFO);
     if (playerInfo == nullptr)
         return false;
-    const uint32_t flags = *reinterpret_cast<const uint32_t *>(
-        playerInfo + Offsets::OFF_PLAYER_INFO_FLAGS);
+    const uint32_t flags =
+        Game::Read<uint32_t>(playerInfo, Offsets::OFF_PLAYER_INFO_FLAGS);
     return (flags & flagMask) != 0;
 }
 
@@ -122,20 +120,19 @@ int __fastcall Script_UnitIsFeignDeath(void *L) {
         return 1;
     }
 
-    auto resolve = reinterpret_cast<ResolveUnitToken_t>(Offsets::FUN_RESOLVE_UNIT_TOKEN);
-    auto *unit = static_cast<const uint8_t *>(resolve(token));
+    auto *unit = static_cast<const uint8_t *>(Game::ResolveUnitToken(token));
     if (unit == nullptr) {
         Game::Lua::PushBoolean(L, 0);
         return 1;
     }
-    auto *fields = *reinterpret_cast<const uint8_t *const *>(
-        unit + Offsets::OFF_UNIT_DESCRIPTOR);
+    auto *fields =
+        Game::Read<const uint8_t *>(unit, Offsets::OFF_UNIT_DESCRIPTOR);
     if (fields == nullptr) {
         Game::Lua::PushBoolean(L, 0);
         return 1;
     }
-    const uint32_t unitFlags = *reinterpret_cast<const uint32_t *>(
-        fields + Offsets::OFF_UNIT_FIELD_FLAGS);
+    const uint32_t unitFlags =
+        Game::Read<uint32_t>(fields, Offsets::OFF_UNIT_FIELD_FLAGS);
     Game::Lua::PushBoolean(L,
         (unitFlags & Offsets::UNIT_FLAG_FEIGN_DEATH) != 0);
     return 1;
@@ -153,24 +150,16 @@ uint32_t ReadGuildKey(const uint8_t *unit) {
     // and crash (issue: UnitIsInMyGuild on a nameplate pet/totem).
     if (!IsPlayerObject(unit))
         return 0;
-    auto *info = *reinterpret_cast<const uint8_t *const *>(
-        unit + Offsets::OFF_CGPLAYER_INFO);
+    auto *info = Game::Read<const uint8_t *>(unit, Offsets::OFF_CGPLAYER_INFO);
     if (info == nullptr)
         return 0;
-    return *reinterpret_cast<const uint32_t *>(
-        info + Offsets::OFF_PLAYER_INFO_GUILD_KEY);
+    return Game::Read<uint32_t>(info, Offsets::OFF_PLAYER_INFO_GUILD_KEY);
 }
 
 using TokenToGUID_t = uint64_t(__fastcall *)(const char *token);
 using PlayerInfoLookup_t = const uint8_t *(__thiscall *)(
     void *cache, uint32_t guidLo, uint32_t guidHi, uint64_t *cookie,
     void *callback, void *userData, int retryFlag);
-
-using ResolveObjectByGuid_t = void *(__fastcall *)(int typeMask,
-                                                   const char *debugName,
-                                                   uint32_t guidLo,
-                                                   uint32_t guidHi,
-                                                   int priority);
 
 // Resolve a GUID to its live CGUnit / CGPlayer object, or nullptr if
 // the object isn't currently loaded. Unlike a unit-*token* resolve
@@ -185,11 +174,8 @@ const uint8_t *ResolveUnitOrPlayerByGuid(uint64_t guid) {
         return nullptr;
     constexpr int kUnitOrPlayerMask =
         (1 << Offsets::OBJECT_TYPE_UNIT) | (1 << Offsets::OBJECT_TYPE_PLAYER);
-    auto fn = reinterpret_cast<ResolveObjectByGuid_t>(
-        Offsets::FUN_OBJECT_RESOLVE_BY_GUID);
     return static_cast<const uint8_t *>(
-        fn(kUnitOrPlayerMask, "UnitIsInMyGuild",
-           static_cast<uint32_t>(guid), static_cast<uint32_t>(guid >> 32), 0));
+        Object::ByGuid(kUnitOrPlayerMask, guid, "UnitIsInMyGuild", 0));
 }
 
 // Resolves a player GUID to its character name via
@@ -220,8 +206,7 @@ const char *NameFromGuid(uint64_t guid, char (&nameBuf)[64]) {
         return nullptr;
 
     std::snprintf(nameBuf, sizeof(nameBuf), "%s",
-                  reinterpret_cast<const char *>(
-                      entry + Offsets::OFF_PLAYER_INFO_NAME));
+                  Game::Ptr<const char>(entry, Offsets::OFF_PLAYER_INFO_NAME));
     return nameBuf;
 }
 
@@ -276,9 +261,8 @@ int __fastcall Script_UnitIsInMyGuild(void *L) {
         return 1;
     }
 
-    auto resolve = reinterpret_cast<ResolveUnitToken_t>(Offsets::FUN_RESOLVE_UNIT_TOKEN);
     const uint32_t playerKey = ReadGuildKey(
-        static_cast<const uint8_t *>(resolve("player")));
+        static_cast<const uint8_t *>(Game::ResolveUnitToken("player")));
     if (playerKey == 0) {
         // Player isn't in a guild — nobody is.
         Game::Lua::PushNil(L);
@@ -331,10 +315,8 @@ int __fastcall Script_UnitIsInMyGuild(void *L) {
         nameToFind = input;
     }
 
-    auto **roster = *reinterpret_cast<uint8_t ***>(
-        Offsets::VAR_GUILD_ROSTER_PTR);
-    const int total = *reinterpret_cast<const int *>(
-        Offsets::VAR_GUILD_ROSTER_TOTAL_COUNT);
+    auto **roster = Game::Read<uint8_t **>(Offsets::VAR_GUILD_ROSTER_PTR);
+    const int total = Game::Read<int>(Offsets::VAR_GUILD_ROSTER_TOTAL_COUNT);
     if (roster == nullptr || total <= 0) {
         Game::Lua::PushNil(L);
         return 1;
@@ -343,8 +325,8 @@ int __fastcall Script_UnitIsInMyGuild(void *L) {
         const uint8_t *entry = roster[i];
         if (entry == nullptr)
             continue;
-        const char *name = reinterpret_cast<const char *>(
-            entry + Offsets::OFF_GUILD_MEMBER_NAME);
+        const char *name =
+            Game::Ptr<const char>(entry, Offsets::OFF_GUILD_MEMBER_NAME);
         if (std::strcmp(name, nameToFind) == 0) {
             Game::Lua::PushNumber(L, 1.0);
             return 1;
@@ -370,20 +352,19 @@ int __fastcall Script_UnitIsPossessed(void *L) {
         return 1;
     }
 
-    auto resolve = reinterpret_cast<ResolveUnitToken_t>(Offsets::FUN_RESOLVE_UNIT_TOKEN);
-    auto *unit = static_cast<const uint8_t *>(resolve(token));
+    auto *unit = static_cast<const uint8_t *>(Game::ResolveUnitToken(token));
     if (unit == nullptr) {
         Game::Lua::PushBoolean(L, 0);
         return 1;
     }
-    auto *fields = *reinterpret_cast<const uint8_t *const *>(
-        unit + Offsets::OFF_UNIT_DESCRIPTOR);
+    auto *fields =
+        Game::Read<const uint8_t *>(unit, Offsets::OFF_UNIT_DESCRIPTOR);
     if (fields == nullptr) {
         Game::Lua::PushBoolean(L, 0);
         return 1;
     }
-    const uint32_t unitFlags = *reinterpret_cast<const uint32_t *>(
-        fields + Offsets::OFF_UNIT_FIELD_FLAGS);
+    const uint32_t unitFlags =
+        Game::Read<uint32_t>(fields, Offsets::OFF_UNIT_FIELD_FLAGS);
     Game::Lua::PushBoolean(L,
         (unitFlags & Offsets::UNIT_FLAG_POSSESSED) != 0);
     return 1;

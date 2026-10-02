@@ -1120,51 +1120,50 @@ spell-API functions use. Returns `(1, nil)` / `(nil, 1)` /
 `(nil, nil)` per legacy convention. `C_Spell.IsSpellUsable` is the
 modern shape — same logic, returns proper booleans.
 
-**Two engine-cache approaches investigated and discarded:**
+**Reworked for issue #51 (2026-09-12) — it now IS the engine's
+verdict.** `IsUsableAction` reads the per-slot cache
+(`0x00BC6B60` usable / `0x00BC67A0` noMana, reader `FUN_004E5230`),
+which the recompute `FUN_004E5050` fills per slot. For a player spell
+slot that recompute is one call: `FUN_SPELL_IS_USABLE(record,
+&noMana)` (`0x006E3D60`). For a pet spell slot it is `FUN_PET_ACTIONS_
+USABLE()` then the pet's power vs `FUN_GET_SPELL_COST(spellID, 0)`.
+`Spell::Usable` now runs exactly those two paths live (plus a
+knowledge gate on `VAR_PLAYER_SPELL_BITMAP`, since the helper is also
+fed item on-use spells and never checks knowledge). Verified check
+list of the helper is on `FUN_SPELL_IS_USABLE` in `Offsets.h`.
+
+**The first version hand-rolled five checks instead** (known, alive,
+off cooldown, power, reagents) and diverged from `IsUsableAction`
+exactly where the helper does more or less — the issue #51 repro
+(Warrior, Whirlwind):
+
+| State | `IsUsableAction` | old `IsUsableSpell` |
+|---|---|---|
+| Berserker, 0 rage, on CD | `nil, 1` | `nil, nil` (we tested cooldown first — the engine never does) |
+| Battle Stance, 25 rage | `nil, nil` | `1, nil` (we never tested stance) |
+
+Cooldown is deliberately NOT part of usability: FrameXML greys
+(`IsUsableAction`) and swipes (`GetActionCooldown`) as two separate
+states, and the engine helper has no cooldown branch. Rule #1 case:
+`Item::Usable` had been calling the helper all along.
+
+**Two engine-cache approaches investigated and discarded before the
+first version** (still true, kept for the record):
 
 1. **Per-spell cache at `0x004F0F40` returning fields at +0x564
    / +0x568** — initially looked promising (the action-bar
    dispatcher at `0x004E5BA0` reads these), but the writers
    (`0x004EFF17` cluster) showed they're parsed config integers,
-   not real-time usability bools. False trail.
+   not real-time usability bools. False trail. (Later identified as
+   the macro entry's cached primary spell — see the `#showtooltip`
+   notes.)
 2. **Action-bar per-slot caches at `0x00BC67A0` (noMana) and
    `0x00BC6B60` (usable)** — these ARE real-time, but only updated
    for the 120 action-bar slots. Spells off the bar stay
    uninitialized. Action-bar-only is the wrong abstraction since
-   modern `IsUsableSpell(spellID)` is action-bar-agnostic.
-
-Settled on a **manual five-check approach**:
-1. Player knows the spell (`VAR_PLAYER_SPELL_BITMAP` lookup —
-   covers profession recipes, talents, racials, etc.).
-2. Player is alive (`HEALTH > 0`).
-3. Spell is not on cooldown (`FUN_SPELL_QUERY_COOLDOWN` —
-   the engine helper `Script_GetSpellCooldown` calls internally
-   after slot resolution, queried with `bookType=0` for player).
-4. Player has ≥ `ManaCost` of the spell's `PowerType` —
-   only this failure flips `noMana=true`.
-5. Player has all required reagents in bags
-   (`Spell.dbc` Reagent[8] / ReagentCount[8] at `+0x110` /
-   `+0x130`, walked via `Item::Location::ResolveBag`).
-
-**Not checked** (deliberate, different concerns): silence, GCD,
-stance/form, range, target type, line-of-sight, casting state.
-
-**Verified on Turtle WoW:**
-- Mana check: Renew rank 3 (cost 105) reports usable at 144 mana
-  and unusable at 39 mana, transitioning exactly at the cost
-  boundary.
-- Reagent check: SHIPPED BUT UNVERIFIED — the Reagent[8] /
-  ReagentCount[8] offsets at `+0x110` / `+0x130` are the
-  CMaNGOS-documented vanilla layout, and we know spell records
-  match CMaNGOS docs (PowerType=+0x7C and ManaCost=+0x80 both
-  match), so high confidence — but no in-game verification yet.
-  Should test with a reagent spell (e.g., Mage Teleport spell 3565
-  needs Rune of Teleportation 17031). Failure mode if offsets are
-  wrong: reagent check becomes a no-op (always passes).
-- Cooldown check: SHIPPED BUT UNVERIFIED in this implementation —
-  the helper signature was traced via `Script_GetSpellCooldown` at
-  `0x004B40A0` but not exercised in-game. Should test with a
-  cooldown'd spell.
+   modern `IsUsableSpell(spellID)` is action-bar-agnostic. The fix
+   above sidesteps this by calling what FILLS the cache, not the
+   cache.
 
 **Important offset correction along the way.** Initial implementation
 read POWER1 at descriptor `+0x5C` based on the CMaNGOS-documented
@@ -1741,7 +1740,14 @@ is a thin wrapper. If they're inlined, we'd either need to skip
 the clear ourselves (call after some no-op state setup) or
 manually call the line-emission primitives.
 
-## ~~61. `GameTooltip:GetItem()` / `GetSpell()` / `GetUnit()`~~ — `GetItem` + `GetSpell` DONE; `GetUnit` skipped
+## ~~61. `GameTooltip:GetItem()` / `GetSpell()` / `GetUnit()`~~ — DONE
+
+`GetUnit` shipped later in [src/unit/Tooltip.cpp](src/unit/Tooltip.cpp):
+`SetUnit` is re-registered in front of the engine's (no MinHook) to
+stage the token, and the token binds in the unit-builder co-hook that
+`Tooltip::SetEvents` already owned. The builder has three callers:
+SetUnit, the world-mouseover setter (→ `"mouseover"`), and an in-place
+refresh (keeps the token). The notes below are the original skip.
 
 Modern query methods that return what the tooltip is currently
 showing:
@@ -1847,10 +1853,17 @@ are supported.
 
 ### Unhookable globals
 
-Modern WoW rejects `hooksecurefunc("<core lua/secure fn>", ...)` outright
-to keep callers from clobbering language primitives or breaking taint
-propagation. We mirror that with a name blacklist in `Script_HookSecureFunc`
-that fires `lua_error` with `"hooksecurefunc: function is unhookable"`
+Patch 11.0.0 (The War Within, 2024-07-23) made `hooksecurefunc` refuse a
+fixed set of names with a "Cannot hook function" error, to keep callers
+from clobbering language primitives or breaking taint propagation. No
+earlier client has the restriction (3.3.5, 4.3.4 and 5.4.8 carry no such
+string), so 11.0's published list is the reference — and it is NOT the
+engine's base-library table (`0x00811E28`, 36 entries, catalogued in
+`BlizzardScriptAPI.md` §3): 11.0 leaves `tostring`/`error`/`loadstring`
+hookable and includes secure-family names that are not base functions. We
+mirror the 11.0 list verbatim with a name blacklist in
+`Script_HookSecureFunc` that fires `lua_error` with
+`"hooksecurefunc: function is unhookable"`
 when the two-arg form targets one of: `getfenv`, `getmetatable`,
 `hooksecurefunc`, `ipairs`, `issecurevalue`, `issecurevariable`, `next`,
 `pairs`, `pcall`, `pcallwithenv`, `rawget`, `rawset`, `scrub`,
@@ -3815,3 +3828,160 @@ estimate. Anyone who wants vanilla threat should run an existing threat
 addon. ClassicAPI's only worthwhile contribution in this space is an
 unrelated precise-combat-log event feed — filed as its own thing, not as
 "threat".
+
+## 99. `C_AddOns.GetAddOnLocalTable(name)` — gate on loaded + opt-in TOC flag — DONE
+
+Shipped gated (branch `feat/lua-syntax-transpile`,
+[src/addons/LocalTable.cpp](src/addons/LocalTable.cpp)). Returns the addon's
+private namespace table **only** when BOTH hold, else `nil`:
+1. the addon `name` is **loaded** (`FUN_ADDON_IS_LOADED`, by-name), and
+2. its `.toc` declares `## AllowAddOnTableAccess: <nonzero>` (scanned via
+   `FUN_FILE_READ` on `Interface\AddOns\<name>\<name>.toc`, read as a TOC
+   boolean flag; approach (a) from the notes below — no parser hook).
+
+The two paths stay separate, as required:
+- **Internal** `__addonns` (the `local name, ns = ...` preamble) stays
+  **ungated** — an addon always gets its own namespace. Still in
+  `luasyntax/Transpile.cpp`.
+- **Public** `C_AddOns.GetAddOnLocalTable` carries the gate, in
+  `addons/LocalTable.cpp`.
+
+Both resolve to the SAME table per addon via `LuaSyntax::PushAddonNamespace`
+(the one owner of the registry-backed name→table map, exposed by
+[src/luasyntax/AddonNamespace.h](src/luasyntax/AddonNamespace.h)) — so an addon
+reads back exactly what it (or its files' `...`) stored.
+
+Directive spelling + function name verified present in the 1.15.8 Classic Era
+binary (`AllowAddOnTableAccess:` TOC key, `GetAddOnLocalTable`).
+
+Deliberate scope choices (revisit only if an addon needs otherwise):
+- **Name (string) input only.** A numeric index returns `nil` — cross-addon
+  table access is by name, and the map is name-keyed. Every other `C_AddOns.*`
+  wrapper accepts name-or-index; this one does not.
+- **`nil` on denial, not a Lua error.** Matches the project's modern-API
+  convention (nil over `lua_error`). Retail may raise instead; switch the
+  denial branches to `Game::Lua::Error` if strict parity is wanted.
+- **No per-name cache** on the TOC scan — GetAddOnLocalTable is not a hot path.
+
+Not shipped by default: no addon opts in yet. The embedded `!!!ClassicAPI`
+addon could add `## AllowAddOnTableAccess: 1` to its `.toc` to expose its own
+namespace as a worked example, but that's a product/security decision left to
+the maintainer.
+
+## 100. Self-documenting API + `/classicapi` browser — SHIPPED (first slice)
+
+`docs/API.md` is 18.7k lines and its anchors are signature slugs, so a
+signature edit breaks the 281 internal + 88 README links into it. Blizzard
+solved the same problem by shipping the API as DATA
+(`Blizzard_APIDocumentationGenerated`: one table per system with typed
+`Functions` / `Events` / `Tables`) plus a browser addon
+(`Blizzard_APIDocumentation`, the `/api` command). warcraft.wiki.gg's
+Arguments/Returns blocks are those same tables rendered by a bot — so one set
+of descriptors feeds the in-game browser, a page generator, and a drift check.
+
+**Shipped in this round**
+
+- `namespace Game::Doc` in [src/Game.h](src/Game.h) — `Field` +
+  `Req`/`Opt`/`Vararg`, `FieldList`, `Function`, `Method`, `Structure`,
+  `Event`. Constant-initialized `const` objects; no heap, no dynamic init.
+- A trailing descriptor argument on all six `Game::Lua::Register*`, and on
+  `Event::Custom::AutoReserve`. Zero changes inside any `Script_*`.
+- [src/api/Documentation.cpp](src/api/Documentation.cpp) — records every
+  registration on the first pass of each Lua state, derives systems, and
+  exports `C_APIDocumentation.GetSystems()` / `GetSystem(name)` lazily in
+  Blizzard's exact table shape, plus `_classicapi_UndocumentedAPI()`.
+- `AddOns/!!!ClassicAPI/APIDocumentation/` — the 8-file port of
+  `Blizzard_APIDocumentation`, driven by `/classicapi` (short `/capi`).
+  Named for what it documents: the browser holds only ClassicAPI's own
+  surface, so `/api` would have over-promised.
+- `Util/LinkUtil.lua` — the `SetItemRef` → `LinkUtil.ProcessLink` dispatch,
+  wiring up a `RegisterLinkHandler` registry that had been dead code. Any
+  future link type now registers a handler instead of stacking another
+  `SetItemRef` override. Also fixed `assertsafe` being undefined there.
+- Documented: the whole `C_Spell` / `C_SpellBook` surface, the spell globals
+  (`SpellGlobals`), the two SpellBook enums, the 13 `UNIT_SPELLCAST_*`
+  events, `GameTooltipAPI` (frame-method example), and `C_Glue` (glue and
+  mixed-environment example).
+
+**The remaining sweep.** `_classicapi_UndocumentedAPI()` is the worklist —
+~700 registrations across ~46 namespaces. Do it a namespace at a time; the
+descriptor goes beside the registration and must be written against the
+`Script_*` BODY, not against `docs/API.md` (which is already stale in
+places — `IsHarmfulSpell` / `IsHelpfulSpell` describe an `AttributesEx` bit
+read that the code does not do; it walks the effects' implicit targets).
+`tools/New-ApiDocSkeletons.ps1` emits paste-ready skeletons from the 207
+single-line `Usage:` strings + the API.md headings, with `// TODO` on every
+guess — a starting point to verify, never to paste blind.
+
+When the sweep finishes, delete the `= nullptr` / `= 0` defaults from the six
+registrar parameters: a registration without a descriptor then fails to
+compile, which is the whole point of putting the descriptor at the call site.
+
+**Then, not before:** an `ExportAPIDocumentation` console command (glue-
+registered like `ExportInterfaceFiles`, writing one Blizzard-format `.lua`
+per system plus `Undocumented.txt`), a CI diff of the committed copies to
+catch descriptor drift, and a Markdown/wiki generator to replace the
+hand-maintained `docs/API.md` — the reason the descriptors exist at all.
+
+## 101. `Frame:SetOnUpdateMode(mode)` + `Enum.OnUpdateMode` — medium
+
+```
+Frame:SetOnUpdateMode(onUpdateMode)      -- Enum.OnUpdateMode
+  0 Disabled            no OnUpdate, visible or not
+  1 RunWhenVisible      the vanilla behaviour (default)
+  2 RunWhenVisibleOnce  run once while visible; resets to Disabled BEFORE running
+  3 RunOnce             run once regardless of visibility; resets to Disabled BEFORE running
+  4 RunAlways           run regardless of visibility
+```
+
+"Resets before running" is load-bearing: the handler re-arms by calling
+`SetOnUpdateMode` again from inside itself.
+
+**Engine (verified 2026-09-15).** The per-frame dispatcher is `FUN_0076B2C0`,
+`__thiscall(frame, float elapsed)` at vtable `+0x38`, present in every frame
+vtable with subclass overrides chaining into it (same shape as the click
+vmethod `FUN_00779540`):
+
+```c
+if (frame[0x128] != 0)                                  // the OnUpdate slot
+    FUN_007026F0(frame, frame + 0x128, "%f", elapsed);  // fmt @0x00835160
+```
+
+The walk is `FUN_00765650`: nine strata buckets of an intrusive list
+(`frame+0x310` = next, saved into the bucket before each call so a handler may
+unlink itself), calling `vtable+0x38` per node — with **no visibility check in
+the loop and none in the dispatcher**. Visibility is therefore *list
+membership*, not a test, and that list is the per-strata render list, so a
+hidden frame is simply absent. Contention: a literal scan of every DLL in
+`dll\` + `dll_local\` finds no reference to `FUN_0076B2C0` or `FUN_00765650`.
+
+**Design.** Modes 0/1/2 need only a co-hook on `FUN_0076B2C0` — mode 0 returns
+without calling the original, mode 2 sets Disabled then calls it, mode 1 is the
+engine unchanged. Guard the detour on an empty mode map so non-users pay a
+compare.
+
+Modes 3/4 cannot come from that hook: the frame is not in the walk's list while
+hidden, and forcing membership would put it in the RENDER list (it would try to
+draw). Drive them from `Tick::WorldTick` instead — an already-owned hook, so no
+second MinHook — calling the engine's own `FUN_0076B2C0(frame, elapsed)` so the
+handler sees exactly the fire it normally would, with a per-tick mark set by the
+hook so a *visible* `RunAlways` frame is not dispatched twice.
+
+**Open question before writing it:** the `elapsed` for the self-driven modes.
+The walk receives it from its caller; cleanest is to capture it in the hook (one
+value per pass, shared by every frame) and reuse it, falling back to a
+`Time::Clock` delta when nothing visible ran that frame. Needs checking whether
+`Tick::WorldTick` (`FUN_0066FD50`, the world subsystem) runs before or after the
+UI pass, which decides whether the captured value is this frame's or last
+frame's.
+
+**Cost:** one new MinHook (uncontended, guarded to ~zero when unused), one
+WorldTick subscriber, a frame-keyed mode map, `Enum.OnUpdateMode`, and
+`SetOnUpdateMode` / `GetOnUpdateMode`.
+
+**Value, honestly.** `RunAlways` is the only genuinely new capability — a hidden
+frame currently cannot run OnUpdate at all, which is why addons keep a
+permanently-shown dummy frame for their tickers. `Disabled` duplicates
+`SetScript("OnUpdate", nil)` and `RunOnce` overlaps `C_Timer.After(0, …)`, so
+the rest is API parity. Worth it for the one capability plus a clean enum, not
+as a performance feature.

@@ -43,37 +43,34 @@
 #include "aura/Source.h"
 #include "dbc/Lookup.h"
 #include "event/Custom.h"
+#include "lossofcontrol/Lockout.h"
 #include "net/PacketDispatch.h"
 #include "net/PacketReader.h"
+#include "spell/CrowdControl.h"
 #include "spell/Lookup.h"
 #include "tick/WorldTick.h"
+#include "time/Clock.h"
 #include "unit/Identity.h"
 
 #include <cstdint>
+#include <cstring>
 
 namespace LossOfControl {
 
 namespace {
 
-using TickMs_t = uint32_t(__fastcall *)();
-int NowMs() {
-    return static_cast<int>(
-        reinterpret_cast<TickMs_t>(Offsets::FUN_OS_TICKCOUNT_MS)());
-}
-
-// Spell.dbc field readers (mirrors the small locals in Spell::Cast).
-constexpr int OFF_NAME = 0x1E0;    // localized name[9]
-constexpr int OFF_ICON_ID = 0x1D4; // -> SpellIcon.dbc
+using Time::Clock::NowMs;
+using Time::Clock::Reached;
 
 const char *SpellName(const uint8_t *rec) {
-    const int locale = *reinterpret_cast<int *>(Offsets::VAR_LOCALE_INDEX);
+    const int locale = Game::Read<int>(Offsets::VAR_LOCALE_INDEX);
     const char *n =
-        *reinterpret_cast<const char *const *>(rec + OFF_NAME + locale * 4);
+        Game::Read<const char *>(rec, Offsets::OFF_SPELL_NAMES + locale * 4);
     return (n != nullptr) ? n : "";
 }
 
 const char *SpellIconPath(const uint8_t *rec) {
-    const int iconID = *reinterpret_cast<const int *>(rec + OFF_ICON_ID);
+    const int iconID = Game::Read<int>(rec, Offsets::OFF_SPELL_RECORD_ICON_ID);
     const uint8_t *iconRec = DBC::Record(Offsets::VAR_SPELL_ICON_RECORDS,
                                          Offsets::VAR_SPELL_ICON_COUNT,
                                          static_cast<uint32_t>(iconID));
@@ -84,42 +81,23 @@ const char *SpellIconPath(const uint8_t *rec) {
 }
 
 int SpellSchoolIndex(const uint8_t *rec) {
-    return *reinterpret_cast<const int *>(rec + Offsets::OFF_SPELL_SCHOOL);
+    return Game::Read<int>(rec, Offsets::OFF_SPELL_SCHOOL);
 }
 
-// Classify a spell's control-loss type from its EffectApplyAuraName array, or
-// null if it applies no control-loss aura. Priority-ordered (strongest control
-// first) so a multi-effect spell resolves to one locType, matching retail.
-const char *ClassifyControlLoss(const uint8_t *rec) {
-    const int32_t *aura = reinterpret_cast<const int32_t *>(
-        rec + Offsets::OFF_SPELL_RECORD_EFFECT_APPLY_AURA_NAME);
-    auto has = [&](int type) {
-        for (int i = 0; i < Offsets::SPELL_RECORD_EFFECT_COUNT; ++i)
-            if (aura[i] == type)
-                return true;
-        return false;
-    };
-    if (has(Offsets::SPELL_AURA_MOD_POSSESS)) return "POSSESS";
-    if (has(Offsets::SPELL_AURA_MOD_CHARM)) return "CHARM";
-    if (has(Offsets::SPELL_AURA_MOD_STUN)) return "STUN";
-    if (has(Offsets::SPELL_AURA_MOD_FEAR)) return "FEAR";
-    if (has(Offsets::SPELL_AURA_MOD_CONFUSE)) return "CONFUSE";
-    if (has(Offsets::SPELL_AURA_MOD_PACIFY_SILENCE)) return "PACIFYSILENCE";
-    if (has(Offsets::SPELL_AURA_MOD_SILENCE)) return "SILENCE";
-    if (has(Offsets::SPELL_AURA_MOD_PACIFY)) return "PACIFY";
-    if (has(Offsets::SPELL_AURA_MOD_ROOT)) return "ROOT";
-    if (has(Offsets::SPELL_AURA_MOD_DISARM)) return "DISARM";
-    return nullptr;
-}
+// The control-loss classifier lives in `Spell::CrowdControl::Classify` so the
+// `C_UnitAuras` CROWD_CONTROL aura filter shares this hard-control set (that
+// filter additionally counts snares, which are crowd control but not LoC).
 
 // ---- School-interrupt lockout state (fed by SMSG_SPELL_COOLDOWN) -----------
 
-// One active lockout per school index (0..6); active while now < endMs.
+// One active lockout per school index (0..6); active until `Reached(endMs)`.
 // Self-expiring, per-process — a stale entry from before a relog is already
-// in the past on the shared uptime clock, so no reset is needed.
+// in the past on the shared uptime clock, so no reset is needed. Unsigned,
+// like every engine-tick store: the OS counter wraps at 2^32 ms and a signed
+// `int` goes negative past 2^31 ms (~24.9 days uptime). See `Time::Clock`.
 struct SchoolLock {
-    int startMs;
-    int endMs;
+    uint32_t startMs;
+    uint32_t endMs;
 };
 SchoolLock g_schoolLock[Offsets::SPELL_SCHOOL_COUNT] = {};
 
@@ -161,9 +139,9 @@ void CooldownSub(uint32_t opcode, Net::CDataStore *packet) {
     // (ProhibitSpellSchool); single/varied packets are normal cooldowns and
     // ignored.
     if (count >= 2 && uniform && firstDur > 0 && schoolIdx >= 0) {
-        const int now = NowMs();
+        const uint32_t now = NowMs();
         g_schoolLock[schoolIdx].startMs = now;
-        g_schoolLock[schoolIdx].endMs = now + firstDur;
+        g_schoolLock[schoolIdx].endMs = now + static_cast<uint32_t>(firstDur);
     }
 }
 
@@ -176,17 +154,17 @@ struct LocEntry {
     int spellID;        // 0 = unknown (school interrupt)
     const uint8_t *rec; // spell record for name/icon; null for school interrupt
     int schoolMask;     // lockoutSchool
-    int startMs;        // 0 = unknown
-    int endMs;          // 0 = unknown / no timing
+    uint32_t startMs;   // 0 = unknown
+    uint32_t endMs;     // 0 = unknown / no timing
 };
 
 int BuildList(LocEntry *out, int maxOut) {
-    const int now = NowMs();
+    const uint32_t now = NowMs();
     int n = 0;
 
     // School-interrupt lockouts first.
     for (int s = 0; s < Offsets::SPELL_SCHOOL_COUNT && n < maxOut; ++s) {
-        if (g_schoolLock[s].endMs != 0 && now < g_schoolLock[s].endMs) {
+        if (g_schoolLock[s].endMs != 0 && !Reached(now, g_schoolLock[s].endMs)) {
             LocEntry &e = out[n++];
             e.locType = "SCHOOL_INTERRUPT";
             e.spellID = 0;
@@ -203,7 +181,7 @@ int BuildList(LocEntry *out, int maxOut) {
         const uint64_t playerGuid = Unit::Identity::PlayerGuid();
         for (int i = 1; n < maxOut; ++i) {
             const int slot = Aura::Data::FindNthSlot(
-                player, i, Aura::Data::Filter::Harmful, false);
+                player, i, Aura::Data::Filter::Harmful, Aura::Data::Match{});
             if (slot < 0)
                 break;
             const uint32_t spellID = Aura::Data::ReadSpellID(player, slot);
@@ -213,7 +191,7 @@ int BuildList(LocEntry *out, int maxOut) {
                 Spell::Lookup::RecordForID(static_cast<int>(spellID));
             if (rec == nullptr)
                 continue;
-            const char *locType = ClassifyControlLoss(rec);
+            const char *locType = Spell::CrowdControl::Classify(rec);
             if (locType == nullptr)
                 continue;
 
@@ -226,15 +204,41 @@ int BuildList(LocEntry *out, int maxOut) {
             e.endMs = 0;
             uint64_t caster = 0;
             uint32_t expMs = 0, durMs = 0;
-            if (Aura::Source::Get(playerGuid, spellID, &caster, &expMs, &durMs) &&
+            if (Aura::Source::Get(playerGuid, spellID, slot, &caster, &expMs,
+                                  &durMs) &&
                 expMs != 0) {
-                e.endMs = static_cast<int>(expMs);
+                e.endMs = expMs;
                 if (durMs != 0)
-                    e.startMs = static_cast<int>(expMs - durMs);
+                    e.startMs = expMs - durMs;
             }
         }
     }
     return n;
+}
+
+// Which spells a control-loss effect blocks — the server's cast gates
+// (`Spell::CheckCast`) restated: a school lockout gates by the spell's school
+// (`Unit::IsSpellSchoolLocked`); stun / fear / confuse / charm / possess gate
+// every cast (UNIT_STAT_STUNNED / FLEEING / CONFUSED, or control handed to
+// another unit); silence and pacify gate by the spell's PreventionType
+// (UNIT_FLAG_SILENCED ↔ SPELL_PREVENTION_TYPE_SILENCE, UNIT_FLAG_PACIFIED ↔
+// _PACIFY). Root and disarm stop no cast.
+bool Blocks(const LocEntry &e, int schoolIdx, int preventionType) {
+    const char *t = e.locType;
+    if (std::strcmp(t, "SCHOOL_INTERRUPT") == 0)
+        return (e.schoolMask & (1 << schoolIdx)) != 0;
+    if (std::strcmp(t, "STUN") == 0 || std::strcmp(t, "FEAR") == 0 ||
+        std::strcmp(t, "CONFUSE") == 0 || std::strcmp(t, "CHARM") == 0 ||
+        std::strcmp(t, "POSSESS") == 0)
+        return true;
+    const bool both = std::strcmp(t, "PACIFYSILENCE") == 0;
+    if ((both || std::strcmp(t, "SILENCE") == 0) &&
+        preventionType == Offsets::SPELL_PREVENTION_TYPE_SILENCE)
+        return true;
+    if ((both || std::strcmp(t, "PACIFY") == 0) &&
+        preventionType == Offsets::SPELL_PREVENTION_TYPE_PACIFY)
+        return true;
+    return false;
 }
 
 // ---- LOSS_OF_CONTROL_ADDED / _UPDATE events (WorldTick poll-and-diff) ------
@@ -246,8 +250,8 @@ int BuildList(LocEntry *out, int maxOut) {
 // lesson). The scan is bounded (16 debuff slots) and early-outs when idle, so
 // the per-frame cost is negligible.
 
-constexpr const char *kEventAdded = "LOSS_OF_CONTROL_ADDED";
-constexpr const char *kEventUpdate = "LOSS_OF_CONTROL_UPDATE";
+const Event::Custom::AutoReserve _reserveAdded{"LOSS_OF_CONTROL_ADDED"};
+const Event::Custom::AutoReserve _reserveUpdate{"LOSS_OF_CONTROL_UPDATE"};
 
 // Identity of an active effect for frame-to-frame diffing: a CC is keyed by
 // spellID, a school interrupt by its school mask (spellID 0).
@@ -278,7 +282,7 @@ void OnWorldTick() {
     for (int i = 0; i < n; ++i) {
         if (!ContainsKey(g_prev, g_prevCount, cur[i])) {
             // A newly-applied effect -> LOSS_OF_CONTROL_ADDED(eventIndex).
-            Event::Custom::Fire(Event::Custom::Lookup(kEventAdded), "%d", i + 1);
+            Event::Custom::Fire(_reserveAdded.Slot(), "%d", i + 1);
             changed = true;
         }
     }
@@ -292,15 +296,13 @@ void OnWorldTick() {
     // forward-compatible with per-unit tracking and matches modern WoW, whose
     // LOSS_OF_CONTROL_UPDATE carries the unit token.
     if (changed)
-        Event::Custom::Fire(Event::Custom::Lookup(kEventUpdate), "%s", "player");
+        Event::Custom::Fire(_reserveUpdate.Slot(), "%s", "player");
 
     for (int i = 0; i < n; ++i)
         g_prev[i] = cur[i];
     g_prevCount = n;
 }
 
-static const Event::Custom::AutoReserve _reserveAdded{kEventAdded};
-static const Event::Custom::AutoReserve _reserveUpdate{kEventUpdate};
 static const Tick::WorldTick::AutoSubscribe _tick{&OnWorldTick};
 
 // `C_LossOfControl.GetActiveLossOfControlDataCount()` -> number.
@@ -326,7 +328,7 @@ int __fastcall Script_GetActiveLossOfControlData(void *L) {
         return 0; // nil
 
     const LocEntry &e = entries[index - 1];
-    const int now = NowMs();
+    const uint32_t now = NowMs();
 
     Game::Lua::NewTable(L);
     Game::Lua::SetFieldString(L, "locType", e.locType);
@@ -338,12 +340,14 @@ int __fastcall Script_GetActiveLossOfControlData(void *L) {
 
     // Timing (seconds, GetTime() epoch). Nullable — leave a field unset (nil)
     // when we don't know it, per the modern contract.
-    if (e.endMs != 0 && now < e.endMs) {
-        Game::Lua::SetFieldNumber(L, "timeRemaining", (e.endMs - now) * 0.001);
+    if (e.endMs != 0 && !Reached(now, e.endMs)) {
+        Game::Lua::SetFieldNumber(L, "timeRemaining",
+                                  static_cast<double>(e.endMs - now) * 0.001);
         if (e.startMs != 0) {
-            Game::Lua::SetFieldNumber(L, "startTime", e.startMs * 0.001);
-            Game::Lua::SetFieldNumber(L, "duration",
-                                      (e.endMs - e.startMs) * 0.001);
+            Game::Lua::SetFieldNumber(L, "startTime",
+                                      static_cast<double>(e.startMs) * 0.001);
+            Game::Lua::SetFieldNumber(
+                L, "duration", static_cast<double>(e.endMs - e.startMs) * 0.001);
         }
     }
 
@@ -355,7 +359,85 @@ int __fastcall Script_GetActiveLossOfControlData(void *L) {
     return 1;
 }
 
+// `C_LossOfControl.GetSchoolLockout([filterMask])` -> lockedMask, seconds.
+//
+// The school-interrupt slice of the active list, served without building the
+// list: reads `g_schoolLock` directly, so it allocates no table and skips the
+// 16-slot aura scan every `GetActiveLossOfControlData` call pays for. Sized for
+// per-frame conditional evaluation, where that scan and a table per call are
+// the whole cost.
+//
+// `lockedMask` ORs *every* currently locked school (`1 << schoolIndex`, the
+// same shape as `lockoutSchool`). Two schools can be locked at once — each
+// SMSG_SPELL_COOLDOWN batch locks one — so a caller that stops at the first
+// SCHOOL_INTERRUPT entry silently drops the rest.
+//
+// `seconds` runs until every school in `lockedMask` is clear, i.e. the lockout
+// ending last. It is absent (nil) when nothing is locked.
+//
+// `filterMask` narrows the scan to those schools, so one school's own remaining
+// time is `GetSchoolLockout(1 << schoolIndex)`. Omitted or 0 means all schools.
+int __fastcall Script_GetSchoolLockout(void *L) {
+    int filter = ~0; // every school
+    if (Game::Lua::IsNumber(L, 1)) {
+        const int arg = static_cast<int>(Game::Lua::ToNumber(L, 1));
+        if (arg != 0)
+            filter = arg;
+    }
+
+    const uint32_t now = NowMs();
+    int locked = 0;
+    uint32_t longest = 0;
+    for (int s = 0; s < Offsets::SPELL_SCHOOL_COUNT; ++s) {
+        const int bit = 1 << s;
+        if ((filter & bit) == 0)
+            continue;
+        const uint32_t endMs = g_schoolLock[s].endMs;
+        if (endMs == 0 || Reached(now, endMs))
+            continue;
+        locked |= bit;
+        // Compare durations, never raw ticks -- see `Time::Clock`.
+        const uint32_t remain = Time::Clock::Remaining(now, endMs);
+        if (remain > longest)
+            longest = remain;
+    }
+
+    Game::Lua::PushNumber(L, static_cast<double>(locked));
+    if (locked == 0)
+        return 1; // nothing locked -> no time to report
+    Game::Lua::PushNumber(L, static_cast<double>(longest) * 0.001);
+    return 2;
+}
+
 } // namespace
+
+bool LockoutForSpell(int spellID, uint32_t *startMs, uint32_t *endMs) {
+    const uint8_t *rec = Spell::Lookup::RecordForID(spellID);
+    if (rec == nullptr)
+        return false;
+    const int school = SpellSchoolIndex(rec);
+    const int prevention =
+        Game::Read<int>(rec, Offsets::OFF_SPELL_RECORD_PREVENTION_TYPE);
+
+    LocEntry entries[32];
+    const int n = BuildList(entries, 32);
+    const uint32_t now = NowMs();
+    bool found = false;
+    for (int i = 0; i < n; ++i) {
+        const LocEntry &e = entries[i];
+        if (e.endMs == 0 || Reached(now, e.endMs))
+            continue; // timing unknown, or already over
+        if (!Blocks(e, school, prevention))
+            continue;
+        if (!found || Time::Clock::Remaining(now, e.endMs) >
+                          Time::Clock::Remaining(now, *endMs)) {
+            *startMs = e.startMs;
+            *endMs = e.endMs;
+            found = true;
+        }
+    }
+    return found;
+}
 
 static void RegisterLuaFunctions() {
     Game::Lua::RegisterTableFunction(
@@ -364,6 +446,8 @@ static void RegisterLuaFunctions() {
     Game::Lua::RegisterTableFunction("C_LossOfControl",
                                      "GetActiveLossOfControlData",
                                      &Script_GetActiveLossOfControlData);
+    Game::Lua::RegisterTableFunction("C_LossOfControl", "GetSchoolLockout",
+                                     &Script_GetSchoolLockout);
 }
 
 static const Game::ModuleAutoRegister _autoreg{&RegisterLuaFunctions};

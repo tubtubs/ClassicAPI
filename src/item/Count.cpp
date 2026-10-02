@@ -16,11 +16,14 @@
 #include "Game.h"
 #include "Offsets.h"
 #include "item/Arg.h"
+#include "item/CGItem.h"
 #include "item/ID.h"
 #include "item/Location.h"
+#include "object/Resolve.h"
 #include "unit/Identity.h"
 
 #include <cstdint>
+#include <cstdio>
 
 namespace Item::Count {
 
@@ -32,8 +35,7 @@ namespace {
 int GetStackCount(const uint8_t *cgItem) {
     if (cgItem == nullptr)
         return 0;
-    auto *descriptor = *reinterpret_cast<const uint8_t *const *>(
-        cgItem + Offsets::OFF_ITEM_DESCRIPTOR);
+    auto *descriptor = Item::ObjectFields(cgItem);
     if (descriptor == nullptr)
         return 0;
     return static_cast<int>(*reinterpret_cast<const uint32_t *>(
@@ -51,8 +53,7 @@ int GetStackCount(const uint8_t *cgItem) {
 int GetUsesPerItem(const uint8_t *cgItem) {
     if (cgItem == nullptr)
         return 1;
-    auto *descriptor = *reinterpret_cast<const uint8_t *const *>(
-        cgItem + Offsets::OFF_ITEM_DESCRIPTOR);
+    auto *descriptor = Item::ObjectFields(cgItem);
     if (descriptor == nullptr)
         return 1;
     const int32_t raw = *reinterpret_cast<const int32_t *>(
@@ -73,16 +74,17 @@ int GetItemContribution(const uint8_t *cgItem, bool includeUses) {
 }
 
 // Walks `bagID` and accumulates per-slot contributions for items
-// matching `targetItemID`. Skips empty slots. Each `ResolveBag` call
-// clobbers Lua stack[1]/[2]; we own the stack inside the callback.
-int CountInBag(void *L, int bagID, int targetItemID, bool includeUses) {
+// matching `arg` (itemID, or name via `MatchesArg`). Skips empty slots.
+// Each `ResolveBag` call clobbers Lua stack[1]/[2]; we own the stack
+// inside the callback.
+int CountInBag(void *L, int bagID, const Item::Arg::Resolved &arg, bool includeUses) {
     int total = 0;
     const int slotCount = Item::Location::GetBagSlotCount(bagID);
     for (int slot = 1; slot <= slotCount; slot++) {
         const uint8_t *item = Item::Location::ResolveBag(L, bagID, slot);
         if (item == nullptr)
             continue;
-        if (Item::ID::FromCGItem(item) != targetItemID)
+        if (!Item::Location::MatchesArg(item, arg))
             continue;
         total += GetItemContribution(item, includeUses);
     }
@@ -97,22 +99,11 @@ int CountInBag(void *L, int bagID, int targetItemID, bool includeUses) {
 // object resolver `FUN_OBJECT_RESOLVE_BY_GUID` (the same function
 // `GetItemBySlot` would call internally if the gate let us through).
 
-using ResolveObjectByGuid_t = void *(__fastcall *)(int type,
-                                                    const char *debugName,
-                                                    uint32_t guidLo,
-                                                    uint32_t guidHi,
-                                                    int priority);
-
 const uint8_t *ResolveByGuid(int type, uint64_t guid) {
     if (guid == 0)
         return nullptr;
-    auto fn = reinterpret_cast<ResolveObjectByGuid_t>(
-        Offsets::FUN_OBJECT_RESOLVE_BY_GUID);
     return static_cast<const uint8_t *>(
-        fn(type, "ItemMgr",
-           static_cast<uint32_t>(guid),
-           static_cast<uint32_t>(guid >> 32),
-           0x172));
+        Object::ByGuid(type, guid, "ItemMgr", 0x172));
 }
 
 // Walks linear slots `[firstSlot, lastSlot]` of `invMgr`'s GUID array
@@ -121,7 +112,7 @@ const uint8_t *ResolveByGuid(int type, uint64_t guid) {
 // main bank (slots 39..62 in player invMgr) and individual bank-bag
 // invMgrs (slots 0..N-1).
 int CountInGuidArray(const uint8_t *invMgr, int firstSlot, int lastSlot,
-                      int targetItemID, bool includeUses) {
+                      const Item::Arg::Resolved &arg, bool includeUses) {
     if (invMgr == nullptr)
         return 0;
     auto *guidArray = *reinterpret_cast<const uint64_t *const *>(
@@ -130,10 +121,10 @@ int CountInGuidArray(const uint8_t *invMgr, int firstSlot, int lastSlot,
         return 0;
     int total = 0;
     for (int slot = firstSlot; slot <= lastSlot; slot++) {
-        const uint8_t *item = ResolveByGuid(Offsets::OBJ_TYPE_ITEM, guidArray[slot]);
+        const uint8_t *item = ResolveByGuid(Offsets::TYPEMASK_ITEM, guidArray[slot]);
         if (item == nullptr)
             continue;
-        if (Item::ID::FromCGItem(item) != targetItemID)
+        if (!Item::Location::MatchesArg(item, arg))
             continue;
         total += GetItemContribution(item, includeUses);
     }
@@ -147,7 +138,7 @@ int CountInGuidArray(const uint8_t *invMgr, int firstSlot, int lastSlot,
 //
 // Layout: bag invMgr+0x00 = max slot count (the bag's size); bag
 // invMgr+0x04 = its GUID array. Same shape as the player invMgr.
-int CountInBankBags(int targetItemID, bool includeUses) {
+int CountInBankBags(const Item::Arg::Resolved &arg, bool includeUses) {
     auto *playerInvMgr = Unit::Identity::PlayerInventoryManager();
     if (playerInvMgr == nullptr)
         return 0;
@@ -159,7 +150,7 @@ int CountInBankBags(int targetItemID, bool includeUses) {
     int total = 0;
     for (int slot = Offsets::INVMGR_BANK_BAG_FIRST_SLOT;
          slot <= Offsets::INVMGR_BANK_BAG_LAST_SLOT; slot++) {
-        const uint8_t *bag = ResolveByGuid(Offsets::OBJ_TYPE_CONTAINER,
+        const uint8_t *bag = ResolveByGuid(Offsets::TYPEMASK_CONTAINER,
                                            playerGuidArray[slot]);
         if (bag == nullptr)
             continue;
@@ -170,8 +161,7 @@ int CountInBankBags(int targetItemID, bool includeUses) {
         const int bagSlots = static_cast<int>(*reinterpret_cast<const uint32_t *>(bagInvMgr));
         if (bagSlots <= 0)
             continue;
-        total += CountInGuidArray(bagInvMgr, 0, bagSlots - 1, targetItemID,
-                                   includeUses);
+        total += CountInGuidArray(bagInvMgr, 0, bagSlots - 1, arg, includeUses);
     }
     return total;
 }
@@ -180,13 +170,13 @@ int CountInBankBags(int targetItemID, bool includeUses) {
 // for items matching `targetItemID`. Equipped items are part of the
 // player's total inventory in the modern API — `GetItemCount` of a
 // currently-equipped trinket returns 1, not 0.
-int CountEquipped(int targetItemID, bool includeUses) {
+int CountEquipped(const Item::Arg::Resolved &arg, bool includeUses) {
     int total = 0;
     for (int slot = 1; slot <= 19; slot++) {
         const uint8_t *item = Item::Location::ResolveEquipmentSlot(slot);
         if (item == nullptr)
             continue;
-        if (Item::ID::FromCGItem(item) != targetItemID)
+        if (!Item::Location::MatchesArg(item, arg))
             continue;
         total += GetItemContribution(item, includeUses);
     }
@@ -195,9 +185,12 @@ int CountEquipped(int targetItemID, bool includeUses) {
 
 // `C_Item.GetItemCount(itemInfo [, includeBank [, includeUses]])` —
 // returns the player's total count of `itemInfo` across equipped
-// items + bags (and optionally bank). `itemInfo` is a number or
-// `"item:NNN"` string. Item names are NOT accepted (vanilla itself
-// has no name → ID resolver).
+// items + bags (and optionally bank). `itemInfo` is a number, an
+// `"item:NNN"` string / link, or an item NAME — a plain string is matched
+// case-insensitively against each carried item's decorated display name
+// (`Item::Location::MatchesArg`, the same rule `C_Item.UseItemByName`
+// uses), which is what lets the `/cast` / `/use` handler decide
+// "is this an item I carry" before falling back to a spell cast.
 //
 // What's counted:
 //   - **Equipped items** (slots 1..19) — always. Matches modern
@@ -221,10 +214,17 @@ int CountEquipped(int targetItemID, bool includeUses) {
 // count (via the `or 1` neutralizer in `GetUsesPerItem`), so the flag
 // is a no-op for them.
 int __fastcall Script_C_Item_GetItemCount(void *L) {
-    const int itemID = Item::Arg::ResolveItemID(L, 1);
-    if (itemID <= 0) {
-        Game::Lua::PushNumber(L, 0);
-        return 1;
+    Item::Arg::Resolved arg = Item::Arg::Resolve(L, 1);
+    // A plain string is a name. Copy it off the Lua string heap before the
+    // bag walk — `ResolveBag` clears the stack.
+    char nameBuf[128];
+    if (arg.itemID <= 0) {
+        if (arg.name == nullptr || arg.name[0] == '\0') {
+            Game::Lua::PushNumber(L, 0);
+            return 1;
+        }
+        std::snprintf(nameBuf, sizeof(nameBuf), "%s", arg.name);
+        arg.name = nameBuf;
     }
     // Read both flags before the bag walk — `ResolveBag` clobbers
     // the Lua stack via SetTop(0) and would invalidate any later
@@ -232,9 +232,9 @@ int __fastcall Script_C_Item_GetItemCount(void *L) {
     const bool includeBank = Game::Lua::ToBoolean(L, 2) != 0;
     const bool includeUses = Game::Lua::ToBoolean(L, 3) != 0;
 
-    int total = CountEquipped(itemID, includeUses);
+    int total = CountEquipped(arg, includeUses);
     for (int bag = 0; bag <= 4; bag++)
-        total += CountInBag(L, bag, itemID, includeUses);
+        total += CountInBag(L, bag, arg, includeUses);
     if (includeBank) {
         // Direct GUID-array reads — bypass the bank gate so this works
         // without the bank window having ever been opened in the
@@ -242,8 +242,8 @@ int __fastcall Script_C_Item_GetItemCount(void *L) {
         total += CountInGuidArray(Unit::Identity::PlayerInventoryManager(),
                                    Offsets::INVMGR_BANK_MAIN_FIRST_SLOT,
                                    Offsets::INVMGR_BANK_MAIN_LAST_SLOT,
-                                   itemID, includeUses);
-        total += CountInBankBags(itemID, includeUses);
+                                   arg, includeUses);
+        total += CountInBankBags(arg, includeUses);
     }
 
     Game::Lua::SetTop(L, 0);
@@ -256,9 +256,10 @@ int __fastcall Script_C_Item_GetItemCount(void *L) {
 int InInventory(void *L, int itemID) {
     if (itemID <= 0)
         return 0;
-    int total = CountEquipped(itemID, /*includeUses*/ false);
+    const Item::Arg::Resolved arg{itemID, 0, nullptr};
+    int total = CountEquipped(arg, /*includeUses*/ false);
     for (int bag = 0; bag <= 4; bag++)
-        total += CountInBag(L, bag, itemID, /*includeUses*/ false);
+        total += CountInBag(L, bag, arg, /*includeUses*/ false);
     return total;
 }
 

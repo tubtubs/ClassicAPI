@@ -23,6 +23,7 @@
 #include "../Game.h"
 #include "../Offsets.h"
 #include "../guid/Guid.h"
+#include "../object/Resolve.h"
 #include "../tick/WorldTick.h"
 
 #include <cstdint>
@@ -38,12 +39,6 @@ enum class State {
     WaitingOpen,
 };
 
-using ClntObjMgrObjectPtr_t = void *(__fastcall *)(uint32_t typeMask,
-                                                    const char *debugMsg,
-                                                    uint32_t guidLo,
-                                                    uint32_t guidHi,
-                                                    int debugCode);
-using ResolveUnitToken_t = void *(__fastcall *)(const char *token);
 using LootUnit_t = void(__thiscall *)(void *player, void *target,
                                       char useDistanceCheck);
 // `FUN_005E1AD0` is `__stdcall(uint8_t)`, not `__fastcall` — the
@@ -61,8 +56,8 @@ uint32_t s_desiredItemID = 0;
 int s_ticksSinceTransition = 0;
 
 uint64_t ReadLootTargetGuid() {
-    const uint32_t lo = *reinterpret_cast<const uint32_t *>(Offsets::VAR_LOOT_GUID_LO);
-    const uint32_t hi = *reinterpret_cast<const uint32_t *>(Offsets::VAR_LOOT_GUID_HI);
+    const uint32_t lo = Game::Read<uint32_t>(Offsets::VAR_LOOT_GUID_LO);
+    const uint32_t hi = Game::Read<uint32_t>(Offsets::VAR_LOOT_GUID_HI);
     return static_cast<uint64_t>(hi) << 32 | lo;
 }
 
@@ -168,19 +163,13 @@ int __fastcall Script_LootUnitItem(void *L) {
         return 1;
     }
 
-    auto Resolve = reinterpret_cast<ResolveUnitToken_t>(
-        Offsets::FUN_RESOLVE_UNIT_TOKEN);
-    void *player = Resolve("player");
+    void *player = Game::ResolveUnitToken("player");
     if (player == nullptr) {
         Game::Lua::PushBool(L, false);
         return 1;
     }
 
-    auto ObjectPtr = reinterpret_cast<ClntObjMgrObjectPtr_t>(
-        Offsets::FUN_CLNT_OBJ_MGR_OBJECT_PTR);
-    void *target = ObjectPtr(Offsets::TYPEMASK_UNIT, nullptr,
-                             static_cast<uint32_t>(guid),
-                             static_cast<uint32_t>(guid >> 32), 0);
+    void *target = Object::ByGuid(Offsets::TYPEMASK_UNIT, guid, nullptr, 0);
     if (target == nullptr) {
         Game::Lua::PushBool(L, false);
         return 1;

@@ -17,6 +17,7 @@
 #include "Offsets.h"
 #include "guid/Guid.h"
 #include "nameplate/Walk.h"
+#include "object/Resolve.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -25,6 +26,13 @@
 namespace Unit::Identity {
 
 using TokenToGUID_t = uint64_t(__fastcall *)(const char *token);
+
+// `FUN_UNIT_FIND_BY_NAME` — see Offsets.h. The distance bound is passed as
+// the float bit pattern the engine's own callers use (FLT_MAX = no limit).
+using FindUnitByName_t = uint64_t(__fastcall *)(const char *name, uint32_t typeMask,
+                                               int mode, int exactMatch,
+                                               uint32_t maxDistance);
+static constexpr uint32_t kMaxDistanceFltMax = 0x7F7FFFFF;
 
 // The selected character's GUID, captured at the glue "Enter World" click
 // (the FUN_GLUE_ENTER_WORLD co-hook below) — i.e. before the engine has
@@ -46,12 +54,11 @@ static void __cdecl EnterWorld_h() {
     g_origEnterWorld();
     // Only on a genuine commit — the rename / char-locked bail paths return
     // before the worker sets the state code to "entering world".
-    if (*reinterpret_cast<const int *>(
-            static_cast<uintptr_t>(Offsets::VAR_GLUE_LOGIN_INPROGRESS)) !=
+    if (Game::Read<int>(Offsets::VAR_GLUE_LOGIN_INPROGRESS) !=
         Offsets::GLUE_STATE_ENTERING_WORLD)
         return;
-    const uintptr_t charStruct = *reinterpret_cast<const uintptr_t *>(
-        static_cast<uintptr_t>(Offsets::VAR_GLUE_SELECTED_CHAR));
+    const uintptr_t charStruct =
+        Game::Read<uintptr_t>(Offsets::VAR_GLUE_SELECTED_CHAR);
     if (charStruct != 0)
         g_charSelectGuid = *reinterpret_cast<const uint64_t *>(
             charStruct + Offsets::OFF_GLUE_CHAR_GUID);
@@ -85,11 +92,10 @@ static const Game::HookAutoRegister _enterWorldHook{
 // this only makes the GUID *value* available early, for keying SavedVariables,
 // comparisons, our aura/cast caster checks, etc.)
 uint64_t PlayerGuid() {
-    auto *player = *reinterpret_cast<uint8_t *const *>(
-        static_cast<uintptr_t>(Offsets::VAR_LOCAL_PLAYER_PTR));
+    auto *player = Game::Read<uint8_t *>(Offsets::VAR_LOCAL_PLAYER_PTR);
     if (player != nullptr) {
-        const uint64_t guid = *reinterpret_cast<const uint64_t *>(
-            player + Offsets::OFF_LOCAL_PLAYER_GUID);
+        const uint64_t guid =
+            Game::Read<uint64_t>(player, Offsets::OFF_LOCAL_PLAYER_GUID);
         if (guid != 0)
             return guid; // live engine value — authoritative
     }
@@ -107,16 +113,8 @@ const uint8_t *PlayerObject() {
     const uint64_t guid = PlayerGuid();
     if (guid == 0)
         return nullptr;
-    using ResolveByGuid_t = void *(__fastcall *)(uint32_t typeMask,
-                                                 const char *debugName,
-                                                 uint32_t guidLo, uint32_t guidHi,
-                                                 int line);
-    auto resolve =
-        reinterpret_cast<ResolveByGuid_t>(Offsets::FUN_OBJECT_RESOLVE_BY_GUID);
     return static_cast<const uint8_t *>(
-        resolve(Offsets::OBJ_TYPE_PLAYER, "ClassicAPI",
-                static_cast<uint32_t>(guid), static_cast<uint32_t>(guid >> 32),
-                /*line*/ 0));
+        Object::ByGuid(Offsets::TYPEMASK_PLAYER, guid, "ClassicAPI", 0));
 }
 
 const uint8_t *PlayerInventoryManager() {
@@ -130,16 +128,15 @@ const uint8_t *PlayerDescriptor() {
     const uint8_t *player = PlayerObject();
     if (player == nullptr)
         return nullptr;
-    return *reinterpret_cast<const uint8_t *const *>(
-        player + Offsets::OFF_UNIT_DESCRIPTOR);
+    return Game::Read<const uint8_t *>(player, Offsets::OFF_UNIT_DESCRIPTOR);
 }
 
 uint64_t GuidForObject(const void *unitObject) {
     if (unitObject == nullptr)
         return 0;
     const auto *unit = static_cast<const uint8_t *>(unitObject);
-    const uint8_t *block = *reinterpret_cast<const uint8_t *const *>(
-        unit + Offsets::OFF_UNIT_GUID_PTR);
+    const uint8_t *block =
+        Game::Read<const uint8_t *>(unit, Offsets::OFF_UNIT_GUID_PTR);
     if (block == nullptr)
         return 0;
     return *reinterpret_cast<const uint64_t *>(block);
@@ -180,6 +177,14 @@ const uint8_t *PlayerInfoRecord(uint64_t guid) {
                   static_cast<uintptr_t>(Offsets::VAR_PLAYER_NAME_CACHE)),
               static_cast<uint32_t>(guid), static_cast<uint32_t>(guid >> 32),
               cookie, nullptr, nullptr, 0);
+}
+
+const char *NameForGuid(uint64_t guid) {
+    const uint8_t *rec = PlayerInfoRecord(guid);
+    if (rec == nullptr)
+        return nullptr;
+    const char *name = Game::Ptr<const char>(rec, Offsets::OFF_PLAYER_INFO_NAME);
+    return (name != nullptr && *name != '\0') ? name : nullptr;
 }
 
 // `UnitGUID(unit)` — returns the unit's 64-bit GUID formatted as a
@@ -285,8 +290,7 @@ const char *TokenFromGUID(uint64_t target, char *buf, size_t bufSize) {
         if (partyGuids[i] != 0)
             ++partyCount;
     }
-    int raidCount = *reinterpret_cast<const int *>(
-        static_cast<uintptr_t>(Offsets::VAR_RAID_MEMBER_COUNT));
+    int raidCount = Game::Read<int>(Offsets::VAR_RAID_MEMBER_COUNT);
     if (raidCount > Offsets::RAID_MAX_SLOTS)
         raidCount = Offsets::RAID_MAX_SLOTS;
 
@@ -391,9 +395,48 @@ static int __fastcall Script_UnitTokenFromGUID(void *L) {
     return 1;
 }
 
+// `UnitTokenFromName(name [, exactMatch])` -> unit token, or nothing.
+//
+// The macro `@unit` / `target=unit` piece accepts a character name as well
+// as a unit token, but nothing in 1.12 turns a name into something the
+// `Unit*` functions accept. This runs the engine's own by-name search — the
+// one behind `TargetByName` — and reports the winner as a token.
+//
+// Prefers a standard token (`party1`, `target`, …) so callers get the
+// stable, readable form, and falls back to the GUID literal for a unit no
+// token names, since the resolver takes those too. `exactMatch` mirrors
+// `TargetByName`: clear matches on the start of the name, set requires all
+// of it.
+static int __fastcall Script_UnitTokenFromName(void *L) {
+    if (!Game::Lua::IsString(L, 1)) {
+        Game::Lua::Error(L, "Usage: UnitTokenFromName(\"name\" [, exactMatch])");
+        return 0;
+    }
+    const char *name = Game::Lua::ToString(L, 1);
+    if (name == nullptr || name[0] == '\0')
+        return 0;
+
+    const int exact = Game::Lua::ToBoolean(L, 2);
+    auto find = reinterpret_cast<FindUnitByName_t>(Offsets::FUN_UNIT_FIND_BY_NAME);
+    const uint64_t guid = find(name, Offsets::TYPEMASK_UNIT, /*mode*/ 0, exact,
+                               kMaxDistanceFltMax);
+    if (guid == 0)
+        return 0;
+
+    char buf[32];
+    if (const char *token = TokenFromGUID(guid, buf, sizeof buf)) {
+        Game::Lua::PushString(L, token);
+        return 1;
+    }
+    char guidBuf[Guid::STRING_SIZE];
+    Game::Lua::PushString(L, Guid::FormatAsString(guid, guidBuf, sizeof guidBuf));
+    return 1;
+}
+
 static void RegisterLuaFunctions() {
     Game::Lua::RegisterGlobalFunction("UnitGUID", &Script_UnitGUID);
     Game::Lua::RegisterGlobalFunction("UnitTokenFromGUID", &Script_UnitTokenFromGUID);
+    Game::Lua::RegisterGlobalFunction("UnitTokenFromName", &Script_UnitTokenFromName);
 }
 
 static const Game::ModuleAutoRegister _autoreg{&RegisterLuaFunctions};

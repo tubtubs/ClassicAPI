@@ -16,6 +16,7 @@
 #include "Game.h"
 #include "Offsets.h"
 #include "cursor/Info.h"
+#include "item/CGItem.h"
 #include "item/Location.h"
 
 #include <cstdint>
@@ -38,18 +39,17 @@ constexpr int OFF_CONTAINER_GUID_LO = 0x08;
 constexpr int OFF_CONTAINER_GUID_HI = 0x0C;
 
 bool ItemLocked(const uint8_t *item) {
-    return (*reinterpret_cast<const uint32_t *>(item + Offsets::OFF_ITEM_CLIENT_LOCK) & 1) != 0;
+    return (Game::Read<uint32_t>(item, Offsets::OFF_ITEM_CLIENT_LOCK) & 1) != 0;
 }
 
 // Reads a CGItem's 64-bit instance GUID into lo/hi. False if the instance
 // block pointer is absent.
 bool ReadItemGuid(const uint8_t *item, uint32_t *lo, uint32_t *hi) {
-    auto *instance = *reinterpret_cast<const uint8_t *const *>(
-        item + Offsets::OFF_ITEM_INSTANCE_BLOCK);
+    auto *instance = Item::InstanceBlock(item);
     if (instance == nullptr)
         return false;
-    *lo = *reinterpret_cast<const uint32_t *>(instance + Offsets::OFF_INSTANCE_BLOCK_GUID);
-    *hi = *reinterpret_cast<const uint32_t *>(instance + Offsets::OFF_INSTANCE_BLOCK_GUID + 4);
+    *lo = Game::Read<uint32_t>(instance, Offsets::OFF_INSTANCE_BLOCK_GUID);
+    *hi = Game::Read<uint32_t>(instance, Offsets::OFF_INSTANCE_BLOCK_GUID + 4);
     return true;
 }
 

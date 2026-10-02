@@ -15,6 +15,7 @@
 
 #include "Offsets.h"
 #include "item/Location.h"
+#include "object/Resolve.h"
 #include "unit/Identity.h"
 
 #include <cstdint>
@@ -58,13 +59,7 @@ int InvMgrSlotCount(const uint8_t *invMgr) {
 uint8_t *ResolveByGUID(int type, uint64_t guid) {
     if (guid == 0)
         return nullptr;
-    using ResolveByGUID_t = void *(__fastcall *)(int, const char *, uint32_t,
-                                                  uint32_t, int);
-    auto fn = reinterpret_cast<ResolveByGUID_t>(Offsets::FUN_OBJECT_RESOLVE_BY_GUID);
-    return static_cast<uint8_t *>(fn(type, "ItemMgr",
-                                     static_cast<uint32_t>(guid),
-                                     static_cast<uint32_t>(guid >> 32),
-                                     0x172));
+    return static_cast<uint8_t *>(Object::ByGuid(type, guid, "ItemMgr", 0x172));
 }
 
 // Walks one bag's contents for a matching GUID. Returns the 1-based
@@ -73,7 +68,7 @@ uint8_t *ResolveByGUID(int type, uint64_t guid) {
 // bank bags (linear 63..68) — the only differences are the source of
 // the bag's GUID and how the result encodes back into a location.
 int WalkBagContents(uint64_t bagGuid, uint64_t targetGuid) {
-    auto *bag = ResolveByGUID(Offsets::OBJ_TYPE_CONTAINER, bagGuid);
+    auto *bag = ResolveByGUID(Offsets::TYPEMASK_CONTAINER, bagGuid);
     if (bag == nullptr)
         return 0;
     auto *bagInvMgr =
@@ -161,6 +156,24 @@ void SnapshotPaperdoll(uint64_t *out) {
         return;
     for (int i = 0; i < SLOT_COUNT; ++i)
         out[i] = guids[i];
+}
+
+bool ContainsLockedItems(const Set &set) {
+    for (int i = 0; i < SLOT_COUNT; ++i) {
+        const uint64_t g = set.items[i];
+        if (g == GUID_EMPTY || g == GUID_IGNORED)
+            continue;
+        if (FindGUID(g) == 0)
+            continue;
+        const uint8_t *item = ResolveItemByGUID(g);
+        if (item == nullptr)
+            continue;
+        const uint32_t flags = *reinterpret_cast<const uint32_t *>(
+            item + Offsets::OFF_ITEM_CLIENT_LOCK);
+        if (flags & Offsets::ITEM_CLIENT_LOCK_BIT)
+            return true;
+    }
+    return false;
 }
 
 } // namespace EquipmentSet::Locations

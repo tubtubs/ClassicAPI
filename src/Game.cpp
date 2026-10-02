@@ -14,8 +14,15 @@
 #include "Game.h"
 #include "MinHook.h"
 #include "Offsets.h"
+#include "api/Documentation.h"
 
 namespace Game {
+
+void *ResolveUnitToken(const char *token) {
+    using ResolveUnitToken_t = void *(__fastcall *)(const char *token);
+    auto fn = reinterpret_cast<ResolveUnitToken_t>(Offsets::FUN_RESOLVE_UNIT_TOKEN);
+    return fn(token);
+}
 
 namespace Lua {
 // Each entry binds a typed function pointer in `Game::Lua::` to the
@@ -40,6 +47,8 @@ namespace Lua {
     F(RawGet,      lua_rawget,      LUA_RAW_GET)      \
     F(SetTable,    lua_settable,    LUA_SET_TABLE)    \
     F(RawSet,      lua_rawset,      LUA_RAW_SET)      \
+    F(GetMetatable,lua_getmetatable,LUA_GET_METATABLE)\
+    F(SetMetatable,lua_setmetatable,LUA_SET_METATABLE)\
     F(Insert,      lua_insert,      LUA_INSERT)       \
     F(Remove,      lua_remove,      LUA_REMOVE)       \
     F(GetTop,      lua_gettop,      LUA_GET_TOP)      \
@@ -73,7 +82,7 @@ using RegisterFrameMethods_t = void(__fastcall *)(const FrameMethodEntry *table,
 } // namespace
 
 void *State() {
-    return *reinterpret_cast<void **>(static_cast<uintptr_t>(Offsets::VAR_LUA_STATE));
+    return Game::Read<void *>(Offsets::VAR_LUA_STATE);
 }
 
 namespace {
@@ -92,26 +101,79 @@ void *ResolveObject(void *L, int idx) {
     return result;
 }
 
-void RegisterGlobalFunction(const char *name, CFunction func) {
-    auto fn = reinterpret_cast<FrameScript_RegisterFunction_t>(
-        Offsets::FUN_FRAMESCRIPT_REGISTER_FUNCTION);
-    fn(name, func);
+namespace {
+using FrameScriptIsA_t = char(__thiscall *)(void *self, int typeId);
+
+const char *EngineString(uintptr_t address) {
+    return reinterpret_cast<const char *>(address);
 }
 
-// Aliased to the same engine entry; the engine reads VAR_LUA_STATE
-// internally to decide which state to write to, and the glue hook
-// runs while that pointer is set to the glue state. Wrapped as a
-// named function (rather than `using RegisterGlueFunction = ...`) so
-// callers express intent at the call site.
-void RegisterGlueFunction(const char *name, CFunction func) {
-    auto fn = reinterpret_cast<FrameScript_RegisterFunction_t>(
-        Offsets::FUN_FRAMESCRIPT_REGISTER_FUNCTION);
-    fn(name, func);
+// Shared body: the engine's prologue with N accepted type ids.
+void *ResolveChecked(void *L, int idx, const uintptr_t *typeIdVars, int count,
+                     bool raiseError) {
+    if (Type(L, idx) != TYPE_TABLE) {
+        if (raiseError)
+            Error(L, EngineString(Offsets::STR_FS_THIS_NON_TABLE));
+        return nullptr;
+    }
+    void *obj = ResolveObject(L, idx);
+    if (obj == nullptr) {
+        if (raiseError)
+            Error(L, EngineString(Offsets::STR_FS_THIS_NON_OBJECT));
+        return nullptr;
+    }
+    auto **vtable = *reinterpret_cast<void ***>(obj);
+    auto IsA = reinterpret_cast<FrameScriptIsA_t>(
+        vtable[Offsets::OFF_VMT_FRAMESCRIPT_ISA / sizeof(void *)]);
+    for (int i = 0; i < count; ++i) {
+        if (IsA(obj, FrameScriptTypeId(typeIdVars[i])))
+            return obj;
+    }
+    if (raiseError)
+        Error(L, EngineString(Offsets::STR_FS_WRONG_OBJECT_TYPE));
+    return nullptr;
+}
+} // namespace
+
+int FrameScriptTypeId(uintptr_t typeIdVar) {
+    auto &typeId = Game::Ref<int>(typeIdVar);
+    if (typeId == 0) {
+        auto &counter = Game::Ref<int>(Offsets::VAR_FRAMESCRIPT_TYPE_ID_COUNTER);
+        counter += 1;
+        typeId = counter;
+    }
+    return typeId;
 }
 
-void RegisterFrameMethods(void *context, const FrameMethodEntry *table, int count) {
-    auto fn = reinterpret_cast<RegisterFrameMethods_t>(Offsets::FUN_REGISTER_FRAME_METHODS);
-    fn(table, count, context);
+void *ResolveTypedObject(void *L, int idx, uintptr_t typeIdVar, bool raiseError) {
+    return ResolveChecked(L, idx, &typeIdVar, 1, raiseError);
+}
+
+void *ResolveTypedObjectAny(void *L, int idx, const uintptr_t *typeIdVars,
+                            int count, bool raiseError) {
+    return ResolveChecked(L, idx, typeIdVars, count, raiseError);
+}
+
+void *ResolveTooltip(void *L, int idx, bool raiseError) {
+    return ResolveTypedObject(L, idx, Offsets::VAR_GAMETOOLTIP_LUA_TYPE_ID, raiseError);
+}
+void *ResolveFrame(void *L, int idx, bool raiseError) {
+    return ResolveTypedObject(L, idx, Offsets::VAR_FRAME_LUA_TYPE_ID, raiseError);
+}
+void *ResolveRegion(void *L, int idx, bool raiseError) {
+    return ResolveTypedObject(L, idx, Offsets::VAR_REGION_LUA_TYPE_ID, raiseError);
+}
+void *ResolveTexture(void *L, int idx, bool raiseError) {
+    return ResolveTypedObject(L, idx, Offsets::VAR_TEXTURE_LUA_TYPE_ID, raiseError);
+}
+void *ResolveFontString(void *L, int idx, bool raiseError) {
+    return ResolveTypedObject(L, idx, Offsets::VAR_FONTSTRING_LUA_TYPE_ID, raiseError);
+}
+void *ResolveEditBox(void *L, int idx, bool raiseError) {
+    return ResolveTypedObject(L, idx, Offsets::VAR_EDITBOX_LUA_TYPE_ID, raiseError);
+}
+void *ResolveModel(void *L, int idx, bool raiseError) {
+    return ResolveTypedObject(L, idx, Offsets::VAR_MODEL_LUA_TYPE_ID, raiseError);
 }
 
 // Looks up `_G[name]`. If absent, creates a fresh table and binds it.
@@ -129,11 +191,110 @@ void EnsureGlobalTable(void *L, const char *name) {
     Insert(L, -2);                 //                           [tbl, name, tbl]
     SetTable(L, GLOBALS_INDEX);    // _G[name] = tbl; pops k+v. [tbl]
 }
+
+// Same, one level down: ensures `parent[name]` is a table, with `parent`
+// on top of the stack. Leaves `[parent, sub]`. Raw access, so a namespace
+// carrying a metatable can't divert the read or the write.
+void EnsureSubTable(void *L, const char *name) {
+    PushString(L, name);           //                           [parent, name]
+    RawGet(L, -2);                 //                           [parent, parent[name]]
+    if (Type(L, -1) == TYPE_TABLE)
+        return;
+    SetTop(L, -2);                 // pop the non-table.        [parent]
+    NewTable(L);                   //                           [parent, sub]
+    PushString(L, name);           //                           [parent, sub, name]
+    PushValue(L, -2);              //                           [parent, sub, name, sub]
+    RawSet(L, -4);                 // parent[name] = sub.       [parent, sub]
+}
+
+// The escape-hatch namespace. Registering a name is not the same as owning
+// it: the engine's registrars write `_G`, FrameXML and every addon load
+// after that, and whoever writes last wins with no error and no way for the
+// loser to notice. `GetServerTime` is the case on record — a client whose
+// GameTime.lua declares its own replaced ours on every login.
+//
+// So every name the registrars below bind is also bound under
+// `_G.ClassicAPI`, which nothing else writes. Two properties earn their
+// keep, and both depend on doing this HERE rather than from Lua:
+//
+//   - It runs at registration, so the mirror captures OUR function. A
+//     Lua-side `ClassicAPI.X = X` in the embedded addon would run after
+//     FrameXML and faithfully copy the clobbered version.
+//   - It mirrors by VALUE, reading the name back instead of making a
+//     second closure over the same C function. So `ClassicAPI.X == X`
+//     holds until something replaces the global, and the pair doubles as
+//     a clobber check for addons and for us.
+//
+// Not covered: frame methods (`obj:Method()` lives in the per-frame-type
+// registry, not `_G`) and `RegisterIntegerEnum` values (a mirrored number
+// is a copy, not a reference).
+constexpr const char *kMirrorTable = "ClassicAPI";
+
+void MirrorRegistration(const char *tableName, const char *name) {
+    void *L = State();
+    if (L == nullptr)
+        return;
+    const int top = GetTop(L);
+
+    // Read back whatever the registration actually bound.
+    if (tableName != nullptr) {
+        EnsureGlobalTable(L, tableName); // [src]
+        PushString(L, name);             // [src, name]
+        RawGet(L, -2);                   // [src, value]
+    } else {
+        PushString(L, name);             // [name]
+        GetTable(L, GLOBALS_INDEX);      // [value]
+    }
+    if (Type(L, -1) != TYPE_FUNCTION) {
+        SetTop(L, top); // registration didn't land; nothing to mirror
+        return;
+    }
+    const int valueIdx = GetTop(L); // absolute, so the pushes below can't skew it
+
+    EnsureGlobalTable(L, kMirrorTable);  // [..., mirror]
+    if (tableName != nullptr)
+        EnsureSubTable(L, tableName);    // [..., mirror, sub]
+    PushString(L, name);
+    PushValue(L, valueIdx);
+    RawSet(L, -3);                       // target[name] = value
+    SetTop(L, top);
+}
 } // namespace
+
+void RegisterGlobalFunction(const char *name, CFunction func, const Doc::Function *doc) {
+    auto fn = reinterpret_cast<FrameScript_RegisterFunction_t>(
+        Offsets::FUN_FRAMESCRIPT_REGISTER_FUNCTION);
+    fn(name, func);
+    MirrorRegistration(nullptr, name);
+    Api::Documentation::RecordGlobal(name, doc);
+}
+
+// Aliased to the same engine entry; the engine reads VAR_LUA_STATE
+// internally to decide which state to write to, and the glue hook
+// runs while that pointer is set to the glue state. Wrapped as a
+// named function (rather than `using RegisterGlueFunction = ...`) so
+// callers express intent at the call site.
+void RegisterGlueFunction(const char *name, CFunction func, const Doc::Function *doc) {
+    auto fn = reinterpret_cast<FrameScript_RegisterFunction_t>(
+        Offsets::FUN_FRAMESCRIPT_REGISTER_FUNCTION);
+    fn(name, func);
+    // `State()` is the glue state here for the same reason the engine
+    // registrar writes there, so the mirror lands on the glue `_G`.
+    MirrorRegistration(nullptr, name);
+    Api::Documentation::RecordGlobal(name, doc);
+}
+
+void RegisterFrameMethods(void *context, const FrameMethodEntry *table, int count,
+                          const Doc::Method *docs, int docCount) {
+    auto fn = reinterpret_cast<RegisterFrameMethods_t>(Offsets::FUN_REGISTER_FRAME_METHODS);
+    fn(table, count, context);
+    Api::Documentation::RecordFrameMethods(context, table, count, docs, docCount);
+}
 
 // Registers `func` at `_G[tableName][methodName]`. If the namespace
 // doesn't already exist, creates an empty table for it.
-void RegisterTableFunction(const char *tableName, const char *methodName, CFunction func) {
+void RegisterTableFunction(const char *tableName, const char *methodName, CFunction func,
+                           const Doc::Function *doc) {
     void *L = State();
     if (L == nullptr)
         return;
@@ -142,10 +303,41 @@ void RegisterTableFunction(const char *tableName, const char *methodName, CFunct
     PushCClosure(L, func, 0);            // [tbl, methodName, closure]
     SetTable(L, -3);                     // tbl[m]=c; pops k+v. [tbl]
     SetTop(L, -2);                       // pop tbl. []
+    MirrorRegistration(tableName, methodName);
+    Api::Documentation::RecordTable(tableName, methodName, doc);
+}
+
+// `_G[alias] = _G[tableName][methodName]`, by VALUE. The engine binds its
+// short aliases this way (`tinsert = tab.insert` in the compat snippet it
+// runs at Lua init), so a module that registers over a library function has
+// to re-bind the alias to the same closure — that keeps `tinsert ==
+// table.insert` true, as the engine left it, instead of minting a second
+// closure. A plain raw write, exactly what the snippet's assignment did. No-op
+// if the source is not a function (nothing was registered to alias).
+void RegisterGlobalAlias(const char *alias, const char *tableName, const char *methodName,
+                         const Doc::Function *doc) {
+    void *L = State();
+    if (L == nullptr)
+        return;
+    const int top = GetTop(L);
+    EnsureGlobalTable(L, tableName);     // [tbl]
+    PushString(L, methodName);           // [tbl, m]
+    RawGet(L, -2);                       // [tbl, value]
+    if (Type(L, -1) != TYPE_FUNCTION) {
+        SetTop(L, top);
+        return;
+    }
+    PushString(L, alias);                // [tbl, value, alias]
+    PushValue(L, -2);                    // [tbl, value, alias, value]
+    RawSet(L, GLOBALS_INDEX);            // _G[alias] = value.  [tbl, value]
+    SetTop(L, top);
+    MirrorRegistration(nullptr, alias);
+    Api::Documentation::RecordGlobal(alias, doc);
 }
 
 void RegisterIntegerEnum(const char *parent, const char *sub,
-                         const EnumIntegerEntry *entries, int count) {
+                         const EnumIntegerEntry *entries, int count,
+                         const char *docSystem) {
     void *L = State();
     if (L == nullptr)
         return;
@@ -159,6 +351,7 @@ void RegisterIntegerEnum(const char *parent, const char *sub,
     }
     SetTable(L, -3); // parentTbl[sub] = subTbl
     SetTop(L, -2);   // pop parentTbl
+    Api::Documentation::RecordEnum(parent, sub, entries, count, docSystem);
 }
 
 void SetFieldNumber(void *L, const char *key, double value) {
@@ -288,6 +481,7 @@ namespace {
 ModuleAutoRegister *g_moduleHead = nullptr;
 GlueModuleAutoRegister *g_glueModuleHead = nullptr;
 HookAutoRegister *g_hookHead = nullptr;
+ReloadAutoRegister *g_reloadHead = nullptr;
 } // namespace
 
 ModuleAutoRegister::ModuleAutoRegister(Fn f) : fn(f), next(g_moduleHead) {
@@ -295,8 +489,10 @@ ModuleAutoRegister::ModuleAutoRegister(Fn f) : fn(f), next(g_moduleHead) {
 }
 
 void RunModuleRegistrations() {
+    Api::Documentation::BeginPass(Api::Documentation::ENV_GAME);
     for (auto *node = g_moduleHead; node != nullptr; node = node->next)
         node->fn();
+    Api::Documentation::EndPass();
 }
 
 GlueModuleAutoRegister::GlueModuleAutoRegister(Fn f)
@@ -305,7 +501,18 @@ GlueModuleAutoRegister::GlueModuleAutoRegister(Fn f)
 }
 
 void RunGlueModuleRegistrations() {
+    Api::Documentation::BeginPass(Api::Documentation::ENV_GLUE);
     for (auto *node = g_glueModuleHead; node != nullptr; node = node->next)
+        node->fn();
+    Api::Documentation::EndPass();
+}
+
+ReloadAutoRegister::ReloadAutoRegister(Fn f) : fn(f), next(g_reloadHead) {
+    g_reloadHead = this;
+}
+
+void RunReloadCleanups() {
+    for (auto *node = g_reloadHead; node != nullptr; node = node->next)
         node->fn();
 }
 
@@ -320,7 +527,12 @@ bool RunHookRegistrations() {
         if (MH_CreateHook(targetPtr, node->hook,
                           reinterpret_cast<LPVOID *>(node->original)) != MH_OK)
             return false;
-        if (MH_EnableHook(targetPtr) != MH_OK)
+        // Queue, don't enable. The caller (InstallHooks) applies every
+        // queued hook with a single MH_ApplyQueued, so all ~90 hooks share
+        // ONE thread-freeze instead of one freeze per hook. This is the
+        // difference that keeps install cheap on machines whose security
+        // stack intercepts SuspendThread / VirtualProtect per call.
+        if (MH_QueueEnableHook(targetPtr) != MH_OK)
             return false;
     }
     return true;

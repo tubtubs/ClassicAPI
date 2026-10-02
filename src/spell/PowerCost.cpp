@@ -49,8 +49,6 @@ namespace {
 
 using GetSpellCost_t = uint32_t(__fastcall *)(int spellID, int unit);
 
-constexpr int OFF_POWER_TYPE = 0x7C;        // int PowerType
-constexpr int OFF_MANA_COST_PERCENT = 0x270; // int, % of base resource (0 = flat)
 
 uint32_t EffectiveCost(int spellID) {
     return reinterpret_cast<GetSpellCost_t>(Offsets::FUN_GET_SPELL_COST)(spellID, 0);
@@ -66,8 +64,8 @@ int __fastcall Script_GetSpellPowerCost(void *L) {
     if (cost == 0xFFFFFFFF)
         return 0; // engine error (no player context, etc.)
 
-    const int powerType = *reinterpret_cast<const int *>(rec + OFF_POWER_TYPE);
-    const int costPercent = *reinterpret_cast<const int *>(rec + OFF_MANA_COST_PERCENT);
+    const int powerType = Game::Read<int>(rec, Offsets::OFF_SPELL_RECORD_POWER_TYPE);
+    const int costPercent = Game::Read<int>(rec, Offsets::OFF_SPELL_RECORD_MANA_COST_PERCENT);
     if (cost == 0 && costPercent == 0)
         return 0; // nil — no resource cost
 
@@ -87,10 +85,41 @@ int __fastcall Script_GetSpellPowerCost(void *L) {
     return 1;
 }
 
+// --- Documentation ----------------------------------------------------------
+
+const Game::Doc::Field kSpellPowerCostInfoFields[] = {
+    Game::Doc::Req("type", "number",
+                   "The power the spell spends: 0 mana, 1 rage, 2 focus, 3 energy, "
+                   "4 happiness."),
+    Game::Doc::Req("name", "string", "The power token, such as \"MANA\" or \"RAGE\"."),
+    Game::Doc::Req("cost", "number", "What the cast costs the player now."),
+    Game::Doc::Req("minCost", "number", "The same value as cost."),
+    Game::Doc::Req("costPercent", "number",
+                   "The share of the base power pool the cast takes, or 0 for a flat cost."),
+    Game::Doc::Req("costPerSec", "number", "Always 0."),
+    Game::Doc::Req("requiredAuraID", "number", "Always 0."),
+    Game::Doc::Req("hasRequiredAura", "bool", "Always false."),
+};
+const Game::Doc::Structure kSpellPowerCostInfo{
+    "SpellPowerCostInfo", "Spell", kSpellPowerCostInfoFields,
+    "What one cast of a spell costs."};
+
+const Game::Doc::Field kArgs[] = {
+    Game::Doc::Req("spell", "SpellIdentifier", "A spell ID, spell link, or spell name."),
+};
+const Game::Doc::Field kRets[] = {
+    Game::Doc::Opt("costs", "table", nullptr,
+                   "An array of SpellPowerCostInfo entries; nil when the spell costs "
+                   "nothing or is unknown."),
+};
+const Game::Doc::Function kGetSpellPowerCost{
+    "What one cast of the spell costs the player in power.", kArgs, kRets};
+
 } // namespace
 
 static void RegisterLuaFunctions() {
-    Game::Lua::RegisterTableFunction("C_Spell", "GetSpellPowerCost", &Script_GetSpellPowerCost);
+    Game::Lua::RegisterTableFunction("C_Spell", "GetSpellPowerCost", &Script_GetSpellPowerCost,
+                                     &kGetSpellPowerCost);
 }
 
 static const Game::ModuleAutoRegister _autoreg{&RegisterLuaFunctions};

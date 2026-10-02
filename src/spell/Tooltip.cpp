@@ -24,8 +24,6 @@ namespace Spell::Tooltip {
 // pulled from Spell::Info — that module keeps these as `static
 // constexpr` privates and exposing them just for two readers here
 // would force a header change.
-static constexpr int OFF_SPELL_NAME = 0x1E0; // localized char *[9]
-static constexpr int OFF_SPELL_RANK = 0x204; // localized char *[9]
 
 using BuildSpellTooltip_t = void(__thiscall *)(void *thisObj, int spellID, int arg2, int arg3,
                                                int isPet, int showRank, int arg6, int arg7);
@@ -33,7 +31,7 @@ using BuildSpellTooltip_t = void(__thiscall *)(void *thisObj, int spellID, int a
 void ShowByID(void *L, int spellID) {
     if (spellID <= 0)
         return;
-    void *tooltipObj = Game::Lua::ResolveObject(L, 1);
+    void *tooltipObj = Game::Lua::ResolveTooltip(L);
     if (tooltipObj == nullptr)
         return;
     auto BuildSpellTooltip =
@@ -72,35 +70,35 @@ static int __fastcall Script_GameTooltipSetSpellByID(void *L) {
 void AppendByID(void *L, int spellID) {
     if (spellID <= 0)
         return;
-    void *tooltipObj = Game::Lua::ResolveObject(L, 1);
+    void *tooltipObj = Game::Lua::ResolveTooltip(L);
     if (tooltipObj == nullptr)
         return;
     auto *tt = static_cast<uint8_t *>(tooltipObj);
 
-    const int before = *reinterpret_cast<const int *>(
-        tt + Offsets::OFF_GAMETOOLTIP_NUM_LINES);
+    const int before = Game::Read<int>(
+        tt, Offsets::OFF_GAMETOOLTIP_NUM_LINES);
 
     auto BuildSpellTooltip =
         reinterpret_cast<BuildSpellTooltip_t>(Offsets::FUN_GAMETOOLTIP_BUILD_SPELL_TOOLTIP);
     BuildSpellTooltip(tooltipObj, spellID, 0, 0, 0, 0, 0, /*param_7 (append)=*/1);
 
-    const int after = *reinterpret_cast<const int *>(
-        tt + Offsets::OFF_GAMETOOLTIP_NUM_LINES);
+    const int after = Game::Read<int>(
+        tt, Offsets::OFF_GAMETOOLTIP_NUM_LINES);
     if (after <= before)
         return; // nothing appended (bad spellID / missing Spell.dbc record)
 
     const uint8_t *record = Spell::Lookup::RecordForID(spellID);
     if (record == nullptr)
         return;
-    const int locale = *reinterpret_cast<const int *>(Offsets::VAR_LOCALE_INDEX);
-    const char *name = *reinterpret_cast<const char *const *>(
-        record + OFF_SPELL_NAME + locale * 4);
+    const int locale = Game::Read<int>(Offsets::VAR_LOCALE_INDEX);
+    const char *name = Game::Read<const char *>(
+        record, Offsets::OFF_SPELL_NAMES + locale * 4);
     if (name == nullptr || name[0] == '\0')
         return;
 
     // Left-text FontString array: descriptor at +0x324, data ptr at +0x8.
-    auto **textLeft = *reinterpret_cast<void ***>(
-        tt + Offsets::OFF_GAMETOOLTIP_TEXTLEFT_DESC + 8);
+    auto **textLeft = Game::Read<void **>(
+        tt, Offsets::OFF_GAMETOOLTIP_TEXTLEFT_DESC + 8);
     if (textLeft == nullptr)
         return;
     void *fs = textLeft[before];
@@ -139,12 +137,12 @@ static int __fastcall Script_GameTooltipGetSpell(void *L) {
         Game::Lua::Error(L, "Usage: GameTooltip:GetSpell()");
         return 0;
     }
-    void *tooltipObj = Game::Lua::ResolveObject(L, 1);
+    void *tooltipObj = Game::Lua::ResolveTooltip(L);
     if (tooltipObj == nullptr)
         return 0;
 
-    const int spellID = *reinterpret_cast<const int *>(
-        static_cast<const uint8_t *>(tooltipObj) + Offsets::OFF_TOOLTIP_SPELL_ID);
+    const int spellID = Game::Read<int>(
+        tooltipObj, Offsets::OFF_TOOLTIP_SPELL_ID);
     if (spellID <= 0)
         return 0;
 
@@ -152,11 +150,11 @@ static int __fastcall Script_GameTooltipGetSpell(void *L) {
     if (record == nullptr)
         return 0;
 
-    const int locale = *reinterpret_cast<const int *>(Offsets::VAR_LOCALE_INDEX);
-    const char *name = *reinterpret_cast<const char *const *>(
-        record + OFF_SPELL_NAME + locale * 4);
-    const char *rank = *reinterpret_cast<const char *const *>(
-        record + OFF_SPELL_RANK + locale * 4);
+    const int locale = Game::Read<int>(Offsets::VAR_LOCALE_INDEX);
+    const char *name = Game::Read<const char *>(
+        record, Offsets::OFF_SPELL_NAMES + locale * 4);
+    const char *rank = Game::Read<const char *>(
+        record, Offsets::OFF_SPELL_RECORD_RANK + locale * 4);
 
     if (name == nullptr)
         return 0;
@@ -178,13 +176,13 @@ static int __fastcall Script_GameTooltipHasSpell(void *L) {
         Game::Lua::Error(L, "Usage: GameTooltip:HasSpell()");
         return 0;
     }
-    void *tooltipObj = Game::Lua::ResolveObject(L, 1);
+    void *tooltipObj = Game::Lua::ResolveTooltip(L);
     if (tooltipObj == nullptr) {
         Game::Lua::PushBool(L, 0);
         return 1;
     }
-    const int spellID = *reinterpret_cast<const int *>(
-        static_cast<const uint8_t *>(tooltipObj) + Offsets::OFF_TOOLTIP_SPELL_ID);
+    const int spellID = Game::Read<int>(
+        tooltipObj, Offsets::OFF_TOOLTIP_SPELL_ID);
     Game::Lua::PushBool(L, spellID > 0);
     return 1;
 }
@@ -196,11 +194,45 @@ static const Game::Lua::FrameMethodEntry g_methods[] = {
     {"HasSpell", &Script_GameTooltipHasSpell},
 };
 
+// --- Documentation ----------------------------------------------------------
+
+static const Game::Doc::Field kSpellIDArg[] = {
+    Game::Doc::Req("spellID", "number", "Any spell ID, learned or not."),
+};
+static const Game::Doc::Function kSetSpellByID{
+    "Fills the tooltip with a spell's tooltip.", kSpellIDArg, {}};
+static const Game::Doc::Function kAddSpellByID{
+    "Appends a spell's tooltip to what the tooltip already shows.", kSpellIDArg, {}};
+
+static const Game::Doc::Field kGetSpellRets[] = {
+    Game::Doc::Opt("name", "string", nullptr, "Nil when the tooltip shows no spell."),
+    Game::Doc::Opt("rank", "string", nullptr, "Empty for a spell that has no rank."),
+    Game::Doc::Opt("spellID", "number"),
+};
+static const Game::Doc::Function kGetSpell{
+    "The spell the tooltip is showing. Aura tooltips report nothing.", {}, kGetSpellRets};
+
+static const Game::Doc::Field kHasSpellRets[] = {
+    Game::Doc::Req("hasSpell", "bool", "True while the tooltip shows a spell."),
+};
+static const Game::Doc::Function kHasSpell{
+    "Whether the tooltip is showing a spell. Aura tooltips report false.",
+    {}, kHasSpellRets};
+
+static const Game::Doc::Method g_methodDocs[] = {
+    {"SetSpellByID", &kSetSpellByID},
+    {"AddSpellByID", &kAddSpellByID},
+    {"GetSpell", &kGetSpell},
+    {"HasSpell", &kHasSpell},
+};
+
 static void RegisterLuaFunctions() {
     Game::Lua::RegisterFrameMethods(
         reinterpret_cast<void *>(Offsets::VAR_GAMETOOLTIP_METHOD_REGISTRY),
         g_methods,
-        static_cast<int>(sizeof(g_methods) / sizeof(g_methods[0])));
+        static_cast<int>(sizeof(g_methods) / sizeof(g_methods[0])),
+        g_methodDocs,
+        static_cast<int>(sizeof(g_methodDocs) / sizeof(g_methodDocs[0])));
 }
 
 static const Game::ModuleAutoRegister _autoreg{&RegisterLuaFunctions};

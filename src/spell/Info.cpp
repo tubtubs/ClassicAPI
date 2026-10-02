@@ -13,33 +13,23 @@
 
 #include "Game.h"
 #include "Offsets.h"
-#include "player/StatSignal.h"
 #include "spell/Arg.h"
 #include "spell/Lookup.h"
 
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 
 namespace Spell::Info {
 
-// Spell.dbc record offsets (from BuildSpellTooltip / Script_GetSpellName / Script_GetSpellTexture).
-static constexpr int OFF_ATTRIBUTES_EX = 0x1C;
-static constexpr int OFF_CASTING_TIME_INDEX = 0x48;
-static constexpr int OFF_POWER_TYPE = 0x7C;
-static constexpr int OFF_MANA_COST = 0x80;
-static constexpr int OFF_RANGE_INDEX = 0x90;
-static constexpr int OFF_ICON_ID = 0x1D4;
-static constexpr int OFF_NAME = 0x1E0;
-static constexpr int OFF_RANK = 0x204;
-
-// Spell.dbc Attributes (+0x18) and AttributesEx (+0x1C) flag bits we read.
-// Both bits are 0x40, but on different fields:
-//   Attributes  bit 6 = SPELL_ATTR_PASSIVE  — passive spell (no cast bar,
-//                       applies its effect as soon as learned/equipped)
-//   AttributesEx bit 6 = SPELL_ATTR_EX_FUNNEL_PERCENT — funnel channel
-static constexpr int OFF_ATTRIBUTES = 0x18;
-static constexpr uint32_t SPELL_ATTR_PASSIVE = 0x40;
-static constexpr uint32_t SPELL_ATTR_EX_FUNNEL = 0x40;
+// GetSpellInfo's isFunnel means a health-funnel spell — AttributesEx2 (+0x20)
+// bit 11 = SPELL_ATTR_EX2_HEALTH_FUNNEL. Verified from Spell.dbc: Health
+// Funnel (755) Ex2=0x808 and Hellfire (1949) Ex2=0x800 carry it, while
+// channeled non-funnels (Drain Life, Mind Flay, Arcane Missiles, Rain of
+// Fire) do not. An earlier version read AttributesEx bit 6, which is
+// CHANNELED_2 — false for Health Funnel itself and true for unrelated
+// channels, so it never actually detected funnel spells.
+static constexpr uint32_t SPELL_ATTR_EX2_HEALTH_FUNNEL = 0x800;
 // Spell.dbc effect-target arrays. Each spell has 3 effects, each
 // with an implicit target A and an implicit target B (the latter
 // often 0). Used by IsSpellHarmful / IsSpellHelpful — vanilla has
@@ -48,9 +38,6 @@ static constexpr uint32_t SPELL_ATTR_EX_FUNNEL = 0x40;
 // have it), so we classify by walking effect targets and checking
 // whether any falls into a known hostile-target or friendly-target
 // set. Same algorithm CMaNGOS uses in `SpellMgr::IsPositiveSpell`.
-static constexpr int OFF_EFFECT_IMPLICIT_TARGET_A = 0x148; // uint32[3]
-static constexpr int OFF_EFFECT_IMPLICIT_TARGET_B = 0x154; // uint32[3]
-
 // Target IDs from vanilla 1.12's `SpellTarget` enum that mark a
 // spell as hostile-targeted (covers single-target damage,
 // debuffs, AoE damage, etc.). List is conservative — anything not
@@ -142,25 +129,26 @@ static bool ReadSpellInfo(int spellID, SpellInfoData &out) {
     const int locale = ReadGlobal<int>(Offsets::VAR_LOCALE_INDEX);
 
     out.spellID = spellID;
-    out.name = *reinterpret_cast<const char *const *>(record + OFF_NAME + locale * 4);
-    out.rank = *reinterpret_cast<const char *const *>(record + OFF_RANK + locale * 4);
+    out.name = Game::Read<const char *>(record, Offsets::OFF_SPELL_NAMES + locale * 4);
+    out.rank = Game::Read<const char *>(record, Offsets::OFF_SPELL_RECORD_RANK + locale * 4);
 
     out.iconPath = nullptr;
-    const int iconID = *reinterpret_cast<const int *>(record + OFF_ICON_ID);
+    const int iconID = Game::Read<int>(record, Offsets::OFF_SPELL_RECORD_ICON_ID);
     if (auto *iconRec = LookupSubRecord(Offsets::VAR_SPELL_ICON_RECORDS,
                                         Offsets::VAR_SPELL_ICON_COUNT, iconID)) {
-        out.iconPath = *reinterpret_cast<const char *const *>(iconRec + 4);
+        out.iconPath = Game::Read<const char *>(iconRec, Offsets::OFF_SPELLICON_PATH);
     }
 
-    out.cost = *reinterpret_cast<const int *>(record + OFF_MANA_COST);
+    out.cost = Game::Read<int>(record, Offsets::OFF_SPELL_RECORD_MANA_COST);
 
-    const uint32_t attrEx = *reinterpret_cast<const uint32_t *>(record + OFF_ATTRIBUTES_EX);
-    out.isFunnel = (attrEx & SPELL_ATTR_EX_FUNNEL) != 0;
+    const uint32_t attrEx2 = Game::Read<uint32_t>(
+        record, Offsets::OFF_SPELL_RECORD_ATTRIBUTES_EX2);
+    out.isFunnel = (attrEx2 & SPELL_ATTR_EX2_HEALTH_FUNNEL) != 0;
 
-    out.powerType = *reinterpret_cast<const int *>(record + OFF_POWER_TYPE);
+    out.powerType = Game::Read<int>(record, Offsets::OFF_SPELL_RECORD_POWER_TYPE);
 
     out.castTimeMs = 0;
-    const int castIndex = *reinterpret_cast<const int *>(record + OFF_CASTING_TIME_INDEX);
+    const int castIndex = Game::Read<int>(record, Offsets::OFF_SPELL_RECORD_CASTING_TIME_INDEX);
     if (auto *castRec = LookupSubRecord(Offsets::VAR_SPELL_CAST_TIMES_RECORDS,
                                         Offsets::VAR_SPELL_CAST_TIMES_COUNT, castIndex)) {
         out.castTimeMs = *reinterpret_cast<const int *>(castRec + 4);
@@ -168,7 +156,7 @@ static bool ReadSpellInfo(int spellID, SpellInfoData &out) {
 
     out.minRange = 0.0f;
     out.maxRange = 0.0f;
-    const int rangeIndex = *reinterpret_cast<const int *>(record + OFF_RANGE_INDEX);
+    const int rangeIndex = Game::Read<int>(record, Offsets::OFF_SPELL_RECORD_RANGE_INDEX);
     if (auto *rangeRec = LookupSubRecord(Offsets::VAR_SPELL_RANGE_RECORDS,
                                          Offsets::VAR_SPELL_RANGE_COUNT, rangeIndex)) {
         out.minRange = *reinterpret_cast<const float *>(rangeRec + 4);
@@ -191,15 +179,44 @@ static bool BookTypeIsPet(const char *s) {
     return lc(s[0]) == 'p' && lc(s[1]) == 'e' && lc(s[2]) == 't' && s[3] == '\0';
 }
 
-// Resolves the Lua args to a spellID, supporting:
-//   GetSpellInfo(spellID)              -- arg2 absent or non-string
-//   GetSpellInfo(slot, "spell"|"pet")  -- arg2 string → spellbook lookup
-// Returns 0 for invalid/empty inputs (Lua side surfaces 0 as nil since
-// spellID 0 is never valid). Calls `lua_error` if arg1 isn't a number,
-// matching the engine's own `lua_error`-on-misuse style.
+// Parses a spellID out of a spell hyperlink ("…|Hspell:<id>[:…]…").
+// Returns 0 when `s` isn't a spell link, so the caller can fall through
+// to a plain-name lookup.
+static int SpellIDFromLink(const char *s) {
+    if (s == nullptr)
+        return 0;
+    const char *p = std::strstr(s, "Hspell:");
+    if (p == nullptr)
+        return 0;
+    p += 7; // past "Hspell:"
+    if (*p < '0' || *p > '9')
+        return 0;
+    int id = 0;
+    while (*p >= '0' && *p <= '9')
+        id = id * 10 + (*p++ - '0');
+    return id;
+}
+
+// Resolves the Lua args to a spellID, supporting the full retail
+// GetSpellInfo argument set:
+//   GetSpellInfo(spellID)              -- arg1 number, arg2 non-string
+//   GetSpellInfo(slot, "spell"|"pet")  -- arg1 number, arg2 string → book slot
+//   GetSpellInfo("name")               -- arg1 string → spellbook name lookup
+//   GetSpellInfo("…|Hspell:ID|h…")      -- arg1 string → link's embedded spellID
+// A name resolves against the player's/pet's spellbook (retail's scope),
+// returning the highest known rank; an unknown name yields 0. Returns 0
+// for invalid/empty inputs (Lua side surfaces 0 as nil since spellID 0 is
+// never valid). Only a non-string, non-number arg1 raises `lua_error` —
+// a name retail doesn't recognize returns nil, it does not error.
 static int ResolveLuaArgsToSpellID(void *L) {
+    if (Game::Lua::Type(L, 1) == Game::Lua::TYPE_STRING) {
+        const char *s = Game::Lua::ToString(L, 1);
+        const int fromLink = SpellIDFromLink(s);
+        return fromLink > 0 ? fromLink : Spell::Lookup::SpellNameToID(s);
+    }
     if (!Game::Lua::IsNumber(L, 1)) {
-        Game::Lua::Error(L, "Usage: GetSpellInfo(spellID) or GetSpellInfo(slot, bookType)");
+        Game::Lua::Error(L, "Usage: GetSpellInfo(spellID | \"name\" | link) "
+                            "or GetSpellInfo(slot, bookType)");
         return 0;
     }
     const int arg1 = static_cast<int>(Game::Lua::ToNumber(L, 1));
@@ -288,7 +305,7 @@ static int __fastcall Script_C_GetSpellName(void *L) {
         return 0; // nil for unknown spellID
 
     const int locale = ReadGlobal<int>(Offsets::VAR_LOCALE_INDEX);
-    const char *name = *reinterpret_cast<const char *const *>(record + OFF_NAME + locale * 4);
+    const char *name = Game::Read<const char *>(record, Offsets::OFF_SPELL_NAMES + locale * 4);
     if (name == nullptr || *name == '\0')
         return 0; // empty / no name in current locale → nil
     Game::Lua::PushString(L, name);
@@ -301,12 +318,12 @@ static int __fastcall Script_C_GetSpellTexture(void *L) {
     if (record == nullptr)
         return 0;
 
-    const int iconID = *reinterpret_cast<const int *>(record + OFF_ICON_ID);
+    const int iconID = Game::Read<int>(record, Offsets::OFF_SPELL_RECORD_ICON_ID);
     auto *iconRec = LookupSubRecord(Offsets::VAR_SPELL_ICON_RECORDS,
                                     Offsets::VAR_SPELL_ICON_COUNT, iconID);
     if (iconRec == nullptr)
         return 0;
-    const char *path = *reinterpret_cast<const char *const *>(iconRec + 4);
+    const char *path = Game::Read<const char *>(iconRec, Offsets::OFF_SPELLICON_PATH);
     if (path == nullptr || *path == '\0')
         return 0;
     Game::Lua::PushString(L, path);
@@ -327,7 +344,7 @@ static bool BuildSpellLink(int spellID, char *out, size_t outLen) {
     if (record == nullptr)
         return false;
     const int locale = ReadGlobal<int>(Offsets::VAR_LOCALE_INDEX);
-    const char *name = *reinterpret_cast<const char *const *>(record + OFF_NAME + locale * 4);
+    const char *name = Game::Read<const char *>(record, Offsets::OFF_SPELL_NAMES + locale * 4);
     if (name == nullptr || *name == '\0')
         return false;
     const int n = std::snprintf(out, outLen, "|cff71d5ff|Hspell:%d:0|h[%s]|h|r",
@@ -404,8 +421,9 @@ static int PushIsPassive(void *L, int spellID) {
     const uint8_t *record = Spell::Lookup::RecordForID(spellID);
     if (record == nullptr)
         return 0;
-    const uint32_t attr = *reinterpret_cast<const uint32_t *>(record + OFF_ATTRIBUTES);
-    Game::Lua::PushBool(L, (attr & SPELL_ATTR_PASSIVE) != 0);
+    const uint32_t attr = Game::Read<uint32_t>(
+        record, Offsets::OFF_SPELL_RECORD_ATTRIBUTES);
+    Game::Lua::PushBool(L, (attr & Offsets::SPELL_ATTR_PASSIVE) != 0);
     return 1;
 }
 
@@ -449,16 +467,124 @@ static int __fastcall Script_C_IsSpellPassive(void *L) {
 static bool PlayerKnowsSpell(int spellID) {
     if (spellID < 1)
         return false;
-    const int spellCount = *reinterpret_cast<const int *>(
+    const int spellCount = Game::Read<int>(
         static_cast<uintptr_t>(Offsets::VAR_SPELL_RECORD_COUNT));
     if (spellID > spellCount)
         return false;
-    auto *bitmap = *reinterpret_cast<const uint32_t *const *>(
+    auto *bitmap = Game::Read<const uint32_t *>(
         static_cast<uintptr_t>(Offsets::VAR_PLAYER_SPELL_BITMAP));
     if (bitmap == nullptr)
         return false;
     const uint32_t mask = 1u << (spellID & 31);
     return (bitmap[spellID >> 5] & mask) != 0;
+}
+
+// Walks the known-spell bitmap and calls `fn(spellID, record)` for every
+// set bit that has a Spell.dbc row, in ascending spellID order, until `fn`
+// returns false. This is `IsPlayerSpell` turned around: only a set bit ever
+// touches a record, so a full pass costs a few hundred lookups, not the
+// ~28,000-row table. The bitmap covers spellIDs 0..spellCount inclusive,
+// one bit each, so the last word is index spellCount >> 5; zero words — the
+// vast majority — cost one compare. No-op before login, when the bitmap is
+// not yet allocated.
+template <typename F>
+static void ForEachKnownSpell(F fn) {
+    auto *bitmap = Game::Read<const uint32_t *>(
+        static_cast<uintptr_t>(Offsets::VAR_PLAYER_SPELL_BITMAP));
+    if (bitmap == nullptr)
+        return;
+    const int spellCount = Game::Read<int>(
+        static_cast<uintptr_t>(Offsets::VAR_SPELL_RECORD_COUNT));
+    for (int word = 0; word <= (spellCount >> 5); ++word) {
+        const uint32_t bits = bitmap[word];
+        if (bits == 0)
+            continue;
+        for (int bit = 0; bit < 32; ++bit) {
+            if ((bits & (1u << bit)) == 0)
+                continue;
+            const int spellID = (word << 5) | bit;
+            if (spellID < 1 || spellID > spellCount)
+                continue;
+            const uint8_t *record = Spell::Lookup::RecordForID(spellID);
+            if (record == nullptr)
+                continue;
+            if (!fn(spellID, record))
+                return;
+        }
+    }
+}
+
+// `C_SpellBook.GetPlayerSpellsByAura(auraName)` -> { spellID, ... }
+//
+// Every spell the player currently knows whose Spell.dbc record has an
+// effect applying aura `auraName` (an EffectApplyAuraName code — 134 for
+// MOD_MANA_REGEN_INTERRUPT, 217 for Turtle's MOD_ENERGY_REGEN_TIME, ...),
+// as a 1-based ascending array of spell IDs.
+//
+// The known-spell bitmap is the right table to walk, because "which of MY
+// spells apply this" is the question a caller summing aura amounts is
+// actually asking. The bitmap holds only a talent's CURRENT rank, so such
+// a sum never double-counts ranks.
+//
+// Known is not the same as active. For a passive it is — known means in
+// effect, and a passive never appears in the buff list. A castable buff
+// in this result is merely learned; whether it is up is a buff-list
+// question, and a buff another player put on us is not in the bitmap at
+// all. Callers split on `C_Spell.IsSpellPassive` accordingly.
+//
+// `auraName` 0 means "applies no aura" and would match most of what the
+// player knows, so it and negatives return the empty array. Empty before
+// login too.
+static int __fastcall Script_GetPlayerSpellsByAura(void *L) {
+    if (!Game::Lua::IsNumber(L, 1)) {
+        Game::Lua::Error(L,
+            "Usage: C_SpellBook.GetPlayerSpellsByAura(auraName)");
+        return 0;
+    }
+    const int auraName = static_cast<int>(Game::Lua::ToNumber(L, 1));
+
+    Game::Lua::SetTop(L, 0);
+    Game::Lua::NewTable(L);
+    if (auraName <= 0)
+        return 1;
+
+    int n = 0;
+    ForEachKnownSpell([&](int spellID, const uint8_t *record) {
+        auto *auras = reinterpret_cast<const int32_t *>(
+            record + Offsets::OFF_SPELL_RECORD_EFFECT_APPLY_AURA_NAME);
+        for (int e = 0; e < Offsets::SPELL_RECORD_EFFECT_COUNT; ++e) {
+            if (auras[e] == auraName) {
+                Game::Lua::PushNumber(L, static_cast<double>(++n));
+                Game::Lua::PushNumber(L, static_cast<double>(spellID));
+                Game::Lua::RawSet(L, -3);
+                break; // one entry per spell, however many effects match
+            }
+        }
+        return true;
+    });
+    return 1;
+}
+
+// `C_SpellBook.ContainsAnyDisenchantSpell()` -> bool. True iff the player
+// knows a spell with SPELL_EFFECT_DISENCHANT. That is 13262 "Disenchant"
+// (the only such row in Spell.dbc), but the test is data-driven like the
+// retail original — "any disenchant spell" — so a custom variant a server
+// adds counts too.
+static int __fastcall Script_ContainsAnyDisenchantSpell(void *L) {
+    bool found = false;
+    ForEachKnownSpell([&](int, const uint8_t *record) {
+        auto *effects = reinterpret_cast<const int32_t *>(
+            record + Offsets::OFF_SPELL_RECORD_EFFECT);
+        for (int e = 0; e < Offsets::SPELL_RECORD_EFFECT_COUNT; ++e) {
+            if (effects[e] == Offsets::SPELL_EFFECT_DISENCHANT) {
+                found = true;
+                return false;
+            }
+        }
+        return true;
+    });
+    Game::Lua::PushBool(L, found);
+    return 1;
 }
 
 static int __fastcall Script_IsPlayerSpell(void *L) {
@@ -533,10 +659,10 @@ template <typename Pred>
 static bool AnyEffectTarget(const uint8_t *record, Pred pred) {
     if (record == nullptr)
         return false;
-    auto *targetsA = reinterpret_cast<const uint32_t *>(
-        record + OFF_EFFECT_IMPLICIT_TARGET_A);
-    auto *targetsB = reinterpret_cast<const uint32_t *>(
-        record + OFF_EFFECT_IMPLICIT_TARGET_B);
+    auto *targetsA = Game::Ptr<const uint32_t>(
+        record, Offsets::OFF_SPELL_RECORD_EFFECT_IMPLICIT_TARGET_A);
+    auto *targetsB = Game::Ptr<const uint32_t>(
+        record, Offsets::OFF_SPELL_RECORD_EFFECT_IMPLICIT_TARGET_B);
     for (int i = 0; i < 3; ++i) {
         if (pred(targetsA[i]) || pred(targetsB[i]))
             return true;
@@ -599,55 +725,318 @@ static int __fastcall Script_C_Spell_IsSpellHelpful(void *L) {
     return 1;
 }
 
-// --- Known-spell-bitmap change signal ------------------------------------
-// Learning/unlearning a spell rewrites the bitmap GetSpellBonusHealing scans
-// for talent conversions (Spiritual Guidance / Ironclad). Co-hook the engine's
-// learn + unlearn writers and bump Player::StatSignal, so a talent respec
-// invalidates the healing cache immediately — the same event-driven path as
-// aura/equipment changes, no polling. Both fire only at login and on
-// learn/unlearn (never per-frame), so they're safe co-hook targets.
-using LearnSpell_t = void(__fastcall *)(uint32_t spellID, int notify,
-                                        uint32_t replacedSpellID);
-static LearnSpell_t g_origLearnSpell = nullptr;
-static void __fastcall LearnSpell_h(uint32_t spellID, int notify,
-                                    uint32_t replacedSpellID) {
-    g_origLearnSpell(spellID, notify, replacedSpellID);
-    Player::StatSignal::Notify();
-}
-static const Game::HookAutoRegister _hookLearnSpell{
-    Offsets::FUN_LEARN_SPELL, reinterpret_cast<void *>(&LearnSpell_h),
-    reinterpret_cast<void **>(&g_origLearnSpell)};
+// The learn / unlearn writer co-hooks (Player::StatSignal bump +
+// LEARNED_SPELL_IN_SKILL_LINE) live in spell/Learn.cpp.
 
-using UnlearnSpell_t = void(__fastcall *)(uint32_t spellID, int param2);
-static UnlearnSpell_t g_origUnlearnSpell = nullptr;
-static void __fastcall UnlearnSpell_h(uint32_t spellID, int param2) {
-    g_origUnlearnSpell(spellID, param2);
-    Player::StatSignal::Notify();
+// Enum.SpellBookItemType values (retail). Vanilla's spellbook only ever
+// produces real spells, so we emit Spell (player book) or PetAction (pet
+// book); None/FutureSpell/Flyout don't occur in 1.12.
+static constexpr int kSpellBookItemTypeSpell = 1;
+static constexpr int kSpellBookItemTypePetAction = 3;
+
+static const Game::Lua::EnumIntegerEntry kSpellBookSpellBankEntries[] = {
+    {"Player", 0}, {"Pet", 1},
+};
+static const Game::Lua::EnumIntegerEntry kSpellBookItemTypeEntries[] = {
+    {"None", 0}, {"Spell", 1}, {"FutureSpell", 2}, {"PetAction", 3},
+    {"Flyout", 4},
+};
+
+// `C_SpellBook.GetSpellBookItemInfo(slotIndex, spellBank)` -> table.
+// `slotIndex` is 1-based across the whole book; `spellBank` is
+// Enum.SpellBookSpellBank (0 = Player, 1 = Pet). Returns nil for an empty or
+// out-of-range slot. Vanilla's spellbook holds only real spells, so `itemType`
+// is always Spell (player) or PetAction (pet).
+//
+// Field deviations from retail, all forced by 1.12 lacking the data:
+//   - `iconID` is the icon PATH string (vanilla has no fileID), same as
+//     C_Spell.GetSpellInfo.iconID -- feed it straight to texture:SetTexture.
+//   - `isOffSpec` is always false (vanilla has no specializations).
+//   - `skillLineIndex` is omitted (nil) -- spellbook tabs aren't SkillLines.
+static int __fastcall Script_C_SpellBook_GetSpellBookItemInfo(void *L) {
+    if (!Game::Lua::IsNumber(L, 1))
+        return 0; // modern returns nil (not an error) for a bad index
+    const int slot = static_cast<int>(Game::Lua::ToNumber(L, 1));
+    const int bookType = Spell::Lookup::SpellBankArgToBookType(L, 2);
+
+    const int spellID = Spell::Lookup::SpellbookSlotToID(slot, bookType);
+    if (spellID <= 0)
+        return 0; // empty slot / out of range -> nil
+
+    SpellInfoData info;
+    if (!ReadSpellInfo(spellID, info))
+        return 0;
+
+    const uint8_t *record = Spell::Lookup::RecordForID(spellID);
+    const uint32_t attr =
+        record ? Game::Read<uint32_t>(
+                     record, Offsets::OFF_SPELL_RECORD_ATTRIBUTES)
+               : 0u;
+
+    Game::Lua::NewTable(L);
+    SetField(L, "itemType",
+             static_cast<double>(bookType == 1 ? kSpellBookItemTypePetAction
+                                               : kSpellBookItemTypeSpell));
+    SetField(L, "actionID", static_cast<double>(spellID));
+    SetField(L, "spellID", static_cast<double>(spellID));
+    SetField(L, "name", info.name);
+    // subName carries the rank text ("Rank N"); modern uses "" when absent.
+    SetField(L, "subName", info.rank ? info.rank : "");
+    SetField(L, "iconID", info.iconPath); // path string -- see note above
+    SetFieldBool(L, "isPassive", (attr & Offsets::SPELL_ATTR_PASSIVE) != 0);
+    SetFieldBool(L, "isOffSpec", false);
+    return 1;
 }
-static const Game::HookAutoRegister _hookUnlearnSpell{
-    Offsets::FUN_UNLEARN_SPELL, reinterpret_cast<void *>(&UnlearnSpell_h),
-    reinterpret_cast<void **>(&g_origUnlearnSpell)};
+
+// --- Documentation ----------------------------------------------------------
+
+// The globals that share `ResolveLuaArgsToSpellID`: a spell ID, a name, a
+// "name(Rank N)", or a link — or a spellbook slot when a bookType follows.
+static const Game::Doc::Field kSpellOrSlotArgs[] = {
+    Game::Doc::Req("spell", "SpellIdentifier",
+                   "A spell ID, name, or link, or a spellbook slot when bookType is given."),
+    Game::Doc::Opt("bookType", "string", nullptr,
+                   "\"spell\" or \"pet\"; makes the first argument a slot in that book."),
+};
+
+// The `C_Spell.*` forms take one identifier; they have no slot form.
+static const Game::Doc::Field kSpellIdArgs[] = {
+    Game::Doc::Req("spell", "SpellIdentifier", "A spell ID, spell link, or spell name."),
+};
+
+static const Game::Doc::Field kGetSpellInfoRets[] = {
+    Game::Doc::Opt("name", "string", nullptr,
+                   "Localized spell name; all returns are nil for an unknown spell."),
+    Game::Doc::Opt("rank", "string", nullptr, "Localized rank text, such as \"Rank 2\"."),
+    Game::Doc::Opt("icon", "string", nullptr, "Icon texture path."),
+    Game::Doc::Opt("cost", "number", nullptr, "Base power cost."),
+    Game::Doc::Opt("isFunnel", "bool", nullptr, "True for a health funnel spell."),
+    Game::Doc::Opt("powerType", "number", nullptr,
+                   "0 mana, 1 rage, 2 focus, 3 energy, 4 happiness."),
+    Game::Doc::Opt("castTime", "number", nullptr,
+                   "Base cast time in milliseconds; 0 when instant."),
+    Game::Doc::Opt("minRange", "number", nullptr, "Minimum range in yards."),
+    Game::Doc::Opt("maxRange", "number", nullptr, "Maximum range in yards."),
+    Game::Doc::Opt("spellID", "number", nullptr, "The spell ID the arguments resolved to."),
+};
+static const Game::Doc::Function kGetSpellInfo{
+    "Name, rank, icon, cost, cast time and range for any spell, plus its ID.",
+    kSpellOrSlotArgs, kGetSpellInfoRets, "SpellGlobals"};
+
+static const Game::Doc::Field kSpellInfoFields[] = {
+    Game::Doc::Opt("name", "string", nullptr, "Localized spell name."),
+    Game::Doc::Opt("iconID", "string", nullptr,
+                   "Icon texture path; give it to texture:SetTexture."),
+    Game::Doc::Req("castTime", "number", "Base cast time in milliseconds; 0 when instant."),
+    Game::Doc::Req("minRange", "number", "Minimum range in yards."),
+    Game::Doc::Req("maxRange", "number", "Maximum range in yards."),
+    Game::Doc::Req("spellID", "number", "The spell ID."),
+    Game::Doc::Opt("rank", "string", nullptr, "Localized rank text, such as \"Rank 2\"."),
+    Game::Doc::Req("cost", "number", "Base power cost."),
+    Game::Doc::Req("isFunnel", "bool", "True for a health funnel spell."),
+    Game::Doc::Req("powerType", "number", "0 mana, 1 rage, 2 focus, 3 energy, 4 happiness."),
+};
+static const Game::Doc::Structure kSpellInfoStruct{
+    "SpellInfo", "Spell", kSpellInfoFields, "Static data for one spell."};
+
+static const Game::Doc::Field kCSpellInfoRets[] = {
+    Game::Doc::Opt("info", "SpellInfo", nullptr, "Nil for an unknown spell."),
+};
+static const Game::Doc::Function kCSpellGetSpellInfo{
+    "A table of the spell's name, icon, cast time, range and cost.",
+    kSpellIdArgs, kCSpellInfoRets};
+
+static const Game::Doc::Field kSpellNameRets[] = {
+    Game::Doc::Opt("name", "string", nullptr,
+                   "Nil for an unknown spell, or one with no name in this locale."),
+};
+static const Game::Doc::Function kCSpellGetSpellName{
+    "The localized name of a spell.", kSpellIdArgs, kSpellNameRets};
+
+static const Game::Doc::Field kSpellTextureRets[] = {
+    Game::Doc::Opt("texture", "string", nullptr,
+                   "Icon texture path; nil when the spell or its icon is unknown."),
+};
+static const Game::Doc::Function kCSpellGetSpellTexture{
+    "The icon texture path for a spell.", kSpellIdArgs, kSpellTextureRets};
+
+static const Game::Doc::Field kGetSpellLinkRets[] = {
+    Game::Doc::Opt("link", "string", nullptr,
+                   "Chat hyperlink for the spell; nil for an unknown spell."),
+    Game::Doc::Opt("spellID", "number", nullptr, "The spell ID the arguments resolved to."),
+};
+static const Game::Doc::Function kGetSpellLink{
+    "The chat hyperlink for a spell, with the spell ID it resolves to.",
+    kSpellOrSlotArgs, kGetSpellLinkRets, "SpellGlobals"};
+
+static const Game::Doc::Field kCSpellLinkRets[] = {
+    Game::Doc::Opt("link", "string", nullptr,
+                   "Chat hyperlink for the spell; nil for an unknown spell."),
+};
+static const Game::Doc::Function kCSpellGetSpellLink{
+    "The chat hyperlink for a spell.", kSpellIdArgs, kCSpellLinkRets};
+
+static const Game::Doc::Field kFindSlotArgs[] = {
+    Game::Doc::Req("spellID", "number", "The spell to look for."),
+};
+static const Game::Doc::Field kFindSlotRets[] = {
+    Game::Doc::Opt("slot", "luaIndex", nullptr,
+                   "Spellbook slot holding the spell; nil when neither book has it."),
+    Game::Doc::Opt("bookType", "string", nullptr, "\"spell\" or \"pet\"."),
+};
+static const Game::Doc::Function kFindSpellBookSlotByID{
+    "The spellbook slot and book that hold a spell.",
+    kFindSlotArgs, kFindSlotRets, "SpellGlobals"};
+
+static const Game::Doc::Field kIsPassiveRets[] = {
+    Game::Doc::Opt("isPassive", "bool", nullptr,
+                   "True when the spell applies itself with no cast; nil for an unknown spell."),
+};
+static const Game::Doc::Function kIsPassiveSpell{
+    "Whether a spell is passive, so it needs no cast.",
+    kSpellOrSlotArgs, kIsPassiveRets, "SpellGlobals"};
+static const Game::Doc::Function kCSpellIsSpellPassive{
+    "Whether a spell is passive, so it needs no cast.",
+    kSpellIdArgs, kIsPassiveRets};
+
+static const Game::Doc::Field kIsPlayerSpellArgs[] = {
+    Game::Doc::Req("spellID", "number", "The spell to test."),
+};
+static const Game::Doc::Field kIsPlayerSpellRets[] = {
+    Game::Doc::Req("isKnown", "bool", "True when the player knows this exact spell ID."),
+};
+static const Game::Doc::Function kIsPlayerSpell{
+    "Whether the player knows the spell, talents, racials and recipes included.",
+    kIsPlayerSpellArgs, kIsPlayerSpellRets, "SpellGlobals"};
+
+static const Game::Doc::Field kCanDualWieldRets[] = {
+    Game::Doc::Req("canDualWield", "bool", "True when the player has learned Dual Wield."),
+};
+static const Game::Doc::Function kCanDualWield{
+    "Whether the player can hold a weapon in the off hand.",
+    {}, kCanDualWieldRets, "SpellGlobals"};
+
+static const Game::Doc::Field kIsSpellKnownArgs[] = {
+    Game::Doc::Req("spellID", "number", "The spell to test."),
+    Game::Doc::Opt("isPet", "bool", "false", "Search the pet spellbook instead."),
+};
+static const Game::Doc::Field kIsSpellKnownRets[] = {
+    Game::Doc::Req("isKnown", "bool", "True when the chosen spellbook holds the spell."),
+};
+static const Game::Doc::Function kIsSpellKnown{
+    "Whether the spell has a button in the player's or the pet's spellbook.",
+    kIsSpellKnownArgs, kIsSpellKnownRets, "SpellGlobals"};
+
+static const Game::Doc::Field kIsHarmfulRets[] = {
+    Game::Doc::Req("isHarmful", "bool", "True when an effect of the spell aims at an enemy."),
+};
+static const Game::Doc::Function kIsHarmfulSpell{
+    "Whether the spell aims at an enemy.",
+    kSpellOrSlotArgs, kIsHarmfulRets, "SpellGlobals"};
+static const Game::Doc::Function kCSpellIsSpellHarmful{
+    "Whether the spell aims at an enemy.", kSpellIdArgs, kIsHarmfulRets};
+
+static const Game::Doc::Field kIsHelpfulRets[] = {
+    Game::Doc::Req("isHelpful", "bool",
+                   "True when an effect of the spell aims at yourself or a friendly unit."),
+};
+static const Game::Doc::Function kIsHelpfulSpell{
+    "Whether the spell aims at yourself or a friendly unit.",
+    kSpellOrSlotArgs, kIsHelpfulRets, "SpellGlobals"};
+static const Game::Doc::Function kCSpellIsSpellHelpful{
+    "Whether the spell aims at yourself or a friendly unit.",
+    kSpellIdArgs, kIsHelpfulRets};
+
+static const Game::Doc::Field kSpellBookItemInfoFields[] = {
+    Game::Doc::Req("itemType", "SpellBookItemType", "Spell for the player book, PetAction for the pet book."),
+    Game::Doc::Req("actionID", "number", "The spell ID; the same value as spellID."),
+    Game::Doc::Req("spellID", "number", "The spell ID in the slot."),
+    Game::Doc::Opt("name", "string", nullptr, "Localized spell name."),
+    Game::Doc::Req("subName", "string", "Rank text, such as \"Rank 3\", or an empty string."),
+    Game::Doc::Opt("iconID", "string", nullptr,
+                   "Icon texture path; give it to texture:SetTexture."),
+    Game::Doc::Req("isPassive", "bool", "True for a passive spell."),
+    Game::Doc::Req("isOffSpec", "bool", "Always false."),
+};
+static const Game::Doc::Structure kSpellBookItemInfoStruct{
+    "SpellBookItemInfo", "SpellBook", kSpellBookItemInfoFields,
+    "The spell that fills one spellbook slot."};
+
+static const Game::Doc::Field kGetSpellBookItemInfoArgs[] = {
+    Game::Doc::Req("slotIndex", "luaIndex", "Slot number, counted across the whole book."),
+    Game::Doc::Opt("spellBank", "SpellBookSpellBank", "0",
+                   "Which book to read; Player by default."),
+};
+static const Game::Doc::Field kGetSpellBookItemInfoRets[] = {
+    Game::Doc::Opt("info", "SpellBookItemInfo", nullptr,
+                   "Nil for an empty slot, or a slot past the end of the book."),
+};
+static const Game::Doc::Function kGetSpellBookItemInfo{
+    "A table describing the spell in a spellbook slot.",
+    kGetSpellBookItemInfoArgs, kGetSpellBookItemInfoRets};
+
+static const Game::Doc::Field kByAuraArgs[] = {
+    Game::Doc::Req("auraName", "number", "The aura code an effect of the spell must apply."),
+};
+static const Game::Doc::Field kByAuraRets[] = {
+    Game::Doc::Req("spellIDs", "table",
+                   "Spell IDs in ascending order; empty when no known spell applies the aura."),
+};
+static const Game::Doc::Function kGetPlayerSpellsByAura{
+    "Every spell the player knows that applies the given aura.",
+    kByAuraArgs, kByAuraRets};
+
+static const Game::Doc::Field kDisenchantRets[] = {
+    Game::Doc::Req("hasDisenchant", "bool", "True when a known spell disenchants items."),
+};
+static const Game::Doc::Function kContainsAnyDisenchantSpell{
+    "Whether the player knows a spell that disenchants items.", {}, kDisenchantRets};
 
 static void RegisterLuaFunctions() {
-    Game::Lua::RegisterGlobalFunction("GetSpellInfo", &Script_GetSpellInfo);
-    Game::Lua::RegisterGlobalFunction("GetSpellLink", &Script_GetSpellLink);
+    Game::Lua::RegisterGlobalFunction("GetSpellInfo", &Script_GetSpellInfo, &kGetSpellInfo);
+    Game::Lua::RegisterGlobalFunction("GetSpellLink", &Script_GetSpellLink, &kGetSpellLink);
     Game::Lua::RegisterGlobalFunction("FindSpellBookSlotByID",
-                                      &Script_FindSpellBookSlotByID);
-    Game::Lua::RegisterGlobalFunction("IsPassiveSpell", &Script_IsPassiveSpell);
-    Game::Lua::RegisterGlobalFunction("IsPlayerSpell", &Script_IsPlayerSpell);
-    Game::Lua::RegisterGlobalFunction("CanDualWield", &Script_CanDualWield);
-    Game::Lua::RegisterGlobalFunction("IsSpellKnown", &Script_IsSpellKnown);
-    Game::Lua::RegisterGlobalFunction("IsHarmfulSpell", &Script_IsHarmfulSpell);
-    Game::Lua::RegisterGlobalFunction("IsHelpfulSpell", &Script_IsHelpfulSpell);
-    Game::Lua::RegisterTableFunction("C_Spell", "GetSpellLink", &Script_C_GetSpellLink);
-    Game::Lua::RegisterTableFunction("C_Spell", "GetSpellInfo", &Script_C_GetSpellInfo);
-    Game::Lua::RegisterTableFunction("C_Spell", "GetSpellName", &Script_C_GetSpellName);
-    Game::Lua::RegisterTableFunction("C_Spell", "GetSpellTexture", &Script_C_GetSpellTexture);
-    Game::Lua::RegisterTableFunction("C_Spell", "IsSpellPassive", &Script_C_IsSpellPassive);
+                                      &Script_FindSpellBookSlotByID,
+                                      &kFindSpellBookSlotByID);
+    Game::Lua::RegisterGlobalFunction("IsPassiveSpell", &Script_IsPassiveSpell,
+                                      &kIsPassiveSpell);
+    Game::Lua::RegisterGlobalFunction("IsPlayerSpell", &Script_IsPlayerSpell,
+                                      &kIsPlayerSpell);
+    Game::Lua::RegisterGlobalFunction("CanDualWield", &Script_CanDualWield, &kCanDualWield);
+    Game::Lua::RegisterGlobalFunction("IsSpellKnown", &Script_IsSpellKnown, &kIsSpellKnown);
+    Game::Lua::RegisterGlobalFunction("IsHarmfulSpell", &Script_IsHarmfulSpell,
+                                      &kIsHarmfulSpell);
+    Game::Lua::RegisterGlobalFunction("IsHelpfulSpell", &Script_IsHelpfulSpell,
+                                      &kIsHelpfulSpell);
+    Game::Lua::RegisterTableFunction("C_Spell", "GetSpellLink", &Script_C_GetSpellLink,
+                                      &kCSpellGetSpellLink);
+    Game::Lua::RegisterTableFunction("C_Spell", "GetSpellInfo", &Script_C_GetSpellInfo,
+                                      &kCSpellGetSpellInfo);
+    Game::Lua::RegisterTableFunction("C_Spell", "GetSpellName", &Script_C_GetSpellName,
+                                      &kCSpellGetSpellName);
+    Game::Lua::RegisterTableFunction("C_Spell", "GetSpellTexture", &Script_C_GetSpellTexture,
+                                      &kCSpellGetSpellTexture);
+    Game::Lua::RegisterTableFunction("C_Spell", "IsSpellPassive", &Script_C_IsSpellPassive,
+                                      &kCSpellIsSpellPassive);
     Game::Lua::RegisterTableFunction("C_Spell", "IsSpellHarmful",
-                                      &Script_C_Spell_IsSpellHarmful);
+                                      &Script_C_Spell_IsSpellHarmful,
+                                      &kCSpellIsSpellHarmful);
     Game::Lua::RegisterTableFunction("C_Spell", "IsSpellHelpful",
-                                      &Script_C_Spell_IsSpellHelpful);
+                                      &Script_C_Spell_IsSpellHelpful,
+                                      &kCSpellIsSpellHelpful);
+    Game::Lua::RegisterTableFunction("C_SpellBook", "GetSpellBookItemInfo",
+                                      &Script_C_SpellBook_GetSpellBookItemInfo,
+                                      &kGetSpellBookItemInfo);
+    Game::Lua::RegisterTableFunction("C_SpellBook", "GetPlayerSpellsByAura",
+                                      &Script_GetPlayerSpellsByAura,
+                                      &kGetPlayerSpellsByAura);
+    Game::Lua::RegisterTableFunction("C_SpellBook", "ContainsAnyDisenchantSpell",
+                                      &Script_ContainsAnyDisenchantSpell,
+                                      &kContainsAnyDisenchantSpell);
+    Game::Lua::RegisterIntegerEnum("Enum", "SpellBookSpellBank",
+                                   kSpellBookSpellBankEntries, 2, "SpellBook");
+    Game::Lua::RegisterIntegerEnum("Enum", "SpellBookItemType",
+                                   kSpellBookItemTypeEntries, 5, "SpellBook");
 }
 
 static const Game::ModuleAutoRegister _autoreg{&RegisterLuaFunctions};

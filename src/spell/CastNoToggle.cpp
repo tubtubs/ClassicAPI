@@ -11,10 +11,16 @@
 // You should have received a copy of the GNU General Public License along with
 // ClassicAPI. If not, see <https://www.gnu.org/licenses/>.
 
-// `CastSpellNoToggle(name | spellID)` — spam-safe variant of
-// `CastSpellByName` that won't toggle off an already-active self-aura
-// or auto-repeat. Covers everything the modern `/cast !Name` syntax
-// covers in vanilla terms:
+// `CastSpellNoToggle(name | spellID [, unit [, placeGroundSpell]])` —
+// spam-safe variant of `CastSpellByName` that won't toggle off an
+// already-active self-aura or auto-repeat. The optional second argument is a
+// unit token to cast at (issue #22), e.g. `CastSpellNoToggle("Auto Shot",
+// "focus")` or `CastSpellNoToggle("Shoot", "targettarget")`: the spell fires
+// at that unit without changing your current target, and the third argument
+// decides a ground-target spell's aim exactly as `C_Spell.CastAtUnit`'s does.
+// When both are omitted the call behaves exactly as before. This is where the
+// `/cast !Name` line lands (`Util/SlashCommandsRegistry.lua`), and it covers
+// everything that syntax covers in vanilla terms:
 //
 //   - Auto-repeat: Shoot, Auto-Shot, Wand. Engine tracks via the
 //     `VAR_ACTIVE_AUTO_REPEAT_SPELL` global.
@@ -41,6 +47,7 @@
 #include "Game.h"
 #include "Offsets.h"
 #include "spell/Arg.h"
+#include "spell/AtUnit.h"
 #include "spell/Lookup.h"
 #include "spell/MacroPrimarySpell.h"
 
@@ -52,10 +59,6 @@ namespace Spell::CastNoToggle {
 
 namespace {
 
-// Offset of the locale-resolved Name[9] table inside a Spell.dbc record
-// (same value used by `Spell::Info`; duplicated here to keep this module
-// header-free).
-constexpr int OFF_NAME = 0x1E0;
 
 using CastSpellByName_t = int(__fastcall *)(void *L);
 using NameToSlot_t = int(__fastcall *)(const char *name, int *outBookType);
@@ -65,7 +68,7 @@ const CastSpellByName_t Script_CastSpellByName_Engine =
     reinterpret_cast<CastSpellByName_t>(Offsets::FUN_SCRIPT_CAST_SPELL_BY_NAME);
 
 int ReadActiveSpellID() {
-    return *reinterpret_cast<const int *>(
+    return Game::Read<int>(
         static_cast<uintptr_t>(Offsets::VAR_ACTIVE_AUTO_REPEAT_SPELL));
 }
 
@@ -73,9 +76,9 @@ const char *LocaleName(int spellID) {
     const uint8_t *record = Spell::Lookup::RecordForID(spellID);
     if (record == nullptr)
         return nullptr;
-    const int locale = *reinterpret_cast<const int *>(
+    const int locale = Game::Read<int>(
         static_cast<uintptr_t>(Offsets::VAR_LOCALE_INDEX));
-    return *reinterpret_cast<const char *const *>(record + OFF_NAME + locale * 4);
+    return Game::Read<const char *>(record, Offsets::OFF_SPELL_NAMES + locale * 4);
 }
 
 // Case-insensitive name match for the auto-repeat-name gate. Walks
@@ -104,7 +107,7 @@ bool NameMatches(const char *userInput, const char *spellName) {
 }
 
 // Resolves `name` to a (slot, bookType) pair via the engine's name
-// resolver. Goes through `Spell::CastByID`'s hook so numeric input
+// resolver. Goes through `Spell::NameResolve`'s hook so numeric input
 // like `"5019"` is accepted in addition to spell names. Returns -1 on
 // resolution failure.
 int ResolveSlot(const char *name, int *outBookType) {
@@ -122,7 +125,8 @@ bool IsAuraToggleActive(int slot, int bookType) {
     return fn(static_cast<unsigned>(slot), bookType) != 0;
 }
 
-// `CastSpellNoToggle(name | spellID)` — see the file-header block.
+// `CastSpellNoToggle(name | spellID [, unit [, placeGroundSpell]])` — see the
+// file-header block.
 // Returns a boolean indicating whether the requested spell is, at
 // function exit, in the "active" state the caller asked for: true
 // when we either started the cast or determined the spell was already
@@ -150,13 +154,53 @@ int __fastcall Script_CastSpellNoToggle(void *L) {
             Game::Lua::PushBool(L, false);
             return 1;
         }
+        // Tolerate the macro `!Name` prefix: this call is exactly what it
+        // asks for, so the name behind it is the spell to compare and cast.
+        // The engine's resolver drops the prefix too (`Spell::NameResolve`),
+        // but the auto-repeat name compare below is ours.
+        const char *p = s;
+        while (*p == ' ' || *p == '\t')
+            ++p;
+        if (*p == '!') {
+            ++p;
+            while (*p == ' ' || *p == '\t')
+                ++p;
+            if (*p != '\0')
+                s = p;
+        }
         // Copy off Lua's string heap — the SetTop+PushString below
         // could shift it and invalidate `s`.
         std::snprintf(nameBuf, sizeof(nameBuf), "%s", s);
     } else {
-        Game::Lua::Error(L, "Usage: CastSpellNoToggle(\"name\" | spellID)");
+        Game::Lua::Error(
+            L,
+            "Usage: CastSpellNoToggle(\"name\" | spellID [, \"unit\" [, placeGroundSpell]])");
         return 0;
     }
+
+    // Optional arg2 — a unit token to cast at (issue #22), e.g.
+    // CastSpellNoToggle("Auto Shot", "focus"). Copy it off Lua's string
+    // heap now, before the toggle gates and the SetTop below can shift the
+    // stack. A non-string arg2 (nil / absent) leaves unitToken null and the
+    // call keeps its original single-arg behavior.
+    char unitBuf[64];
+    const char *unitToken = nullptr;
+    if (Game::Lua::Type(L, 2) == Game::Lua::TYPE_STRING) {
+        const char *u = Game::Lua::ToString(L, 2);
+        if (u != nullptr && *u != '\0') {
+            std::snprintf(unitBuf, sizeof(unitBuf), "%s", u);
+            unitToken = unitBuf;
+        }
+    }
+
+    // Optional arg3 — the ground-target rule, read exactly as
+    // `C_Spell.CastAtUnit` reads its own third argument: omitted or nil means
+    // place a ground spell at the unit, an explicit false leaves the reticle
+    // up. `lua_type` reports NONE, not nil, past the top of the stack, so test
+    // the top rather than the type alone.
+    const bool placeGroundSpell = Game::Lua::GetTop(L) < 3 ||
+                                  Game::Lua::Type(L, 3) == Game::Lua::TYPE_NIL ||
+                                  Game::Lua::ToBoolean(L, 3) != 0;
 
     // Check 1 — auto-repeat (Shoot / Auto-Shot / Wand). Cheap global
     // read; the spell-cast subsystem owns this state separately from
@@ -185,12 +229,24 @@ int __fastcall Script_CastSpellNoToggle(void *L) {
         return 1;
     }
 
-    // Neither toggle would fire — safe to cast. Delegate to the engine
-    // with a fresh, one-arg stack so `lua_toboolean(L, 2)` (the
-    // `onSelf` flag inside Script_CastSpellByName) sees nil → false.
-    Game::Lua::SetTop(L, 0);
-    Game::Lua::PushString(L, nameBuf);
-    Script_CastSpellByName_Engine(L);
+    // Neither toggle would fire — safe to cast.
+    if (unitToken != nullptr) {
+        // Cast at the given unit without disturbing the current target —
+        // reuses AtUnit's resolve→GUID→dispatch core. A unit-target /
+        // auto-repeat spell fires straight at the unit; a ground spell lands
+        // at its feet unless the caller said not to. Casts by name so numeric
+        // and string input match the no-unit path (highest known rank). A
+        // genuinely unknown token raises the engine's standard "Unknown unit"
+        // error, same as UnitHealth.
+        Spell::AtUnit::CastByName(nameBuf, unitToken, placeGroundSpell);
+    } else {
+        // Delegate to the engine with a fresh, one-arg stack so
+        // `lua_toboolean(L, 2)` (the `onSelf` flag inside
+        // Script_CastSpellByName) sees nil → false.
+        Game::Lua::SetTop(L, 0);
+        Game::Lua::PushString(L, nameBuf);
+        Script_CastSpellByName_Engine(L);
+    }
 
     // Reflect the post-cast state: true if either toggle is now active.
     const bool autoRepeatNow = ReadActiveSpellID() != 0;

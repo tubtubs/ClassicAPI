@@ -13,21 +13,20 @@
 
 #include "map/Area.h"
 
+#include "Game.h"
 #include "Offsets.h"
 #include "dbc/Lookup.h"
 
 namespace Map::Area {
 
 int RowForAreaID(uint32_t areaID) {
-    const int count =
-        *reinterpret_cast<const int *>(Offsets::VAR_WORLDMAP_AREA_COUNT);
+    const int count = Game::Read<int>(Offsets::VAR_WORLDMAP_AREA_COUNT);
     for (int id = 1; id <= count; ++id) {
         const uint8_t *rec = DBC::Record(Offsets::VAR_WORLDMAP_AREA_RECORDS,
                                          Offsets::VAR_WORLDMAP_AREA_COUNT,
                                          static_cast<uint32_t>(id));
         if (rec != nullptr &&
-            *reinterpret_cast<const uint32_t *>(rec + Offsets::OFF_WMA_AREA_ID) ==
-                areaID)
+            Game::Read<uint32_t>(rec, Offsets::OFF_WMA_AREA_ID) == areaID)
             return id;
     }
     return -1;
@@ -35,17 +34,15 @@ int RowForAreaID(uint32_t areaID) {
 
 int CurrentViewRow() {
     const int continent =
-        *reinterpret_cast<const int *>(Offsets::VAR_WORLDMAP_CONTINENT_INDEX);
+        Game::Read<int>(Offsets::VAR_WORLDMAP_CONTINENT_INDEX);
     if (continent < 0)
-        return *reinterpret_cast<const int *>(
-            Offsets::VAR_WORLDMAP_DEFAULT_AREA_ROW);
-    const uint8_t *blob = *reinterpret_cast<const uint8_t *const *>(
-        Offsets::VAR_WORLDMAP_CONTINENT_DATA);
+        return Game::Read<int>(Offsets::VAR_WORLDMAP_DEFAULT_AREA_ROW);
+    const uint8_t *blob =
+        Game::Read<const uint8_t *>(Offsets::VAR_WORLDMAP_CONTINENT_DATA);
     if (blob == nullptr)
         return -1;
     const uint8_t *entry = blob + continent * Offsets::WORLDMAP_CONTINENT_STRIDE;
-    const int zone =
-        *reinterpret_cast<const int *>(Offsets::VAR_WORLDMAP_ZONE_INDEX);
+    const int zone = Game::Read<int>(Offsets::VAR_WORLDMAP_ZONE_INDEX);
     if (zone < 0)
         return *reinterpret_cast<const int *>(entry + 0x04);
     const int *zoneRows = *reinterpret_cast<const int *const *>(entry + 0x10);
@@ -57,10 +54,10 @@ double FloatField(const uint8_t *rec, int off) {
     return *reinterpret_cast<const float *>(rec + off);
 }
 
-// Vanilla zone world-map canvas size (WorldMapDetailFrame); WorldMapOverlay
-// hit rects live in this pixel space.
-constexpr double kZoneCanvasW = 1002.0;
-constexpr double kZoneCanvasH = 668.0;
+// Zone world-map canvas size (WorldMapDetailFrame); WorldMapOverlay hit
+// rects live in this pixel space. Shared with the map-art readers.
+constexpr double kZoneCanvasW = kMapCanvasWidth;
+constexpr double kZoneCanvasH = kMapCanvasHeight;
 
 // How deep inside its containing WorldMapOverlay hit rect the map-percent point
 // (0..100) sits on WMA row `wmaRow` — the max, over that zone's overlays whose
@@ -80,20 +77,19 @@ double OverlayMargin(int wmaRow, double mapXpct, double mapYpct) {
     const double cx = mapXpct / 100.0 * kZoneCanvasW;
     const double cy = mapYpct / 100.0 * kZoneCanvasH;
     const int count =
-        *reinterpret_cast<const int *>(Offsets::VAR_WORLDMAP_OVERLAY_COUNT);
+        Game::Read<int>(Offsets::VAR_WORLDMAP_OVERLAY_COUNT);
     double best = -1.0;
     for (int id = 1; id <= count; ++id) {
         const uint8_t *rec = DBC::Record(Offsets::VAR_WORLDMAP_OVERLAY_RECORDS,
                                          Offsets::VAR_WORLDMAP_OVERLAY_COUNT,
                                          static_cast<uint32_t>(id));
         if (rec == nullptr ||
-            *reinterpret_cast<const int *>(rec + Offsets::OFF_WMO_WORLDMAP_AREA) !=
-                wmaRow)
+            Game::Read<int>(rec, Offsets::OFF_WMO_WORLDMAP_AREA) != wmaRow)
             continue;
-        const int hl = *reinterpret_cast<const int *>(rec + Offsets::OFF_WMO_HITRECT_LEFT);
-        const int hr = *reinterpret_cast<const int *>(rec + Offsets::OFF_WMO_HITRECT_RIGHT);
-        const int ht = *reinterpret_cast<const int *>(rec + Offsets::OFF_WMO_HITRECT_TOP);
-        const int hb = *reinterpret_cast<const int *>(rec + Offsets::OFF_WMO_HITRECT_BOTTOM);
+        const int hl = Game::Read<int>(rec, Offsets::OFF_WMO_HITRECT_LEFT);
+        const int hr = Game::Read<int>(rec, Offsets::OFF_WMO_HITRECT_RIGHT);
+        const int ht = Game::Read<int>(rec, Offsets::OFF_WMO_HITRECT_TOP);
+        const int hb = Game::Read<int>(rec, Offsets::OFF_WMO_HITRECT_BOTTOM);
         const double sw = hr - hl, sh = hb - ht;
         if (sw <= 0.0 || sh <= 0.0)
             continue; // no / degenerate hit rect
@@ -111,8 +107,7 @@ double OverlayMargin(int wmaRow, double mapXpct, double mapYpct) {
 
 bool ZonePercent(int mapID, float x, float y, int *outAreaID, double *outMapX,
                  double *outMapY) {
-    const int count =
-        *reinterpret_cast<const int *>(Offsets::VAR_WORLDMAP_AREA_COUNT);
+    const int count = Game::Read<int>(Offsets::VAR_WORLDMAP_AREA_COUNT);
     // Two candidate tracks over the zones whose rect contains the point:
     //   land* — the point is on the zone's drawn landmass (an overlay hit rect
     //           encloses it): authoritative, wins whenever any zone qualifies.
@@ -132,10 +127,9 @@ bool ZonePercent(int mapID, float x, float y, int *outAreaID, double *outMapX,
                                          static_cast<uint32_t>(id));
         if (rec == nullptr)
             continue;
-        if (*reinterpret_cast<const int *>(rec + Offsets::OFF_WMA_MAP_ID) != mapID)
+        if (Game::Read<int>(rec, Offsets::OFF_WMA_MAP_ID) != mapID)
             continue;
-        const int areaID =
-            *reinterpret_cast<const int *>(rec + Offsets::OFF_WMA_AREA_ID);
+        const int areaID = Game::Read<int>(rec, Offsets::OFF_WMA_AREA_ID);
         if (areaID == 0)
             continue; // continent-spanning row, not a zone
 
@@ -191,15 +185,14 @@ bool ZonePercent(int mapID, float x, float y, int *outAreaID, double *outMapX,
 }
 
 bool PercentInZone(int areaID, float x, float y, double *outMapX, double *outMapY) {
-    const int count =
-        *reinterpret_cast<const int *>(Offsets::VAR_WORLDMAP_AREA_COUNT);
+    const int count = Game::Read<int>(Offsets::VAR_WORLDMAP_AREA_COUNT);
     for (int id = 1; id <= count; ++id) {
         const uint8_t *rec = DBC::Record(Offsets::VAR_WORLDMAP_AREA_RECORDS,
                                          Offsets::VAR_WORLDMAP_AREA_COUNT,
                                          static_cast<uint32_t>(id));
         if (rec == nullptr)
             continue;
-        if (*reinterpret_cast<const int *>(rec + Offsets::OFF_WMA_AREA_ID) != areaID)
+        if (Game::Read<int>(rec, Offsets::OFF_WMA_AREA_ID) != areaID)
             continue;
         const double left = FloatField(rec, Offsets::OFF_WMA_LOC_LEFT);
         const double right = FloatField(rec, Offsets::OFF_WMA_LOC_RIGHT);
@@ -218,18 +211,113 @@ bool PercentInZone(int areaID, float x, float y, double *outMapX, double *outMap
     return false;
 }
 
-bool ContinentPercent(int mapID, float x, float y, double *outPx, double *outPy) {
-    const int count =
-        *reinterpret_cast<const int *>(Offsets::VAR_WORLDMAP_AREA_COUNT);
+int RowForUiMapID(int uiMapID) {
+    if (uiMapID > 0)
+        return RowForAreaID(static_cast<uint32_t>(uiMapID));
+    if (uiMapID < 0) {
+        const int row = -uiMapID;
+        if (DBC::Record(Offsets::VAR_WORLDMAP_AREA_RECORDS,
+                        Offsets::VAR_WORLDMAP_AREA_COUNT,
+                        static_cast<uint32_t>(row)) != nullptr)
+            return row;
+    }
+    return -1;
+}
+
+int UiMapIDForRow(int row) {
+    if (row <= 0)
+        return 0;
+    const uint8_t *rec = DBC::Record(Offsets::VAR_WORLDMAP_AREA_RECORDS,
+                                     Offsets::VAR_WORLDMAP_AREA_COUNT,
+                                     static_cast<uint32_t>(row));
+    if (rec == nullptr)
+        return 0;
+    const int areaID = Game::Read<int>(rec, Offsets::OFF_WMA_AREA_ID);
+    return (areaID != 0) ? areaID : -row;
+}
+
+int ContinentRowForMapID(int mapID) {
+    const int count = Game::Read<int>(Offsets::VAR_WORLDMAP_AREA_COUNT);
     for (int id = 1; id <= count; ++id) {
         const uint8_t *rec = DBC::Record(Offsets::VAR_WORLDMAP_AREA_RECORDS,
                                          Offsets::VAR_WORLDMAP_AREA_COUNT,
                                          static_cast<uint32_t>(id));
         if (rec == nullptr)
             continue;
-        if (*reinterpret_cast<const int *>(rec + Offsets::OFF_WMA_MAP_ID) != mapID)
+        if (Game::Read<int>(rec, Offsets::OFF_WMA_MAP_ID) != mapID)
             continue;
-        if (*reinterpret_cast<const int *>(rec + Offsets::OFF_WMA_AREA_ID) != 0)
+        if (Game::Read<int>(rec, Offsets::OFF_WMA_AREA_ID) != 0)
+            continue; // a zone row, not the continent-spanning one
+        const double left = FloatField(rec, Offsets::OFF_WMA_LOC_LEFT);
+        const double right = FloatField(rec, Offsets::OFF_WMA_LOC_RIGHT);
+        const double top = FloatField(rec, Offsets::OFF_WMA_LOC_TOP);
+        const double bottom = FloatField(rec, Offsets::OFF_WMA_LOC_BOTTOM);
+        if (left - right <= 0.0 || top - bottom <= 0.0)
+            continue; // stray zero-rect continent row (the "World" row)
+        return id;
+    }
+    return -1;
+}
+
+bool RowRect(int row, double *outLeft, double *outRight, double *outTop,
+             double *outBottom, int *outMapID) {
+    if (row <= 0)
+        return false;
+    const uint8_t *rec = DBC::Record(Offsets::VAR_WORLDMAP_AREA_RECORDS,
+                                     Offsets::VAR_WORLDMAP_AREA_COUNT,
+                                     static_cast<uint32_t>(row));
+    if (rec == nullptr)
+        return false;
+    if (outLeft != nullptr)
+        *outLeft = FloatField(rec, Offsets::OFF_WMA_LOC_LEFT);
+    if (outRight != nullptr)
+        *outRight = FloatField(rec, Offsets::OFF_WMA_LOC_RIGHT);
+    if (outTop != nullptr)
+        *outTop = FloatField(rec, Offsets::OFF_WMA_LOC_TOP);
+    if (outBottom != nullptr)
+        *outBottom = FloatField(rec, Offsets::OFF_WMA_LOC_BOTTOM);
+    if (outMapID != nullptr)
+        *outMapID = Game::Read<int>(rec, Offsets::OFF_WMA_MAP_ID);
+    return true;
+}
+
+bool PercentInRow(int row, float x, float y, double *outPx, double *outPy) {
+    double left, right, top, bottom;
+    if (!RowRect(row, &left, &right, &top, &bottom, nullptr))
+        return false;
+    const double spanY = left - right; // horizontal (world Y)
+    const double spanX = top - bottom; // vertical (world X)
+    if (spanX <= 0.0 || spanY <= 0.0)
+        return false;
+    *outPx = (left - y) / spanY;
+    *outPy = (top - x) / spanX;
+    return true;
+}
+
+bool WorldFromRow(int row, double px, double py, double *outX, double *outY) {
+    double left, right, top, bottom;
+    if (!RowRect(row, &left, &right, &top, &bottom, nullptr))
+        return false;
+    const double spanY = left - right;
+    const double spanX = top - bottom;
+    if (spanX <= 0.0 || spanY <= 0.0)
+        return false;
+    *outY = left - px * spanY;
+    *outX = top - py * spanX;
+    return true;
+}
+
+bool ContinentPercent(int mapID, float x, float y, double *outPx, double *outPy) {
+    const int count = Game::Read<int>(Offsets::VAR_WORLDMAP_AREA_COUNT);
+    for (int id = 1; id <= count; ++id) {
+        const uint8_t *rec = DBC::Record(Offsets::VAR_WORLDMAP_AREA_RECORDS,
+                                         Offsets::VAR_WORLDMAP_AREA_COUNT,
+                                         static_cast<uint32_t>(id));
+        if (rec == nullptr)
+            continue;
+        if (Game::Read<int>(rec, Offsets::OFF_WMA_MAP_ID) != mapID)
+            continue;
+        if (Game::Read<int>(rec, Offsets::OFF_WMA_AREA_ID) != 0)
             continue; // want the continent-spanning row
 
         const double left = FloatField(rec, Offsets::OFF_WMA_LOC_LEFT);

@@ -75,8 +75,11 @@
 #include "Offsets.h"
 #include "bag/UpdateDelayed.h"
 #include "event/Custom.h"
+#include "item/CGItem.h"
 #include "item/Location.h"
+#include "object/Resolve.h"
 #include "tick/WorldTick.h"
+#include "time/Clock.h"
 #include "unit/Identity.h"
 
 #include <cstdint>
@@ -126,10 +129,7 @@ bool g_seeded = false;     // true once the login baseline has been taken
 uint64_t g_playerGuid = 0; // re-arm the baseline when this changes (relog)
 uint32_t g_loginMs = 0;    // engine ms at which the current player resolved
 
-uint32_t NowMs() {
-    using TickCount_t = uint32_t(__fastcall *)();
-    return reinterpret_cast<TickCount_t>(Offsets::FUN_OS_TICKCOUNT_MS)();
-}
+using Time::Clock::NowMs;
 
 bool Contains(const uint64_t *arr, int count, uint64_t guid) {
     for (int i = 0; i < count; ++i)
@@ -196,8 +196,7 @@ bool RemoveFrom(uint64_t *arr, int *count, uint64_t guid) {
 uint64_t ItemGUID(const uint8_t *item) {
     if (item == nullptr)
         return 0;
-    auto *instance = *reinterpret_cast<const uint8_t *const *>(
-        item + Offsets::OFF_ITEM_INSTANCE_BLOCK);
+    auto *instance = Item::InstanceBlock(item);
     if (instance == nullptr)
         return 0;
     return *reinterpret_cast<const uint64_t *>(
@@ -265,16 +264,11 @@ void AppendGuidArray(const uint8_t *invMgr, int first, int last, uint64_t *out,
             AddUnique(out, count, arr[slot]);
 }
 
-using ResolveByGuid_t = void *(__fastcall *)(int type, const char *debugName,
-                                             uint32_t guidLo, uint32_t guidHi,
-                                             int priority);
 const uint8_t *ResolveByGuid(int type, uint64_t guid) {
     if (guid == 0)
         return nullptr;
-    auto fn = reinterpret_cast<ResolveByGuid_t>(Offsets::FUN_OBJECT_RESOLVE_BY_GUID);
     return static_cast<const uint8_t *>(
-        fn(type, "ItemMgr", static_cast<uint32_t>(guid),
-           static_cast<uint32_t>(guid >> 32), 0x172));
+        Object::ByGuid(type, guid, "ItemMgr", 0x172));
 }
 
 // Appends every item the player owns that ISN'T in bags 0..4 — worn
@@ -308,7 +302,7 @@ void AppendNonBagOwned(uint64_t *out, int *count) {
         return;
     for (int slot = Offsets::INVMGR_BANK_BAG_FIRST_SLOT;
          slot <= Offsets::INVMGR_BANK_BAG_LAST_SLOT; ++slot) {
-        const uint8_t *bag = ResolveByGuid(Offsets::OBJ_TYPE_CONTAINER, playerArr[slot]);
+        const uint8_t *bag = ResolveByGuid(Offsets::TYPEMASK_CONTAINER, playerArr[slot]);
         if (bag == nullptr)
             continue;
         auto *bagInvMgr =
@@ -324,7 +318,7 @@ void AppendNonBagOwned(uint64_t *out, int *count) {
 }
 
 void FireChanged() {
-    Event::Custom::Fire(Event::Custom::Lookup(kEvtNewItems), "");
+    Event::Custom::Fire(_r.Slot(), "");
 }
 
 // Login-baseline handler. Runs every frame but does no work once the

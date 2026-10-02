@@ -47,11 +47,15 @@ using FindCVar_t = void *(__fastcall *)(const char *name);
 using SetCVarValue_t = char(__thiscall *)(void *cvar, const char *value,
                                           int a3, int a4, int a5, int a6);
 
-const char *ReadValue(void *cvar) {
+const char *ReadStringField(void *cvar, uintptr_t offset) {
     if (cvar == nullptr)
         return nullptr;
     return *reinterpret_cast<const char *const *>(
-        static_cast<const uint8_t *>(cvar) + Offsets::OFF_CVAR_VALUE_STR);
+        static_cast<const uint8_t *>(cvar) + offset);
+}
+
+const char *ReadValue(void *cvar) {
+    return ReadStringField(cvar, Offsets::OFF_CVAR_VALUE_STR);
 }
 
 } // namespace
@@ -76,6 +80,10 @@ const char *GetString(Handle cvar) {
     return ReadValue(cvar);
 }
 
+const char *GetDefaultString(Handle cvar) {
+    return ReadStringField(cvar, Offsets::OFF_CVAR_DEFAULT_STR);
+}
+
 int GetInt(Handle cvar, int fallback) {
     const char *value = ReadValue(cvar);
     if (value == nullptr || value[0] == '\0')
@@ -83,11 +91,11 @@ int GetInt(Handle cvar, int fallback) {
     return std::atoi(value);
 }
 
-void SetString(Handle cvar, const char *value) {
+void SetString(Handle cvar, const char *value, bool persist) {
     if (cvar == nullptr || value == nullptr)
         return;
     auto set = reinterpret_cast<SetCVarValue_t>(Offsets::FUN_SET_CVAR_VALUE);
-    set(cvar, value, 1, 0, 0, 1);
+    set(cvar, value, 1, 0, 0, persist ? 1 : 0);
 }
 
 void SetInt(Handle cvar, int value) {

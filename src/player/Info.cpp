@@ -35,10 +35,13 @@
 // them, or they appear in guild login spam), they will be.
 
 #include "Game.h"
+#include "Info.h"
 #include "NameCache.h"
 #include "Offsets.h"
-#include "dbc/Lookup.h"
+#include "dbc/Names.h"
+#include "friendlist/FriendList.h"
 #include "guid/Guid.h"
+#include "object/Resolve.h"
 #include "unit/Identity.h"
 
 #include <cstdint>
@@ -47,6 +50,17 @@
 namespace Player::Info {
 
 namespace {
+
+// Bounded, always-terminated copy. Returns true iff a non-empty name landed.
+bool CopyName(char *dst, const char *src, size_t n) {
+    if (dst == nullptr || n == 0)
+        return false;
+    size_t i = 0;
+    for (; src && src[i] && i + 1 < n; ++i)
+        dst[i] = src[i];
+    dst[i] = '\0';
+    return dst[0] != '\0';
+}
 
 // Thin shim: parses a GUID string and splits to hi/lo dwords. Shared parser
 // lives in `Guid::Parse`.
@@ -108,18 +122,10 @@ int __fastcall Script_GetPlayerInfoByGUID(void *L) {
         realm = "";
     }
 
-    const char *englishClass = DBC::StringField(
-        Offsets::VAR_CHRCLASSES_RECORDS, Offsets::VAR_CHRCLASSES_COUNT,
-        classID, Offsets::OFF_CHRCLASSES_FILENAME);
-    const char *localizedClass = DBC::LocalizedField(
-        Offsets::VAR_CHRCLASSES_RECORDS, Offsets::VAR_CHRCLASSES_COUNT,
-        classID, Offsets::OFF_CHRCLASSES_NAMES);
-    const char *englishRace = DBC::StringField(
-        Offsets::VAR_CHRRACES_RECORDS, Offsets::VAR_CHRRACES_COUNT,
-        race, Offsets::OFF_CHRRACES_FILENAME);
-    const char *localizedRace = DBC::LocalizedField(
-        Offsets::VAR_CHRRACES_RECORDS, Offsets::VAR_CHRRACES_COUNT,
-        race, Offsets::OFF_CHRRACES_NAMES);
+    const char *englishClass = DBC::ClassToken(classID);
+    const char *localizedClass = DBC::ClassName(classID);
+    const char *englishRace = DBC::RaceToken(race);
+    const char *localizedRace = DBC::RaceName(race);
 
     Game::Lua::PushString(L, localizedClass ? localizedClass : "");
     Game::Lua::PushString(L, englishClass ? englishClass : "");
@@ -143,18 +149,10 @@ int __fastcall Script_GetPlayerInfoByGUID(void *L) {
 // inside the Entry value.
 int PushFromNameCacheEntry(void *L, const char *name,
                            const NameCache::Entry &e) {
-    const char *englishClass = DBC::StringField(
-        Offsets::VAR_CHRCLASSES_RECORDS, Offsets::VAR_CHRCLASSES_COUNT,
-        e.classID, Offsets::OFF_CHRCLASSES_FILENAME);
-    const char *localizedClass = DBC::LocalizedField(
-        Offsets::VAR_CHRCLASSES_RECORDS, Offsets::VAR_CHRCLASSES_COUNT,
-        e.classID, Offsets::OFF_CHRCLASSES_NAMES);
-    const char *englishRace = DBC::StringField(
-        Offsets::VAR_CHRRACES_RECORDS, Offsets::VAR_CHRRACES_COUNT,
-        e.raceID, Offsets::OFF_CHRRACES_FILENAME);
-    const char *localizedRace = DBC::LocalizedField(
-        Offsets::VAR_CHRRACES_RECORDS, Offsets::VAR_CHRRACES_COUNT,
-        e.raceID, Offsets::OFF_CHRRACES_NAMES);
+    const char *englishClass = DBC::ClassToken(e.classID);
+    const char *localizedClass = DBC::ClassName(e.classID);
+    const char *englishRace = DBC::RaceToken(e.raceID);
+    const char *localizedRace = DBC::RaceName(e.raceID);
 
     Game::Lua::PushString(L, localizedClass ? localizedClass : "");
     Game::Lua::PushString(L, englishClass ? englishClass : "");
@@ -180,9 +178,12 @@ int PushFromNameCacheEntry(void *L, const char *name,
 //      `FUN_OBJECT_GET_NAME` on it; this routes through the player
 //      NameCache for players AND the creature cache for NPCs, so it
 //      works for both with a single call.
-//   2. If the unit isn't currently synced (ex-target who logged off,
-//      player encountered earlier in chat but no longer visible),
-//      fall back to the persistent NameCache (when enabled).
+//   2. Friends list. It keeps name + GUID for online AND offline
+//      friends (SMSG_FRIEND_LIST), so a friend resolves even while
+//      unsynced and never seen in chat. Always on (not opt-in).
+//   3. If still unresolved (ex-target who logged off, player
+//      encountered earlier in chat but no longer visible), fall back
+//      to the persistent NameCache (when enabled).
 //
 // `realm` is always `""` in vanilla — the engine doesn't populate
 // per-player realm names and 1.12 has no cross-realm interaction.
@@ -194,8 +195,8 @@ int PushFromNameCacheEntry(void *L, const char *name,
 //   - Missing or non-string arg (raises an error rather than return).
 //   - Unparseable GUID string.
 //   - Zero / NULL GUID.
-//   - GUID not resolvable in the object manager AND not in persistent
-//     NameCache (i.e., we've never seen this unit).
+//   - GUID not resolvable in the object manager, not on the friends
+//     list, AND not in the persistent NameCache (never seen this unit).
 //
 // Doesn't trigger a network query on miss — passive read, same as
 // `GetPlayerInfoByGUID`. Use `C_PlayerCache.RememberPlayer` or let
@@ -205,50 +206,14 @@ int __fastcall Script_UnitNameFromGUID(void *L) {
         Game::Lua::Error(L, "Usage: UnitNameFromGUID(\"0x...\")");
         return 0;
     }
-    const char *guidStr = Game::Lua::ToString(L, 1);
     uint32_t hi, lo;
-    if (!ParseGUID(guidStr, hi, lo))
+    if (!ParseGUID(Game::Lua::ToString(L, 1), hi, lo))
         return 0;
-    if (hi == 0 && lo == 0)
+    char name[64];
+    if (!NameFromGuid((static_cast<uint64_t>(hi) << 32) | lo, name, sizeof name))
         return 0;
-
-    // Object-manager path — TYPEMASK_OBJECT (0x01) is permissive; the
-    // name getter at `FUN_OBJECT_GET_NAME` does its own type check and
-    // safely returns the "UNKNOWNOBJECT" sentinel for non-unit
-    // objects (gameobjects etc.), so we just gate on the sentinel
-    // rather than pre-filtering by typemask.
-    using ObjectPtr_t = void *(__fastcall *)(uint32_t typeMask,
-                                              const char *debugMsg,
-                                              uint32_t guidLo,
-                                              uint32_t guidHi,
-                                              int debugCode);
-    using GetName_t = const char *(__thiscall *)(void *obj, int *outFlags);
-
-    auto objectPtr = reinterpret_cast<ObjectPtr_t>(
-        Offsets::FUN_CLNT_OBJ_MGR_OBJECT_PTR);
-    void *obj = objectPtr(Offsets::TYPEMASK_OBJECT, nullptr, lo, hi, 0);
-    if (obj != nullptr) {
-        auto getName = reinterpret_cast<GetName_t>(Offsets::FUN_OBJECT_GET_NAME);
-        const char *name = getName(obj, nullptr);
-        if (name != nullptr && *name != '\0' &&
-            std::strcmp(name, "UNKNOWNOBJECT") != 0 &&
-            std::strcmp(name, "Unknown Being") != 0) {
-            Game::Lua::PushString(L, name);
-            Game::Lua::PushString(L, "");
-            return 2;
-        }
-    }
-
-    // Object-manager miss / sentinel — fall back to the persistent
-    // NameCache (when enabled). Covers ex-units no longer in the
-    // engine's sync window.
-    const std::string *cachedName = nullptr;
-    const NameCache::Entry *cached = NameCache::Lookup(
-        (static_cast<uint64_t>(hi) << 32) | lo, &cachedName);
-    if (cached == nullptr || cachedName == nullptr || cachedName->empty())
-        return 0;
-    Game::Lua::PushString(L, cachedName->c_str());
-    Game::Lua::PushString(L, "");
+    Game::Lua::PushString(L, name);
+    Game::Lua::PushString(L, ""); // realm — always "" in vanilla
     return 2;
 }
 
@@ -278,6 +243,42 @@ int __fastcall Script_C_PlayerCache_GetPlayerInfoByName(void *L) {
 }
 
 } // namespace
+
+// Resolution order matches vanilla's own `Script_UnitName` (0x00517020):
+//   1. Object manager — TYPEMASK_OBJECT (0x01) is permissive; the name getter
+//      at `FUN_OBJECT_GET_NAME` does its own type check and routes through the
+//      player NameCache for players AND the creature cache for NPCs, so it
+//      resolves both with a single call. It returns the "UNKNOWNOBJECT"
+//      sentinel for non-unit objects (gameobjects etc.), so we gate on that
+//      rather than pre-filtering by typemask.
+//   2. Friends list — keeps name + GUID for online AND offline friends, so a
+//      friend resolves even while unsynced and never seen in chat.
+//   3. Persistent NameCache (when enabled) — ex-units no longer in the sync
+//      window (an ex-target who logged off, a chat name no longer visible).
+bool NameFromGuid(uint64_t guid, char *buf, size_t bufSize) {
+    if (guid == 0 || buf == nullptr || bufSize == 0)
+        return false;
+
+    using GetName_t = const char *(__thiscall *)(void *obj, int *outFlags);
+    if (void *obj = Object::ByGuid(Offsets::TYPEMASK_OBJECT, guid, nullptr, 0)) {
+        auto getName = reinterpret_cast<GetName_t>(Offsets::FUN_OBJECT_GET_NAME);
+        const char *name = getName(obj, nullptr);
+        if (name != nullptr && *name != '\0' &&
+            std::strcmp(name, "UNKNOWNOBJECT") != 0 &&
+            std::strcmp(name, "Unknown Being") != 0)
+            return CopyName(buf, name, bufSize);
+    }
+
+    if (const char *fname = FriendList::NameForGuid(guid))
+        return CopyName(buf, fname, bufSize);
+
+    const std::string *cachedName = nullptr;
+    const NameCache::Entry *cached = NameCache::Lookup(guid, &cachedName);
+    if (cached != nullptr && cachedName != nullptr && !cachedName->empty())
+        return CopyName(buf, cachedName->c_str(), bufSize);
+
+    return false;
+}
 
 static void RegisterLuaFunctions() {
     Game::Lua::RegisterGlobalFunction("GetPlayerInfoByGUID",

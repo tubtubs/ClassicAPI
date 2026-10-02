@@ -59,13 +59,9 @@ namespace NamePlate::Events {
 
 namespace {
 
-constexpr const char *kEventCreated = "NAME_PLATE_CREATED";
-constexpr const char *kEventUnitAdded = "NAME_PLATE_UNIT_ADDED";
-constexpr const char *kEventUnitRemoved = "NAME_PLATE_UNIT_REMOVED";
-
-const Event::Custom::AutoReserve _r1{kEventCreated};
-const Event::Custom::AutoReserve _r2{kEventUnitAdded};
-const Event::Custom::AutoReserve _r3{kEventUnitRemoved};
+const Event::Custom::AutoReserve _evtCreated{"NAME_PLATE_CREATED"};
+const Event::Custom::AutoReserve _evtUnitAdded{"NAME_PLATE_UNIT_ADDED"};
+const Event::Custom::AutoReserve _evtUnitRemoved{"NAME_PLATE_UNIT_REMOVED"};
 
 // Previous tick's snapshot — GUID → nameplate-frame pointer for each
 // nameplated unit. Compared against the next tick's walk to compute
@@ -76,6 +72,11 @@ std::unordered_map<uint64_t, const void *> g_lastTickPlates;
 // the end. File-static so we don't pay the constructor/destructor
 // cycle every frame — `clear()` keeps the existing bucket capacity.
 std::unordered_map<uint64_t, const void *> g_currentTickPlates;
+
+// GUIDs whose ADDED couldn't go out this tick (see `OnWorldTick`). Dropped
+// from the snapshot before the swap so the next tick sees them as new again.
+// File-static for the same reuse-the-capacity reason as the maps above.
+std::vector<uint64_t> g_deferredAdds;
 
 // Frame pointers we've ever surfaced as nameplate plates. First
 // sighting fires NAME_PLATE_CREATED; same pointer reappearing (pool
@@ -98,6 +99,27 @@ std::unordered_set<const void *> g_seenPlates;
 // `nameplateN` unit-token resolver in `unit/TokenExtensions.cpp`.
 std::vector<uint64_t> g_slots;
 
+// The (GUID, Frame) pair currently being torn down, published only for the
+// duration of that GUID's `NAME_PLATE_UNIT_REMOVED` dispatch and cleared
+// immediately after. `NamePlate::Info`'s getters fall back to it because the
+// unit→plate binding they read is already gone by the time the event fires —
+// see `PlateBeingRemoved` in `nameplate/Walk.h` for the retail precedent.
+uint64_t g_removingGuid = 0;
+const void *g_removingPlate = nullptr;
+
+// True iff `plate` is bound to some unit in THIS tick's walk — i.e. the engine
+// pulled the frame off its freelist and rebound it to another unit in the gap
+// between the tick that last saw it and the tick that noticed it was gone.
+// Frames are pooled and reused (`FUN_006087F0`), so the pointer stays valid
+// memory either way; what makes it unservable is that it now belongs to
+// somebody else.
+bool PlateReassigned(const void *plate) {
+    for (const auto &kv : g_currentTickPlates)
+        if (kv.second == plate)
+            return true;
+    return false;
+}
+
 // Assign `guid` the lowest free slot, reusing a vacated one when present and
 // growing the array only when every slot is occupied. Returns the 0-based
 // slot. Never shifts an existing entry.
@@ -112,14 +134,14 @@ int AssignSlot(uint64_t guid) {
     return static_cast<int>(g_slots.size() - 1);
 }
 
-// Fire `eventName` with a pre-formatted string as `arg1`. The engine
+// Fire `event` with a pre-formatted string as `arg1`. The engine
 // dispatcher's `%s` format code pushes the C string into `_G.arg1`
 // as a Lua string — no escaping concerns for our own input
 // (`"nameplateN"`).
-void FireWithString(const char *eventName, const char *value) {
+void FireWithString(const Event::Custom::AutoReserve &event, const char *value) {
     if (value == nullptr)
         return;
-    const int slot = Event::Custom::Lookup(eventName);
+    const int slot = event.Slot();
     if (slot < 0)
         return;
     Event::Custom::Fire(slot, "%s", value);
@@ -168,20 +190,23 @@ int __fastcall NamePlateFieldCb(uint32_t fieldOffset, uint32_t /*size*/,
 // fire so we don't leak our frame into unrelated global state.
 //
 // Lua-stack-clean: stack depth on entry == stack depth on exit.
+//
+// Returns whether the event went out. `false` when the slot isn't claimed yet
+// or there's no Lua state — the caller must not treat the plate as announced.
 using LuaRefRef_t = int(__fastcall *)(void *L, int t);
 using LuaRefUnref_t = void(__fastcall *)(void *L, int t, int ref);
 using LuaRawGetI_t = void(__fastcall *)(void *L, int t, int n);
 
-void FireWithFrame(const char *eventName, void *frame) {
+bool FireWithFrame(const Event::Custom::AutoReserve &event, void *frame) {
     if (frame == nullptr)
-        return;
-    const int slot = Event::Custom::Lookup(eventName);
+        return false;
+    const int slot = event.Slot();
     if (slot < 0)
-        return;
+        return false;
 
     void *L = Game::Lua::State();
     if (L == nullptr)
-        return;
+        return false;
 
     auto refRef = reinterpret_cast<LuaRefRef_t>(
         static_cast<uintptr_t>(Offsets::LUA_REF_REF));
@@ -208,6 +233,7 @@ void FireWithFrame(const char *eventName, void *frame) {
     rawgeti(L, Game::Lua::REGISTRY_INDEX, savedRef);
     Game::Lua::SetTable(L, Game::Lua::GLOBALS_INDEX);
     refUnref(L, Game::Lua::REGISTRY_INDEX, savedRef);
+    return true;
 }
 
 void OnWorldTick() {
@@ -227,17 +253,34 @@ void OnWorldTick() {
     // GUIDs not in last tick's snapshot. The slot is assigned *before*
     // firing so the token resolves to the newly-added plate during the
     // event handler.
+    //
+    // Neither event is recorded as sent until it actually goes out. A fire
+    // dropped because its slot isn't claimed yet retries next tick; otherwise
+    // the plate stays unannounced until /reload clears the diff state. ADDED
+    // also waits for its frame's CREATED, so a handler never gets a unit for a
+    // plate it hasn't been introduced to. A deferred GUID gets no token slot
+    // and no observers, and is kept out of the snapshot, so it produces no
+    // REMOVED for an ADDED that never fired.
+    g_deferredAdds.clear();
     for (const auto &kv : g_currentTickPlates) {
-        if (g_seenPlates.insert(kv.second).second)
-            FireWithFrame(kEventCreated, const_cast<void *>(kv.second));
+        bool announced = g_seenPlates.find(kv.second) != g_seenPlates.end();
+        if (!announced &&
+            FireWithFrame(_evtCreated, const_cast<void *>(kv.second))) {
+            g_seenPlates.insert(kv.second);
+            announced = true;
+        }
         if (g_lastTickPlates.find(kv.first) == g_lastTickPlates.end()) {
+            if (!announced || _evtUnitAdded.Slot() < 0) {
+                g_deferredAdds.push_back(kv.first);
+                continue;
+            }
             const int slot = AssignSlot(kv.first);
             // Watch this unit's fields so UNIT_HEALTH/UNIT_AURA/… fire with
             // its "nameplateN" token (the engine only watches its own
             // target/party/raid tokens, not nameplates).
             Unit::TokenObserver::Register(kv.first, &NamePlateFieldCb);
             char tokenBuf[24];
-            FireWithString(kEventUnitAdded,
+            FireWithString(_evtUnitAdded,
                 FormatNamePlateToken(tokenBuf, sizeof tokenBuf, slot + 1));
         }
     }
@@ -253,15 +296,29 @@ void OnWorldTick() {
             if (it == g_slots.end())
                 continue;
             const int oneBased = static_cast<int>(it - g_slots.begin()) + 1;
+            // Let the handler reach the frame it is being told about; live
+            // state can no longer answer for it. Skipped once the engine has
+            // rebound the frame to another unit.
+            if (!PlateReassigned(kv.second)) {
+                g_removingGuid = kv.first;
+                g_removingPlate = kv.second;
+            }
             char tokenBuf[24];
-            FireWithString(kEventUnitRemoved,
+            FireWithString(_evtUnitRemoved,
                 FormatNamePlateToken(tokenBuf, sizeof tokenBuf, oneBased));
+            g_removingGuid = 0;
+            g_removingPlate = nullptr;
             Unit::TokenObserver::Unregister(kv.first, &NamePlateFieldCb);
             *it = 0; // free the slot (no shift of survivors)
             while (!g_slots.empty() && g_slots.back() == 0)
                 g_slots.pop_back();
         }
     }
+
+    // After the REMOVED pass, which needs every bound frame for
+    // `PlateReassigned`.
+    for (uint64_t guid : g_deferredAdds)
+        g_currentTickPlates.erase(guid);
 
     g_lastTickPlates.swap(g_currentTickPlates);
 }
@@ -294,6 +351,8 @@ void PrepareForReload() {
     g_slots.clear();
 }
 
+static const Game::ReloadAutoRegister _reloadReg{&PrepareForReload};
+
 // Exposed via `nameplate/Walk.h` so the `nameplateN` token resolver
 // in `unit/TokenExtensions.cpp` can map an index to a GUID without seeing
 // the internal array. Returns 0 for an out-of-range OR currently-free slot.
@@ -304,6 +363,14 @@ uint64_t GetGUIDByIndex(int oneBased) {
     if (idx >= g_slots.size())
         return 0;
     return g_slots[idx]; // 0 when the slot is free
+}
+
+// The frame `guid` is losing, for the span of its UNIT_REMOVED dispatch only
+// (see `nameplate/Walk.h`).
+const void *PlateBeingRemoved(uint64_t guid) {
+    if (guid == 0 || guid != g_removingGuid)
+        return nullptr;
+    return g_removingPlate;
 }
 
 // Number of slots (1-based max index). Because the slot array is SPARSE,

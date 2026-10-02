@@ -19,7 +19,15 @@
 // the client ever sees the caster + a server-authoritative duration is the
 // `SMSG_SPELL_GO` packet at cast time. We parse it (the same packet
 // nampower parses for its `AURA_CAST_ON_*` events) and remember, per
-// `(targetGuid, spellId)`, who cast it and when it should expire.
+// `(targetGuid, spellId, casterGuid)`, who cast it and when it should expire.
+//
+// The caster belongs in that key because it belongs in the server's: two
+// same-class raiders' Corruption on one boss are two auras in two descriptor
+// slots, and a `(target, spell)` cache holds one entry for both — the second
+// cast overwrites the first caster's timing, and either copy falling off
+// evicts the survivor's entry too. The descriptor stores only spell IDs, so
+// each entry additionally records the slot its aura was seated in
+// (`OnAuraAdded`), which is what lets a per-slot query name the right instance.
 //
 // `Aura::Data::Push` consults this to fill `sourceUnit` (caster, resolved
 // to a unit token) and `expirationTime` for non-player units. The cache is
@@ -31,16 +39,139 @@
 
 namespace Aura::Source {
 
-// Looks up the cached caster + timing for the aura `spellId` currently on
-// the unit identified by `unitGuid`. Returns true and fills the out params
-// on a hit. `*outExpirationMs` is an absolute `GetTickCount`-epoch timestamp
-// (0 = unknown / infinite-duration aura); `*outDurationMs` is the applied
-// duration including the caster's modifiers (talents etc.; 0 = none) — use
-// it for the `duration` field so it stays consistent with `expirationTime`;
-// `*outCaster` is the caster's 64-bit GUID (never 0 on a hit). Returns false
-// on a miss or for zero inputs.
-bool Get(uint64_t unitGuid, uint32_t spellId, uint64_t *outCaster,
+// `slot` value for a query with no descriptor slot to go on (out-of-range
+// group array, cache fallback) and for an entry not yet seated in one.
+constexpr int SLOT_UNBOUND = -1;
+
+// Looks up the cached caster + timing for the aura `spellId` occupying
+// absolute descriptor `slot` on the unit identified by `unitGuid`. Returns
+// true and fills the out params on a hit. `*outExpirationMs` is an absolute
+// `GetTickCount`-epoch timestamp (0 = unknown / infinite-duration aura);
+// `*outDurationMs` is the applied duration including the caster's modifiers
+// (talents etc.; 0 = none) — use it for the `duration` field so it stays
+// consistent with `expirationTime`; `*outCaster` is the caster's 64-bit GUID
+// (0 when the aura was seen applied but its cast never observed). Returns
+// false on a miss or for zero inputs.
+//
+// Pass `SLOT_UNBOUND` when the caller has no slot. Resolution is by slot
+// first, then by spell ID when the unit carries only one entry for it; two
+// casters' entries with no slot binding resolve to a miss rather than to a
+// coin flip between them.
+bool Get(uint64_t unitGuid, uint32_t spellId, int slot, uint64_t *outCaster,
          uint32_t *outExpirationMs, uint32_t *outDurationMs);
+
+// Refreshes `casterGuid`'s aura on `unitGuid` matching the same selector the
+// duration rules use — SpellFamilyName plus a family-flag overlap and/or a
+// SpellIconID, at least one of the two — to a full duration from now. Returns
+// the spellID refreshed, or 0 if nothing matched. For a mechanic whose
+// duration edit reaches the client too late to be attributed to a cast packet,
+// so no rule can express it.
+uint32_t RefreshDurationByFamily(uint64_t unitGuid, uint32_t family,
+                                 uint64_t mask, uint32_t icon,
+                                 uint64_t casterGuid);
+
+// Mirrors the server's melee-swing judgement refresh (tortoise-wow
+// Unit::DealMeleeDamage): a white swing from `attackerGuid` that dealt any
+// damage refreshes every aura it cast on `unitGuid` whose spell is
+// SPELLFAMILY_PALADIN with SPELL_ATTR_EX3_ALWAYS_HIT (the judgement-debuff
+// marker — all Judgement of Light/Wisdom/Justice/Crusader ranks) back to its
+// own applied duration. Caster-strict: entries with an unknown caster are
+// left alone (a swing gives no proof of ownership). The caster comes from
+// the Judgement-cast attribution inside the SpellGo path — the debuff itself
+// is cast server-side with no client-visible SPELL_GO, so the Judgement cast
+// (20271) is what names the owner: it refresh-with-adoption's existing
+// entries (re-judge = in-place server refresh, no aura event) and arms the
+// fresh application's attribution. Returns the number refreshed. Fed by
+// Aura::JudgementRefresh's SMSG_ATTACKERSTATEUPDATE subscriber.
+int RefreshJudgements(uint64_t unitGuid, uint64_t attackerGuid);
+
+// Re-anchors the expiration of every cached aura the local player cast with
+// `spellId` to `now + remainingMs`. Mirrors the server's channel pushback
+// (Spell::DelayedChannel → Unit::DelaySpellAuraHolder): a hit shortens the
+// channel AND every hit target's holder of the channel spell by the same
+// amount, then tells the caster the new remaining time via MSG_CHANNEL_UPDATE
+// — the packet Spell::Cast feeds this from. Without it a pushed-back channel's
+// target-side aura (Dark Harvest, the drains) keeps its full-length SpellGo
+// expiration and reads late by the accumulated pushback. `durationMs` (the
+// applied total, the bar's full width) is deliberately untouched. Self-target
+// holders are also corrected natively by the server (it re-sends
+// SMSG_UPDATE_AURA_DURATION), so restamping those entries just keeps the two
+// sources agreeing. Caster-only packet ⇒ only the player's channels are
+// correctable; remote pushback stays invisible (see spell/Cast.cpp).
+void RestampPlayerChannel(uint32_t spellId, uint32_t remainingMs);
+
+// Op codes for AddDurationMod (mirror the Lua op strings).
+enum DurationModOp {
+    DURATION_MOD_REFRESH = 0,
+    DURATION_MOD_REDUCE = 1,
+    DURATION_MOD_SET = 2,
+    DURATION_MOD_REMOVE = 3,
+};
+
+// Register a server duration-modifier rule from C++. The trigger is matched by
+// exact `triggerSpellId`; the affected aura by SpellFamilyName plus an
+// `affectedMask` family-flag overlap and/or an `affectedIcon`, at least one of
+// the two (0 drops that half of the test; a custom spell with no family flags
+// is named by its icon alone). `valueMs` is the reduce/set
+// amount in milliseconds (ignored by refresh/remove). Used by src/turtle
+// modules for the server's built-in mods (the family/school-matched variant is
+// still Lua-registerable via C_UnitAuras.RegisterAuraDurationModifierByTrigger).
+// Returns false on bad input or a full table.
+bool AddDurationMod(uint32_t triggerSpellId, uint32_t affectedFamily,
+                    uint64_t affectedMask, uint32_t affectedIcon, int op,
+                    int32_t valueMs);
+
+// Register a server "triggered application" rule from C++: `triggerSpellId`'s
+// SMSG_SPELL_GO — local player casts only — arms its hit targets for a short
+// window, and a caster-less aura application on an armed target matching
+// `affectedFamily` + a family-flag overlap with `affectedMask` is attributed
+// to the player at `durationPct` percent of the aura's own player-modified
+// base duration (the server's `max(1, CalculateDuration(caster) * pct / 100)`).
+// For server mechanics that AddAura an aura off another spell's hit with no
+// cast packet of its own (Turtle's Stinging Nettle: Mongoose Bite / fire-trap
+// effects apply the highest known Serpent Sting rank at 20/40% duration).
+// A re-trigger over an EXISTING matching aura is also handled: the server's
+// re-add reuses the descriptor slot (no application event), so the trigger
+// additionally refreshes the player's existing cached entry in place,
+// honoring the server's keep-the-longer-remaining guard.
+// `gateSpellId` (0 = none) keeps the rule live only while the player knows
+// that spell (a talent-granted passive), read from the spell-knowledge bitmap
+// at trigger time so respecs are honored; rules matching the same trigger are
+// tried in registration order and the first live one arms (register the
+// higher talent rank first). Returns false on bad input or a full table.
+bool AddTriggeredApplication(uint32_t triggerSpellId, uint32_t gateSpellId,
+                             uint32_t affectedFamily, uint64_t affectedMask,
+                             int32_t durationPct);
+
+// Family-mask trigger form of the above: the trigger matches any cast whose
+// spell is SpellFamilyName `triggerFamily` with a family-flag overlap of
+// `triggerMask` — rank-proof when the bit selects exactly the trigger set
+// (verify against the DBC that no unrelated spell shares it first: hunter
+// 0x4 is exactly the fire-trap effects, but 0x2 is Mongoose Bite AND Raptor
+// Strike, so that trigger needs the exact-ID form).
+bool AddTriggeredApplicationByFamily(uint32_t triggerFamily,
+                                     uint64_t triggerMask, uint32_t gateSpellId,
+                                     uint32_t affectedFamily,
+                                     uint64_t affectedMask, int32_t durationPct);
+
+// Register a tick-speed compression rule from C++: while an aura matching
+// (triggerFamily, triggerMask) is live on a target, every cached aura on that
+// target CAST BY THE SAME CASTER matching (affectedFamily, affectedMask) — and
+// whose record carries a periodic damage/leech effect, the server's aura-type
+// gate — drains an extra `pct`% of real time: its expiration moves earlier by
+// pct% of the elapsed overlap. Mirrors a server that preserves an accelerated
+// dot's tick COUNT, so ticking pct% faster consumes it pct% faster with no
+// client-visible aura change (Turtle's Dark Harvest; see
+// src/turtle/DarkHarvest.cpp for the live-behavior derivation). Caster-paired
+// like the server's own check, so another warlock's observed DH compresses
+// THEIR dots' cached timing too; caster-less entries never compress. The
+// trigger's cache-entry lifetime is the compression window — created by its
+// SpellGo, shortened by channel pushback (RestampPlayerChannel), evicted by
+// OnAuraRemoved on interrupt / early end — so the window tracks every edge the
+// server's has. Returns false on bad input or a full table.
+bool AddTickCompression(uint32_t triggerFamily, uint64_t triggerMask,
+                        uint32_t affectedFamily, uint64_t affectedMask,
+                        int32_t pct);
 
 // One cached aura, as returned by `Enumerate`.
 struct CachedAura {
@@ -48,19 +179,27 @@ struct CachedAura {
     uint64_t casterGuid;   // 0 = caster unknown (application hook, no SpellGo)
     uint32_t expirationMs; // 0 = infinite / unknown
     uint32_t durationMs;   // applied duration (incl. caster mods); 0 = none
+    int slot;              // descriptor slot the aura was seated in; feed it
+                           // back to `Get` to reach this exact entry again
 };
 
-// Evicts every cached entry for `unitGuid` whose spellId is NOT present in
-// `presentSpellIds[0..count)`. Used to reconcile the cache against a unit's
-// authoritative descriptor when it is back in view (a populated aura array
-// means the unit is fully synced): an entry the descriptor no longer lists
-// was removed while we couldn't observe it — e.g. a buff the owner cancelled
-// while out of our range, whose `OnAuraRemoved` we never received — so drop
-// it before the descriptor-drop fallback resurfaces it as a phantom. The
-// caller must only invoke this when the descriptor is populated (count > 0);
-// an empty array can't distinguish "out of range" from "genuinely buffless",
-// so reconciling then would wrongly wipe still-valid out-of-range entries.
-void EvictAbsent(uint64_t unitGuid, const uint32_t *presentSpellIds, int count);
+// Evicts every cached entry for `unitGuid` the unit's descriptor contradicts.
+// `slotSpellIds` is the raw `UNIT_FIELD_AURA` array — exactly
+// `Offsets::UNIT_AURA_TOTAL` spell IDs indexed by absolute slot, 0 for empty.
+// Used to reconcile the cache against a unit's authoritative descriptor when
+// it is back in view (a populated aura array means the unit is fully synced):
+// an entry the descriptor no longer backs was removed while we couldn't
+// observe it — e.g. a buff the owner cancelled while out of our range, whose
+// `OnAuraRemoved` we never received — so drop it before the descriptor-drop
+// fallback resurfaces it as a phantom.
+//
+// An entry seated in a slot is checked against THAT slot, so one caster's
+// copy going away retires its own entry even while another caster keeps the
+// spell ID present on the unit. Entries never seated are checked against the
+// whole array. An all-empty array is ignored: it can't distinguish "out of
+// range" from "genuinely buffless", and reconciling then would wrongly wipe
+// still-valid out-of-range entries.
+void EvictAbsent(uint64_t unitGuid, const uint32_t *slotSpellIds);
 
 // Fills `out` with up to `maxOut` cached, non-expired auras on `unitGuid`
 // whose helpful/harmful classification matches `harmful`. Returns the count

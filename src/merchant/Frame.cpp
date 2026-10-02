@@ -32,7 +32,9 @@
 
 #include "Game.h"
 #include "Offsets.h"
+#include "item/CGItem.h"
 #include "item/Location.h"
+#include "item/Record.h"
 #include "unit/Identity.h"
 #include "tick/WorldTick.h"
 
@@ -42,10 +44,6 @@
 namespace Merchant::Frame {
 
 namespace {
-
-using GetItemRecord_t = const uint8_t *(__thiscall *)(
-    void *cache, uint32_t itemID, const uint64_t *guid,
-    void *callback, void *userData, bool requestIfMissing);
 
 // Read the 64-bit merchant NPC GUID. Both halves zero means no
 // merchant window is open and the rest of the merchant globals are
@@ -63,8 +61,7 @@ bool MerchantOpen(uint32_t &outGuidLo, uint32_t &outGuidHi) {
 int ItemIDFromCGItem(const uint8_t *cgItem) {
     if (cgItem == nullptr)
         return 0;
-    auto *instance = *reinterpret_cast<const uint8_t *const *>(
-        cgItem + Offsets::OFF_ITEM_INSTANCE_BLOCK);
+    auto *instance = Item::InstanceBlock(cgItem);
     if (instance == nullptr)
         return 0;
     return static_cast<int>(*reinterpret_cast<const uint32_t *>(
@@ -75,31 +72,18 @@ int ItemIDFromCGItem(const uint8_t *cgItem) {
 uint64_t ItemGUIDFromCGItem(const uint8_t *cgItem) {
     if (cgItem == nullptr)
         return 0;
-    auto *instance = *reinterpret_cast<const uint8_t *const *>(
-        cgItem + Offsets::OFF_ITEM_INSTANCE_BLOCK);
+    auto *instance = Item::InstanceBlock(cgItem);
     if (instance == nullptr)
         return 0;
     return *reinterpret_cast<const uint64_t *>(
         instance + Offsets::OFF_INSTANCE_BLOCK_GUID);
 }
 
-// Same `PeekItemRecord` pattern Item::Bag / Item::Equipment use —
-// inline cache peek with a null callback (no network round-trip on
-// miss). Same call shape `Item::Info::FetchItemRecord` uses; not
-// shared because each module has its own slightly different needs.
-const uint8_t *PeekItemRecord(uint32_t itemID) {
-    auto fn = reinterpret_cast<GetItemRecord_t>(
-        Offsets::FUN_DBCACHE_ITEMSTATS_GET_RECORD);
-    auto *cache = reinterpret_cast<void *>(Offsets::VAR_ITEMDB_CACHE);
-    const uint64_t zeroGuid = 0;
-    return fn(cache, itemID, &zeroGuid, nullptr, nullptr, false);
-}
-
 // Looks up `itemID` in the ItemStats cache and reads quality from
 // `+0x1C`. Quality 0 = Poor (grey junk). Returns -1 on cache miss
 // so callers can distinguish "not loaded" from "loaded poor-quality".
 int ItemQuality(uint32_t itemID) {
-    auto *record = PeekItemRecord(itemID);
+    auto *record = Item::PeekRecord(itemID);
     if (record == nullptr)
         return -1;
     return static_cast<int>(*reinterpret_cast<const uint32_t *>(

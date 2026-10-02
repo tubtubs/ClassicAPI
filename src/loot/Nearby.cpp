@@ -14,6 +14,7 @@
 #include "../Game.h"
 #include "../Offsets.h"
 #include "../guid/Guid.h"
+#include "../object/Resolve.h"
 
 #include <cstdint>
 
@@ -48,8 +49,6 @@ using ClntObjMgrEnumVisibleObjectsCallback_t = int(__fastcall *)(void *ctx,
 using ClntObjMgrEnumVisibleObjects_t =
     int(__fastcall *)(ClntObjMgrEnumVisibleObjectsCallback_t cb, void *ctx);
 
-using ResolveUnitToken_t = void *(__fastcall *)(const char *token);
-
 // `__thiscall(self, outBuf) → const C3Vector *` at vtable slot 5
 // (byte offset `0x14`). Both CGUnit_C and CGPlayer_C populate the
 // caller-provided 12-byte buffer with the unit's world position and
@@ -61,19 +60,6 @@ struct C3Vector {
 using GetPosition_t = const C3Vector *(__thiscall *)(const void *self,
                                                       C3Vector *outBuf);
 constexpr int VTBL_GET_POSITION_OFFSET = 0x14;
-
-// `ClntObjMgrObjectPtr(typeMask, debugMessage, guid_lo, guid_hi, debugCode)`
-// — resolves a 64-bit GUID to the loaded `CGObject_C *` it currently
-// refers to, filtered by `typeMask`. Returns NULL when no live object
-// matches the GUID *and* the typeMask. Splitting the GUID into lo/hi
-// DWORDs on the stack is equivalent to the engine's
-// `__fastcall(uint32_t, const char*, uint64_t, int)` signature once the
-// `uint64_t` argument is placed in the same stack slots.
-using ClntObjMgrObjectPtr_t = void *(__fastcall *)(uint32_t typeMask,
-                                                    const char *debugMsg,
-                                                    uint32_t guidLo,
-                                                    uint32_t guidHi,
-                                                    int debugCode);
 
 // Reads `(unit.m_objectFields[+0x224] & UNIT_DYNFLAG_LOOTABLE) != 0`
 // — the server-driven bit it sets when the local player has loot
@@ -88,10 +74,9 @@ using ClntObjMgrObjectPtr_t = void *(__fastcall *)(uint32_t typeMask,
 // bit of *race* — yields false positives for any Human / Dwarf /
 // Undead / Gnome player and false negatives for dead mobs.
 bool IsLootable(const void *unit) {
-    auto *fields = *reinterpret_cast<const uint8_t *const *>(
-        static_cast<const uint8_t *>(unit) + Offsets::OFF_UNIT_DESCRIPTOR);
-    const uint32_t flags = *reinterpret_cast<const uint32_t *>(
-        fields + Offsets::OFF_UNIT_FIELD_DYNAMIC_FLAGS);
+    auto *fields = Game::Read<const uint8_t *>(unit, Offsets::OFF_UNIT_DESCRIPTOR);
+    const uint32_t flags =
+        Game::Read<uint32_t>(fields, Offsets::OFF_UNIT_FIELD_DYNAMIC_FLAGS);
     return (flags & Offsets::UNIT_DYNFLAG_LOOTABLE) != 0;
 }
 
@@ -99,10 +84,8 @@ bool IsLootable(const void *unit) {
 // engine uses this as the contribution from both sides (player + target)
 // in its interact-range computation.
 float BoundingRadius(const void *unit) {
-    auto *fields = *reinterpret_cast<const uint8_t *const *>(
-        static_cast<const uint8_t *>(unit) + Offsets::OFF_UNIT_DESCRIPTOR);
-    return *reinterpret_cast<const float *>(
-        fields + Offsets::OFF_UNIT_FIELD_BOUNDING_RADIUS);
+    auto *fields = Game::Read<const uint8_t *>(unit, Offsets::OFF_UNIT_DESCRIPTOR);
+    return Game::Read<float>(fields, Offsets::OFF_UNIT_FIELD_BOUNDING_RADIUS);
 }
 
 // Invokes the unit's virtual `GetPosition` (vtable slot at offset
@@ -157,11 +140,7 @@ struct ScanCtx {
 };
 
 int __fastcall ScanCallback(ScanCtx *ctx, void * /*unusedEdx*/, uint64_t guid) {
-    auto ObjectPtr = reinterpret_cast<ClntObjMgrObjectPtr_t>(
-        Offsets::FUN_CLNT_OBJ_MGR_OBJECT_PTR);
-    void *obj = ObjectPtr(Offsets::TYPEMASK_UNIT, nullptr,
-                          static_cast<uint32_t>(guid),
-                          static_cast<uint32_t>(guid >> 32), 0);
+    void *obj = Object::ByGuid(Offsets::TYPEMASK_UNIT, guid, nullptr, 0);
     if (obj == nullptr)
         return 1; // GUID isn't a unit; continue
 
@@ -201,9 +180,7 @@ int __fastcall Script_GetNearbyLootableUnits(void *L) {
     // Resolve the local player once — the canonical CGPlayer_C the
     // engine's own interact-range checks use, distinct from the
     // `VAR_LOCAL_PLAYER_PTR` global. Bail if unavailable.
-    auto ResolveUnitToken = reinterpret_cast<ResolveUnitToken_t>(
-        Offsets::FUN_RESOLVE_UNIT_TOKEN);
-    const void *player = ResolveUnitToken("player");
+    const void *player = Game::ResolveUnitToken("player");
     if (player == nullptr)
         return 1;
 

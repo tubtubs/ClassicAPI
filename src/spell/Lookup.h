@@ -22,6 +22,15 @@ namespace Spell::Lookup {
 // always invalid.
 const uint8_t *RecordForID(int spellID);
 
+// True if `spellRecord`'s SpellFamilyName equals `family` and its
+// SpellFamilyFlags overlap `flagMask` — the client-side form of the server's
+// `SpellEntry::IsFitToFamily<FAMILY, FLAG>()`. `flagMask` must be non-zero
+// (the callers always identify a spell by a specific flag bit). Returns false
+// for a null record. Callers add any extra discriminators (icon, effect type)
+// themselves.
+bool IsFitToFamily(const uint8_t *spellRecord, uint32_t family,
+                   uint64_t flagMask);
+
 // Resolves a 1-based Lua-facing spellbook slot to the spellID stored
 // there. `bookType` is `0` for the player spellbook, `1` for the pet
 // spellbook (matches the engine's encoding from `Script_GetSpellName`).
@@ -34,6 +43,18 @@ const uint8_t *RecordForID(int spellID);
 //   - "pet"                          → 1 (pet)
 int SpellbookSlotToID(int slot1Based, int bookType);
 
+// Modern `Enum.SpellBookSpellBank` argument at Lua stack `idx` → the engine
+// bookType above. `1` (Pet) selects the pet book; a missing arg, a
+// non-number, or any other value reads as the player book — the same
+// tolerance `C_SpellBook.GetSpellBookItemInfo` established.
+int SpellBankArgToBookType(void *L, int idx);
+
+// The modern `(slotIndex, spellBank)` argument pair at Lua stack
+// `slotIdx` / `bankIdx` → the spellID in that slot. 0 when the slot arg is
+// not a number or the slot is empty / out of range. Pure stack reads — the
+// caller may still read other arguments afterwards.
+int SpellbookItemArgsToID(void *L, int slotIdx, int bankIdx);
+
 // Inverse of `SpellbookSlotToID` — finds the 1-based slot where a
 // given `spellID` lives in the spellbook arrays. Searches the player
 // book first (`bookType=0`), then the pet book (`bookType=1`). On a
@@ -41,6 +62,24 @@ int SpellbookSlotToID(int slot1Based, int bookType);
 // to `*outBookType` if it's non-null. Returns 0 if the spellID isn't
 // in either book.
 int FindSpellbookSlot(int spellID, int *outBookType);
+
+// The spell's icon texture path from SpellIcon.dbc (already a full
+// `Interface\Icons\...` path), or nullptr when the record is null or the
+// icon row is missing/empty. `active` selects Spell.dbc's `activeIconID`
+// (`+0x1D8`, the icon shown while a toggle / stance / auto-repeat is up)
+// instead of `iconID` (`+0x1D4`) — exactly the choice the engine's action
+// texture resolver makes off `FUN_ACTION_SPELL_ICON_ACTIVE`, with no
+// fallback to the base icon when the active one is 0.
+const char *IconPath(const uint8_t *spellRecord, bool active);
+
+// Resolves a spell NAME to a spellID against the player's (then pet's)
+// spellbook — the same scope retail's `GetSpellInfo(name)` uses. The
+// match is exact and case-sensitive against the current locale's name
+// field (matching retail and ShaguTweaks' `libspell`). When a spell has
+// several ranks in the book, the highest rank is returned (the spellbook
+// arrays list a spell's ranks in ascending order, so the last match
+// wins). Returns 0 for a null/empty name or one the player doesn't know.
+int SpellNameToID(const char *name);
 
 // Resolves a 0-based UI slot into the recipe's spellID. Used by both
 // tradeskill and craft scrapers — they share the same storage shape:

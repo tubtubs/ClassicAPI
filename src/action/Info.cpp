@@ -25,6 +25,7 @@
 //   macro:           "macro", macroIndex (1-based)
 //   bag item:        "item", nil           (see note below)
 //   item-by-id:      "item", itemID
+//   equipment set:   "equipmentset", setName
 //
 // The subType is always "spell" for spell-type entries — the engine
 // helper hardcodes pet=0 for entries on this table. Pet-bar actions
@@ -47,6 +48,8 @@
 
 #include "Game.h"
 #include "Offsets.h"
+#include "action/Slot.h"
+#include "equipmentset/Data.h"
 
 #include <cstdint>
 
@@ -60,19 +63,6 @@ uint32_t ReadEntry(int slot0) {
     auto *base = reinterpret_cast<const uint32_t *>(
         static_cast<uintptr_t>(Offsets::VAR_ACTION_TABLE));
     return base[slot0];
-}
-
-// Returns 1-based macro slot index if `key` matches any entry in the
-// macro-slot map, or 0 if no match. `key` is the action entry with the
-// `0x40000000` type bit stripped (i.e. `entry & 0xBFFFFFFF`).
-int FindMacroSlot(uint32_t key) {
-    auto *map = reinterpret_cast<const uint32_t *>(
-        static_cast<uintptr_t>(Offsets::VAR_MACRO_SLOT_MAP));
-    for (int i = 0; i < Offsets::MACRO_SLOT_MAP_COUNT; ++i) {
-        if (map[i] == key)
-            return i + 1;
-    }
-    return 0;
 }
 
 int __fastcall Script_GetActionInfo(void *L) {
@@ -117,7 +107,7 @@ int __fastcall Script_GetActionInfo(void *L) {
 
     if (type == Offsets::ACTION_TYPE_BAG_OR_MACRO) {
         const uint32_t key = entry & Offsets::ACTION_PAYLOAD_MASK_BAG_OR_MACRO;
-        const int macroSlot = FindMacroSlot(key);
+        const int macroSlot = Action::Slot::MacroSlotForID(key);
         if (macroSlot > 0) {
             Game::Lua::PushString(L, "macro");
             Game::Lua::PushNumber(L, static_cast<double>(macroSlot));
@@ -135,6 +125,20 @@ int __fastcall Script_GetActionInfo(void *L) {
         const uint32_t itemID = entry & Offsets::ACTION_PAYLOAD_MASK_ITEM_BY_ID;
         Game::Lua::PushString(L, "item");
         Game::Lua::PushNumber(L, static_cast<double>(itemID));
+        return 2;
+    }
+
+    if (type == Offsets::ACTION_TYPE_EQUIPMENT_SET) {
+        // 3.3.5 `Script_GetActionInfo` (`FUN_005a8f10`): the type and the
+        // set's name.
+        const EquipmentSet::Set *set = EquipmentSet::Data::FindByID(
+            entry & ~static_cast<uint32_t>(Offsets::ACTION_TYPE_EQUIPMENT_SET));
+        if (set == nullptr) {
+            Game::Lua::PushNil(L);
+            return 1;
+        }
+        Game::Lua::PushString(L, "equipmentset");
+        Game::Lua::PushString(L, set->name.c_str());
         return 2;
     }
 

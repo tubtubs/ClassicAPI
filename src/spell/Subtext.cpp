@@ -29,11 +29,17 @@ namespace Spell::Subtext {
 
 namespace {
 
-// `Spell.dbc.Rank[9]` — same 9-slot locale-string array shape as the
-// adjacent `Name[9]` field. Defined locally; sibling modules
-// (`Info.cpp`, `Tooltip.cpp`, `macro/Spell.cpp`) carry the same
-// constant — promoting to `Offsets.h` is a future refactor.
-constexpr int OFF_SPELL_RANK = 0x204;
+// --- Documentation ----------------------------------------------------------
+
+const Game::Doc::Field kArgs[] = {
+    Game::Doc::Req("spell", "SpellIdentifier", "A spell ID, spell link, or spell name."),
+};
+const Game::Doc::Field kRets[] = {
+    Game::Doc::Opt("subtext", "string", nullptr,
+                   "The rank line, nil when the spell has none."),
+};
+const Game::Doc::Function kGetSpellSubtext{
+    "The rank text shown under a spell's name in the spellbook.", kArgs, kRets};
 
 } // namespace
 
@@ -46,7 +52,7 @@ static int __fastcall Script_GetSpellSubtext(void *L) {
     const char *subtext = DBC::LocalizedField(Offsets::VAR_SPELL_RECORDS,
                                               Offsets::VAR_SPELL_RECORD_COUNT,
                                               static_cast<uint32_t>(spellID),
-                                              OFF_SPELL_RANK);
+                                              Offsets::OFF_SPELL_RECORD_RANK);
     if (subtext == nullptr) {
         Game::Lua::PushNil(L);
         return 1;
@@ -57,7 +63,7 @@ static int __fastcall Script_GetSpellSubtext(void *L) {
 
 static void RegisterLuaFunctions() {
     Game::Lua::RegisterTableFunction("C_Spell", "GetSpellSubtext",
-                                     &Script_GetSpellSubtext);
+                                     &Script_GetSpellSubtext, &kGetSpellSubtext);
 }
 
 static const Game::ModuleAutoRegister _autoreg{&RegisterLuaFunctions};

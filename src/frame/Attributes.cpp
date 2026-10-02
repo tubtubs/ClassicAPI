@@ -58,16 +58,25 @@
 // resolve via ReadModAttr's precedence. Verbs: `target` (with the engine's
 // default-interaction precedence — pending spell / cursor item cast/drop on the
 // unit instead of switching target), `assist`, `focus`, `spell` (reads the
-// `spell` attribute and casts it on the unit via our native C_Spell.CastAtUnit —
-// the unit's GUID goes straight to the cast dispatcher, no target juggling, and
-// ground-target spells land at the unit's feet), `item` (uses the `item`
+// `spell` attribute and casts it: with a `unit` attribute, on that unit via our
+// native C_Spell.CastAtUnit — the unit's GUID goes straight to the cast
+// dispatcher, no target juggling, and ground-target spells land at its feet;
+// with no `unit`, on the current target via the plain CastSpellByName), `item`
+// (uses the `item`
 // attribute — a name/itemID/link via C_Item.UseItemByName with the unit as the
 // use target, or a "bag slot" string like "0 1" via UseContainerItem; the
 // deprecated `bag`/`slot` attributes also work), `macro` (from the
 // `macrotext`/`macro` attribute — prefers an addon RunMacro, else runs natively
 // via the stock ChatEdit_ParseText), `stopcasting`, `menu`/`togglemenu` (pops
 // the standard unit dropdown at the cursor via the addon's
-// ClassicAPI_ToggleUnitMenu). Actions call ordinary Lua globals where the entry
+// ClassicAPI_ToggleUnitMenu, or cancels spell-targeting when a spell is on the
+// cursor), `action` (UseAction of the `action` slot), `pet` (CastPetAction of
+// the `action` index), `click` (forwards to the frame in the `clickbutton`
+// attribute via delegate:Click), and any other verb as a custom action — a
+// function stored as a raw field on the frame named by the verb, called as
+// func(self, unit, button). This is the complete secure-button verb set, so the
+// !!!ClassicAPI addon ships no parallel Lua dispatcher. Actions call ordinary
+// Lua globals where the entry
 // is the engine's (TargetUnit, IsAltKeyDown, …); where we own a C++ module the
 // dispatch goes straight to it, no Lua round-trip (Spell::AtUnit for `spell`,
 // Unit::Focus for `focus`). All run under the engine's protected OnClick.
@@ -94,14 +103,21 @@
 // (`FUN_FRAME_SCRIPT_RESOLVER`) and handing out an external per-frame cell for
 // that name — the `Tooltip::SetEvents` analog, applied to every frame.
 
+#include "frame/Attributes.h"
+
+#include "Common.h"
 #include "Game.h"
 #include "Offsets.h"
+#include "baselib/Ascii.h"
 #include "cursor/Info.h"
+#include "macro/Execute.h"
+#include "object/Resolve.h"
 #include "spell/AtCursor.h"
 #include "spell/AtUnit.h"
 #include "tick/WorldTick.h"
 #include "unit/Focus.h"
 #include "unit/Identity.h"
+#include "unit/Tooltip.h"
 
 #include <cctype>
 #include <cstdint>
@@ -129,13 +145,7 @@ void LowerCopy(char *dst, const char *src, size_t n) {
     dst[i] = '\0';
 }
 
-// Bounded, always-terminated copy (avoids the C4996 strncpy/strcpy warnings).
-void BoundedCopy(char *dst, const char *src, size_t n) {
-    size_t i = 0;
-    for (; src && src[i] && i + 1 < n; ++i)
-        dst[i] = src[i];
-    dst[i] = '\0';
-}
+using Common::BoundedCopy;
 
 // dst = tolower(a .. b .. c). Truncates at n-1.
 void Compose3Lower(char *dst, size_t n, const char *a, const char *b, const char *c) {
@@ -145,15 +155,6 @@ void Compose3Lower(char *dst, size_t n, const char *a, const char *b, const char
         for (; s && *s && i + 1 < n; ++s)
             dst[i++] = static_cast<char>(std::tolower(static_cast<unsigned char>(*s)));
     dst[i] = '\0';
-}
-
-// ASCII case-insensitive full-string equality.
-bool EqI(const char *a, const char *b) {
-    for (; *a && *b; ++a, ++b)
-        if (std::tolower(static_cast<unsigned char>(*a)) !=
-            std::tolower(static_cast<unsigned char>(*b)))
-            return false;
-    return *a == *b;
 }
 
 // True if `lname` (already lowercase) is a click "type" action attribute: an
@@ -215,7 +216,12 @@ bool CopyAttr(void *L, int frameIdx, const char *lname, char *buf, size_t n) {
         const int si = Game::Lua::GetTop(L);
         Game::Lua::PushString(L, lname);
         Game::Lua::RawGet(L, si);            // [.., sub, val]
-        if (Game::Lua::Type(L, -1) == Game::Lua::TYPE_STRING) {
+        const int t = Game::Lua::Type(L, -1);
+        if (t == Game::Lua::TYPE_STRING || t == Game::Lua::TYPE_NUMBER) {
+            // lua_tostring coerces a number to its digits in place — on our
+            // temporary stack copy, so the stored attribute is untouched. This
+            // lets a numeric attribute value (e.g. SetAttribute("spell", 12345)
+            // or a numeric itemID) read as a string.
             const char *s = Game::Lua::ToString(L, -1);
             if (s) {
                 BoundedCopy(buf, s, n);
@@ -306,78 +312,6 @@ bool CallTableFunc2Str(void *L, const char *table, const char *method,
     return called;
 }
 
-// ---- macrotext execution (stock ChatEdit_ParseText, no addon dependency) ----
-//
-// 1.12 has no `RunMacroText`/`RunMacro` global — those are addon shims (pfUI
-// wraps `ChatEdit_ParseText`; SuperCleveRoidMacros ships its own `RunMacro`).
-// To run macro text without depending on an addon, we replicate pfUI's shim in
-// C: build a throwaway "edit box" whose `GetText` returns the line and whose
-// every other method is a harmless no-op (via an `__index` metamethod), then
-// hand it to the stock FrameXML `ChatEdit_ParseText(editBox, 1)` — the same
-// path the real chat box uses to dispatch a slash command / send a line.
-
-// GetText: returns upvalue(1), the captured line.
-int __fastcall MacroGetText_c(void *L) {
-    Game::Lua::PushValue(L, Game::Lua::UpvalueIndex(1));
-    return 1;
-}
-
-// A no-op standing in for any edit-box method the parser happens to call.
-int __fastcall MacroNoop_c(void *) { return 0; }
-
-// __index(tab, key): hand back the no-op so `editBox:AnyMethod()` is safe.
-int __fastcall MacroIndex_c(void *L) {
-    Game::Lua::PushCClosure(L, &MacroNoop_c, 0);
-    return 1;
-}
-
-// Runs a single macro line through the stock chat parser.
-void RunMacroLineC(void *L, const char *line, size_t len) {
-    if (len == 0) return;
-    const int top = Game::Lua::GetTop(L);
-
-    Game::Lua::NewTable(L);                    // fake editBox
-    const int obj = Game::Lua::GetTop(L);
-
-    Game::Lua::PushString(L, "GetText");       // obj.GetText = closure over line
-    Game::Lua::PushLString(L, line, static_cast<unsigned int>(len));
-    Game::Lua::PushCClosure(L, &MacroGetText_c, 1);
-    Game::Lua::SetTable(L, obj);
-
-    Game::Lua::NewTable(L);                     // metatable { __index = noop }
-    const int mt = Game::Lua::GetTop(L);
-    Game::Lua::PushString(L, "__index");
-    Game::Lua::PushCClosure(L, &MacroIndex_c, 0);
-    Game::Lua::SetTable(L, mt);
-
-    // No lua_setmetatable binding — use the Lua global.
-    if (Game::Lua::PushGlobalFunction(L, "setmetatable")) {
-        Game::Lua::PushValue(L, obj);
-        Game::Lua::PushValue(L, mt);
-        Game::Lua::Call(L, 2, 0);
-    }
-
-    if (Game::Lua::PushGlobalFunction(L, "ChatEdit_ParseText")) {
-        Game::Lua::PushValue(L, obj);
-        Game::Lua::PushNumber(L, 1);           // send = 1
-        Game::Lua::Call(L, 2, 0);
-    }
-
-    Game::Lua::SetTop(L, top);
-}
-
-// Runs macro text one line at a time — a real macro is line-delimited, and a
-// single ChatEdit_ParseText call only dispatches one command.
-void RunMacroTextC(void *L, const char *text) {
-    if (!text) return;
-    for (const char *p = text; *p;) {
-        const char *nl = p;
-        while (*nl && *nl != '\n') ++nl;
-        RunMacroLineC(L, p, static_cast<size_t>(nl - p));
-        p = (*nl == '\n') ? nl + 1 : nl;
-    }
-}
-
 // ---- mouse-focus poll (drives the native mouseover slot) -------------------
 
 // frame CFrameScriptObject* → current `unit` token, for the mouse-focus poll.
@@ -391,12 +325,11 @@ std::unordered_map<const void *, std::string> g_unitByFrame;
 uint64_t g_lastSet = 0;
 
 const void *CurrentMouseFocus() {
-    const void *ctx = *reinterpret_cast<const void *const *>(
+    const void *ctx = Game::Read<const void *>(
         static_cast<uintptr_t>(Offsets::VAR_UI_CONTEXT_PTR));
     if (ctx == nullptr)
         return nullptr;
-    return *reinterpret_cast<const void *const *>(
-        reinterpret_cast<const uint8_t *>(ctx) + Offsets::OFF_UI_CONTEXT_MOUSE_FOCUS);
+    return Game::Read<const void *>(ctx, Offsets::OFF_UI_CONTEXT_MOUSE_FOCUS);
 }
 
 // The engine's real mouseover setter — `__stdcall(guidLo, guidHi, prevLo,
@@ -410,19 +343,78 @@ void CallEngineMouseover(uint64_t guid) {
         static_cast<uint32_t>(guid), static_cast<uint32_t>(guid >> 32), 0, 0);
 }
 
+// True when the GUID resolves to a live unit/player object (loaded, in range).
+// False for an offline or far out-of-range party/raid member — the case the
+// engine mouseover setter skips the tooltip for. Same resolver Unit::Mouseover
+// uses for its unit test.
+bool GuidHasLiveUnit(uint64_t guid) {
+    if (guid == 0)
+        return false;
+    constexpr int kUnitOrPlayerMask =
+        (1 << Offsets::OBJECT_TYPE_UNIT) | (1 << Offsets::OBJECT_TYPE_PLAYER);
+    return Object::ByGuid(kUnitOrPlayerMask, guid, "ClassicAPI", 0) != nullptr;
+}
+
+// Build the mouseover tooltip for a unit with no live object, straight from the
+// party/raid roster. FUN_00529FE0 is the same unit-tooltip builder SetUnit and
+// the engine mouseover use; with no object it fills name/level/class + the
+// "Offline" line from the roster (verified: `GameTooltip:SetUnit("party1")`
+// works for an offline member). The engine's setter (FUN_00492890) gates this
+// call on a live object, so offline members get nothing — we do it here.
+void BuildRosterUnitTooltip(uint64_t guid) {
+    void *tooltip = Game::Read<void *>(
+        static_cast<uintptr_t>(Offsets::VAR_GAMETOOLTIP_OBJECT_PTR));
+    if (tooltip == nullptr)
+        return;
+
+    // Fire OnTooltipSetDefaultAnchor first, exactly as the engine mouseover
+    // setter (FUN_00492890) does before it builds — FrameXML's handler sets
+    // the tooltip's owner + anchor, which is what actually shows it. Without
+    // this, a rebuild after the tooltip was hidden on the previous leave has
+    // no owner and never re-appears (only a subsequent live-unit hover, which
+    // takes the engine's own anchor path, would). Use the self-contained
+    // invoker FUN_FRAME_INVOKE_SCRIPT, safe to call from the WorldTick.
+    const int anchorHandler = Game::Read<int>(
+        tooltip, Offsets::OFF_TOOLTIP_SET_DEFAULT_ANCHOR_HANDLER);
+    if (anchorHandler != 0)
+        reinterpret_cast<void(__fastcall *)(int, void *)>(
+            static_cast<uintptr_t>(Offsets::FUN_FRAME_INVOKE_SCRIPT))(anchorHandler,
+                                                                      tooltip);
+
+    uint32_t packed[2] = {static_cast<uint32_t>(guid),
+                          static_cast<uint32_t>(guid >> 32)};
+    reinterpret_cast<void(__thiscall *)(void *, uint32_t *)>(
+        static_cast<uintptr_t>(Offsets::FUN_GAMETOOLTIP_BUILD_UNIT))(tooltip, packed);
+}
+
 void MouseoverTick() {
     const void *focus = CurrentMouseFocus();
 
     uint64_t guid = 0;
+    std::string token; // a copy: handlers run below may rewrite the map
     if (focus != nullptr) {
         auto it = g_unitByFrame.find(focus);
-        if (it != g_unitByFrame.end())
-            guid = Unit::Identity::GuidForToken(
-                it->second.c_str()); // live — follows target changes
+        if (it != g_unitByFrame.end()) {
+            token = it->second;
+            guid = Unit::Identity::GuidForToken(token.c_str()); // live — follows target changes
+        }
     }
 
     if (guid != g_lastSet) {
+        // The tooltip built below is for the frame's unit, so `GetUnit()`
+        // answers with the frame's token — "mouseover" would not resolve for
+        // a member with no live object (see Unit::Tooltip).
+        if (guid != 0)
+            Unit::Tooltip::StageToken(
+                Game::Read<void *>(static_cast<uintptr_t>(Offsets::VAR_GAMETOOLTIP_OBJECT_PTR)),
+                token.c_str());
         CallEngineMouseover(guid); // sets slot + highlight + tooltip + event
+        // Offline / far out-of-range party or raid member: the setter wrote the
+        // GUID slot but skipped the tooltip (no live object). Build it from the
+        // roster so hovering the frame still shows name / level / "Offline".
+        if (guid != 0 && !GuidHasLiveUnit(guid))
+            BuildRosterUnitTooltip(guid);
+        Unit::Tooltip::ClearStagedToken();
         g_lastSet = guid;
     }
 }
@@ -455,10 +447,10 @@ void BuildModifierPrefix(void *L, char *buf, size_t n) {
 
 // Button name -> attribute suffix (retail's convention: the button number).
 const char *ButtonSuffix(const char *btn) {
-    if (EqI(btn, "RightButton"))  return "2";
-    if (EqI(btn, "MiddleButton")) return "3";
-    if (EqI(btn, "Button4"))      return "4";
-    if (EqI(btn, "Button5"))      return "5";
+    if (Ascii::EqualCI(btn, "RightButton"))  return "2";
+    if (Ascii::EqualCI(btn, "MiddleButton")) return "3";
+    if (Ascii::EqualCI(btn, "Button4"))      return "4";
+    if (Ascii::EqualCI(btn, "Button5"))      return "5";
     return "1"; // LeftButton / unknown
 }
 
@@ -542,14 +534,83 @@ bool CallGlobalNum2(void *L, const char *name, double a, double b) {
     return called;
 }
 
+// _G[name](a) — one number arg, no results. Returns true iff called.
+bool CallGlobalNum1(void *L, const char *name, double a) {
+    const int top = Game::Lua::GetTop(L);
+    const bool called = Game::Lua::PushGlobalFunction(L, name);
+    if (called) {
+        Game::Lua::PushNumber(L, a);
+        Game::Lua::Call(L, 1, 0);
+    }
+    Game::Lua::SetTop(L, top);
+    return called;
+}
+
+// `click` verb: the `clickbutton` attribute holds a FRAME (not a string).
+// Resolve it with the same modified-key precedence as ReadModAttr, then forward
+// the click via delegate:Click(button). Returns true iff a delegate was called.
+bool ClickDelegate(void *L, int fi, const char *prefix, const char *suffix,
+                   const char *button) {
+    char key[128];
+    Compose3Lower(key, sizeof key, prefix, "clickbutton", suffix);
+    bool got = TryPushValue(L, fi, key);
+    if (!got) {
+        Compose3Lower(key, sizeof key, "", "clickbutton", suffix);
+        got = TryPushValue(L, fi, key);
+    }
+    if (!got) {
+        Compose3Lower(key, sizeof key, "", "clickbutton", "");
+        got = TryPushValue(L, fi, key);
+    }
+    if (!got) return false;                          // no delegate configured
+
+    const int di = Game::Lua::GetTop(L);             // the delegate value
+    bool called = false;
+    if (Game::Lua::Type(L, di) == Game::Lua::TYPE_TABLE) {
+        Game::Lua::PushString(L, "Click");
+        Game::Lua::GetTable(L, di);                  // delegate.Click
+        if (Game::Lua::Type(L, -1) == Game::Lua::TYPE_FUNCTION) {
+            Game::Lua::PushValue(L, di);             // self = delegate
+            Game::Lua::PushString(L, button);        // button name
+            Game::Lua::Call(L, 2, 0);
+            called = true;
+        }
+    }
+    Game::Lua::SetTop(L, di - 1);                    // drop the delegate (+leftovers)
+    return called;
+}
+
+// Custom verb: a function stored as a raw field on the frame's own table named
+// by the verb (retail's escape hatch), invoked as func(self, unit, button).
+// Returns true iff such a function existed and was called.
+bool CallCustomAction(void *L, int fi, const char *verb, const char *unit,
+                      const char *button) {
+    if (Game::Lua::Type(L, fi) != Game::Lua::TYPE_TABLE) return false;
+    Game::Lua::PushString(L, verb);
+    Game::Lua::RawGet(L, fi);                        // frame[verb]
+    bool called = false;
+    if (Game::Lua::Type(L, -1) == Game::Lua::TYPE_FUNCTION) {
+        Game::Lua::PushValue(L, fi);                 // self
+        Game::Lua::PushString(L, unit);              // unit (nil if null)
+        Game::Lua::PushString(L, button);            // button name
+        Game::Lua::Call(L, 3, 0);
+        called = true;
+    } else {
+        Game::Lua::SetTop(L, Game::Lua::GetTop(L) - 1);
+    }
+    return called;
+}
+
 // Performs the resolved `verb` on `unit` (a token attribute value, may be null).
-// Returns true if it owned the click (so the chained handler is skipped).
+// `button` is the raw click-button name ("LeftButton", …), needed by the
+// `click` and custom verbs. Returns true if it owned the click (so the chained
+// handler is skipped).
 bool DispatchVerb(void *L, int fi, const char *prefix, const char *suffix,
-                  const char *verb, const char *unit) {
-    if (EqI(verb, "target")) {
+                  const char *verb, const char *unit, const char *button) {
+    if (Ascii::EqualCI(verb, "target")) {
         if (!unit) return false;
         // `unit="none"` clears the target (retail's SecureActionButton behavior).
-        if (EqI(unit, "none")) {
+        if (Ascii::EqualCI(unit, "none")) {
             Game::Lua::CallGlobal(L, "ClearTarget");
             return true;
         }
@@ -566,25 +627,46 @@ bool DispatchVerb(void *L, int fi, const char *prefix, const char *suffix,
             Game::Lua::CallGlobalString(L, "TargetUnit", unit);
         return true;
     }
-    if (EqI(verb, "assist")) {
+    if (Ascii::EqualCI(verb, "assist")) {
         if (!unit) return false;
         Game::Lua::CallGlobalString(L, "AssistUnit", unit);
         return true;
     }
-    if (EqI(verb, "focus")) {
+    if (Ascii::EqualCI(verb, "focus")) {
         if (!unit) return false;
         Unit::Focus::Set(Unit::Identity::GuidForToken(unit));
         return true;
     }
-    if (EqI(verb, "spell")) {
-        if (!unit) return false;
+    if (Ascii::EqualCI(verb, "spell")) {
+        // A numeric spell ID (modern addons do SetAttribute("spell", 12345),
+        // stored as a Lua number; a numeric string is accepted too). Cast the
+        // EXACT rank by ID through the spellbook-slot resolver — at the unit, or
+        // with no unit on the current target (targetGuid 0). NOT name
+        // resolution, which casts the highest known rank regardless of the rank
+        // the caller asked for.
+        int spellID;
+        if (ReadModAttrInt(L, fi, prefix, "spell", suffix, &spellID)) {
+            if (unit)
+                Spell::AtUnit::CastByID(spellID, unit);
+            else
+                Spell::AtCursor::DispatchSpellCast(spellID);
+            return true;
+        }
+        // Otherwise a spell name. With a `unit`, cast straight at it (GUID →
+        // dispatcher, no target juggling; a ground-target spell lands at its
+        // feet). With no `unit`, fall back to the plain global cast on the
+        // current target — a `type="spell"` button that sets no `unit`
+        // attribute (issue #18) works like `/cast <spell>`.
         char spell[128];
         if (!ReadModAttr(L, fi, prefix, "spell", suffix, spell, sizeof spell))
             return false;
-        Spell::AtUnit::CastByName(spell, unit);
+        if (unit)
+            Spell::AtUnit::CastByName(spell, unit, /*placeGroundSpell*/ true);
+        else
+            Game::Lua::CallGlobalString(L, "CastSpellByName", spell);
         return true;
     }
-    if (EqI(verb, "item")) {
+    if (Ascii::EqualCI(verb, "item")) {
         char item[128];
         int bag, slot;
         if (ReadModAttr(L, fi, prefix, "item", suffix, item, sizeof item)) {
@@ -602,31 +684,95 @@ bool DispatchVerb(void *L, int fi, const char *prefix, const char *suffix,
         }
         return false;
     }
-    if (EqI(verb, "macro")) {
+    if (Ascii::EqualCI(verb, "macro")) {
+        // Give the macro a unit to act on. Vanilla macros have no `@unit`
+        // conditional, and unlike the `spell` verb (which feeds a GUID straight
+        // to the cast dispatcher) we can't inject a target into arbitrary macro
+        // text — so a plain `/cast Flash Heal` would hit the current target, not
+        // the clicked unit. Emulate the classic Clique click-heal: snapshot the
+        // current target, retarget the clicked unit, run the macro, then restore
+        // the previous target so the click doesn't leave the player retargeted.
+        // The macro's actions (/cast etc.) dispatch against the clicked unit
+        // synchronously while it's selected, so restoring the target afterward
+        // doesn't affect them.
+        uint64_t prevTarget = 0;
+        const bool swapped = unit != nullptr;
+        if (swapped) {
+            prevTarget =
+                (static_cast<uint64_t>(Game::Read<volatile uint32_t>(
+                     Offsets::VAR_CURRENT_SELECTION_GUID_HI))
+                 << 32) |
+                Game::Read<volatile uint32_t>(
+                    Offsets::VAR_CURRENT_SELECTION_GUID_LO);
+            Game::Lua::CallGlobalString(L, "TargetUnit", unit);
+        }
         char macro[512];
-        if (!ReadModAttr(L, fi, prefix, "macrotext", suffix, macro, sizeof macro) &&
-            !ReadModAttr(L, fi, prefix, "macro", suffix, macro, sizeof macro))
-            return false;
-        // Prefer an addon-provided RunMacro (SuperCleveRoidMacros, pfUI, …) — it
-        // handles named macros and extended macro text; fall back to the stock
-        // ChatEdit_ParseText path when no RunMacro global is present.
-        if (!Game::Lua::CallGlobalString(L, "RunMacro", macro))
-            RunMacroTextC(L, macro);
-        return true;
+        bool handled = false;
+        // `macrotext` is raw macro text (the modern default). Run it as text
+        // through the stock chat parser so each line dispatches via
+        // SlashCmdList — that routes /cast etc. through any addon slash hooks
+        // (e.g. SuperCleveRoidMacros' conditional /cast). A name-based RunMacro
+        // (which is what SuperCleveRoidMacros ships) can't interpret text and
+        // would silently resolve nothing.
+        if (ReadModAttr(L, fi, prefix, "macrotext", suffix, macro, sizeof macro)) {
+            Macro::Execute::Text(L, macro);
+            handled = true;
+        }
+        // Deprecated `macro` form: a saved-macro name/index. Prefer an
+        // addon-provided RunMacro (SuperCleveRoidMacros, pfUI, …) to run the
+        // named macro's body; fall back to the stock parser when none exists.
+        else if (ReadModAttr(L, fi, prefix, "macro", suffix, macro, sizeof macro)) {
+            handled = Macro::Execute::Saved(L, macro);
+        }
+        // Restore the target the click swapped away from. `FUN_TARGET_BY_GUID`
+        // validates the GUID resolves to a live unit and bails otherwise, so a
+        // target that despawned mid-macro is dropped cleanly rather than
+        // committed; a zero prior target means "no target" → ClearTarget.
+        if (swapped) {
+            if (prevTarget)
+                reinterpret_cast<void(__fastcall *)(const uint64_t *)>(
+                    Offsets::FUN_TARGET_BY_GUID)(&prevTarget);
+            else
+                Game::Lua::CallGlobal(L, "ClearTarget");
+        }
+        return handled;
     }
-    if (EqI(verb, "stop") || EqI(verb, "stopcasting")) {
+    if (Ascii::EqualCI(verb, "stop") || Ascii::EqualCI(verb, "stopcasting")) {
         Game::Lua::CallGlobal(L, "SpellStopCasting");
         return true;
     }
-    if (EqI(verb, "menu") || EqI(verb, "togglemenu")) {
+    if (Ascii::EqualCI(verb, "action")) {
+        int slot;
+        if (!ReadModAttrInt(L, fi, prefix, "action", suffix, &slot)) return false;
+        CallGlobalNum1(L, "UseAction", slot);
+        return true;
+    }
+    if (Ascii::EqualCI(verb, "pet")) {
+        int index;
+        if (!ReadModAttrInt(L, fi, prefix, "action", suffix, &index)) return false;
+        CallGlobalNum1(L, "CastPetAction", index);
+        return true;
+    }
+    if (Ascii::EqualCI(verb, "click")) {
+        return ClickDelegate(L, fi, prefix, suffix, button);
+    }
+    if (Ascii::EqualCI(verb, "menu") || Ascii::EqualCI(verb, "togglemenu")) {
+        // While a spell is on the cursor, cancel targeting instead of opening
+        // the menu (retail's SecureUnitButton behavior).
+        if (CallBoolGlobal(L, "SpellIsTargeting")) {
+            Game::Lua::CallGlobal(L, "SpellStopTargeting");
+            return true;
+        }
         if (!unit) return false;
         // The unit dropdown is pure FrameXML work (UnitPopup + ToggleDropDown),
         // so it lives in the !!!ClassicAPI addon; we just pop it at the cursor.
         Game::Lua::CallGlobalString(L, "ClassicAPI_ToggleUnitMenu", unit);
         return true;
     }
-    // Unknown verb → not handled here; the chained handler runs.
-    return false;
+    // Unknown verb → a custom action: a function stored as a raw field on the
+    // frame named by the verb (retail's escape hatch). If none exists it isn't
+    // handled here and the frame's own chained OnClick runs.
+    return CallCustomAction(L, fi, verb, unit, button);
 }
 
 // The chained OnClick handler. Upvalues: 1 = previous handler (or nil), 2 = the
@@ -661,7 +807,7 @@ int __fastcall OnClick_c(void *L) {
             const bool haveUnit =
                 ReadModAttr(L, fi, prefix, "unit", suffix, unit, sizeof unit);
             handled = DispatchVerb(L, fi, prefix, suffix, verb,
-                                   haveUnit ? unit : nullptr);
+                                   haveUnit ? unit : nullptr, btn);
         }
     }
     Game::Lua::SetTop(L, top);
@@ -738,7 +884,7 @@ int __fastcall FrameResolver_h(void *frame, void *edx, const char *name) {
     const int slot = g_frameResolverOriginal(frame, edx, name);
     if (slot != 0) // a real base-frame / subtype script — leave it
         return slot;
-    if (EqI(name, "onattributechanged"))
+    if (Ascii::EqualCI(name, "onattributechanged"))
         return reinterpret_cast<int>(AttrSlotFor(frame, /*create*/ true));
     return 0;
 }
@@ -807,11 +953,30 @@ void FireAttributeChanged(void *L, void *frame, const char *name) {
 // ---- the methods -----------------------------------------------------------
 
 // Enables the frame's mouse so it can become the mouse-focus (a bare frame
-// otherwise never registers as hovered). Operates on self at index 1.
+// otherwise never registers as hovered).
+//
+// Two properties, both deliberate:
+//   * STACK-NEUTRAL. The old form did SetTop(L, 1) to set up (self, true) for
+//     the engine setter, which DESTROYED the (name, value) at stack[2]/[3] that
+//     FireAttributeChanged reads right after — handing any OnAttributeChanged
+//     handler a nil `arg2`. We instead push the call at the top and restore the
+//     caller's stack, so DoSet's (self, name, value) survives intact.
+//   * PROTECTED. SetAttribute is Frame-scoped (VAR_FRAME_METHOD_REGISTRY), so
+//     `self` is a real Frame and the setter's type check normally passes;
+//     invoking through lua_pcall is belt-and-suspenders so a best-effort side
+//     effect can never surface an error in the addon's SetAttribute. (Calling
+//     via pcall is also what lets us pass the args at the callee's own stack
+//     base without clobbering ours.)
 void EnableFrameMouse(void *L) {
-    Game::Lua::SetTop(L, 1); // (self)
-    Game::Lua::PushBoolean(L, 1);
-    CallScript(Offsets::FUN_SCRIPT_FRAME_ENABLEMOUSE, L);
+    const int top = Game::Lua::GetTop(L);
+    Game::Lua::PushCClosure(
+        L,
+        reinterpret_cast<Game::Lua::CFunction>(Offsets::FUN_SCRIPT_FRAME_ENABLEMOUSE),
+        0);
+    Game::Lua::PushValue(L, 1);   // self (the frame)
+    Game::Lua::PushBoolean(L, 1); // enable = true
+    Game::Lua::PCall(L, 2, 0, 0); // best-effort; swallow a transient type error
+    Game::Lua::SetTop(L, top);    // restore the caller's stack
 }
 
 int DoSet(void *L, bool fireHandler) { // (self, name, value)
@@ -836,7 +1001,7 @@ int DoSet(void *L, bool fireHandler) { // (self, name, value)
     // (the key the mouse-focus poll uses) and enable its mouse so it can be
     // hovered.
     if (std::strcmp(lname, "unit") == 0) {
-        void *obj = Game::Lua::ResolveObject(L, 1);
+        void *obj = Game::Lua::ResolveFrame(L);
         if (obj != nullptr) {
             if (isString) {
                 const char *tok = Game::Lua::ToString(L, 3);
@@ -864,7 +1029,7 @@ int DoSet(void *L, bool fireHandler) { // (self, name, value)
     }
 
     if (fireHandler)
-        FireAttributeChanged(L, Game::Lua::ResolveObject(L, 1), lname);
+        FireAttributeChanged(L, Game::Lua::ResolveFrame(L), lname);
     return 0;
 }
 
@@ -949,5 +1114,26 @@ const Game::ModuleAutoRegister _autoreg{&RegisterLuaFunctions};
 const Tick::WorldTick::AutoSubscribe _tick{&MouseoverTick};
 
 } // namespace
+
+// Drop every per-frame map before a /reload (or logout) resets the Lua state.
+// Both are keyed by the frame's C object pointer, which the allocator recycles
+// across a reload:
+//   * g_attrHandlers holds OnAttributeChanged handler refs. The refs die with
+//     the Lua reset, so a stale entry whose address a new frame reuses would
+//     fire a DEAD ref from FireAttributeChanged — the invoker's protected pcall
+//     catches it, but the engine error handler still prints it as an error "in
+//     SetAttribute" (SecureStateDriverManager sets OnAttributeChanged every
+//     session, so there's always at least one entry to go stale). This was the
+//     "SetAttribute occasionally errors after /reload" report; same class of
+//     bug as Tooltip::SetEvents issue #33.
+//   * g_unitByFrame maps a frame to its `unit` token for the mouse-focus poll;
+//     a stale entry at a reused address would point the mouseover at the wrong
+//     unit and mislead the isNew mouse-enable gate.
+void PrepareForReload() {
+    g_attrHandlers.clear();
+    g_unitByFrame.clear();
+}
+
+static const Game::ReloadAutoRegister _reloadReg{&PrepareForReload};
 
 } // namespace Frame::Attributes

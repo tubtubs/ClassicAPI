@@ -7,6 +7,7 @@
 
 locales\locales.xml
 
+SecureTemplates.xml
 Compat.lua
 Util\Print.lua
 Util\Mixin.lua
@@ -42,6 +43,21 @@ Util\Rectangle.lua
 Util\Vector2D.lua
 Util\Vector3D.lua
 Util\Vector4D.lua
+Util\UiMapPoint.lua
 Util\UIParent.lua
 Util\AuraDurationModifiers.lua
+Util\AuraUtil.lua
 Util\SecureUnitMenu.lua
+Util\TextureUtil.lua
+Util\MacroOptions.lua
+Util\SecureStateDriver.lua
+Util\MacroIconSelection.lua
+
+APIDocumentation\BaseAPIMixin.lua
+APIDocumentation\FieldsAPIMixin.lua
+APIDocumentation\FunctionsAPIMixin.lua
+APIDocumentation\SystemsAPIMixin.lua
+APIDocumentation\TablesAPIMixin.lua
+APIDocumentation\EventsAPIMixin.lua
+APIDocumentation\APIDocumentation.lua
+APIDocumentation\APIDocumentation_Bootstrap.lua

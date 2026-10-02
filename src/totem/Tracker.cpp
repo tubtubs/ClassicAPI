@@ -45,8 +45,10 @@
 #include "event/SignalHook.h"
 #include "guid/Guid.h"
 #include "item/Count.h"
+#include "object/Resolve.h"
 #include "spell/Lookup.h"
 #include "tick/WorldTick.h"
+#include "time/Clock.h"
 #include "ui/ColorData.h"
 #include "unit/Identity.h"
 
@@ -55,13 +57,6 @@
 namespace Totem::Tracker {
 
 namespace {
-
-// Spell.dbc record field offsets (see spell/Info.cpp for the shared set).
-constexpr int OFF_EFFECT = 0xF4;      // int32[3] — SPELL_EFFECT_*
-constexpr int OFF_TOTEM_TOOL = 0xA0;  // int32[2] — Totem (required tool item IDs)
-constexpr int OFF_MISC_VALUE = 0x1A8; // int32[3] — EffectMiscValue
-constexpr int OFF_ICON_ID = 0x1D4;    // int32 — SpellIconID
-constexpr int OFF_NAME = 0x1E0;       // char*[9] locale array
 
 // SUMMON_TOTEM_SLOT1..4 spell effects (verified against Spell.dbc: Searing
 // 87/Fire, Stoneskin 88/Earth, Healing Stream 89/Water, Windfury 90/Air).
@@ -93,15 +88,11 @@ uint32_t g_lastScanMs = 0;
 uint32_t g_toolItem[kSlots] = {};
 int g_spellsChangedId = -1;
 
-uint32_t NowMs() {
-    using TickCount_t = uint32_t(__fastcall *)();
-    return reinterpret_cast<TickCount_t>(
-        static_cast<uintptr_t>(Offsets::FUN_OS_TICKCOUNT_MS))();
-}
+using Time::Clock::NowMs;
 
 // The totem tool item a spell requires (`Totem[0]`), or 0.
 uint32_t TotemToolItem(const uint8_t *rec) {
-    const int32_t t = *reinterpret_cast<const int32_t *>(rec + OFF_TOTEM_TOOL);
+    const int32_t t = Game::Read<int32_t>(rec, Offsets::OFF_SPELL_RECORD_TOTEM);
     return t > 0 ? static_cast<uint32_t>(t) : 0;
 }
 
@@ -131,7 +122,7 @@ void ScanTools() {
         const uint8_t *rec = Spell::Lookup::RecordForID(spellID);
         if (rec == nullptr)
             continue;
-        const auto *eff = reinterpret_cast<const int32_t *>(rec + OFF_EFFECT);
+        const auto *eff = Game::Ptr<const int32_t>(rec, Offsets::OFF_SPELL_RECORD_EFFECT);
         for (int i = 0; i < Offsets::SPELL_RECORD_EFFECT_COUNT; ++i) {
             const int e = eff[i];
             if (e < kEffectSummonTotemSlot1 || e > kEffectSummonTotemSlot4)
@@ -172,9 +163,6 @@ uint32_t SpellDurationMs(const uint8_t *rec) {
 using EnumCallback_t = int(__fastcall *)(void *ctx, void *unusedEdx,
                                          uint64_t guid);
 using EnumVisibleObjects_t = int(__fastcall *)(EnumCallback_t cb, void *ctx);
-using ObjectPtr_t = void *(__fastcall *)(uint32_t typeMask, const char *dbg,
-                                         uint32_t guidLo, uint32_t guidHi,
-                                         int dbgCode);
 
 struct ScanCtx {
     uint64_t playerGuid;
@@ -199,19 +187,15 @@ int __fastcall ScanCallback(ScanCtx *ctx, void * /*unusedEdx*/, uint64_t guid) {
         return 1;
 
     // Confirm it's OUR totem: resolve + check CreatedBy == player.
-    auto ObjectPtr =
-        reinterpret_cast<ObjectPtr_t>(Offsets::FUN_CLNT_OBJ_MGR_OBJECT_PTR);
-    void *obj = ObjectPtr(Offsets::TYPEMASK_UNIT, nullptr,
-                          static_cast<uint32_t>(guid),
-                          static_cast<uint32_t>(guid >> 32), 0);
+    void *obj = Object::ByGuid(Offsets::TYPEMASK_UNIT, guid, nullptr, 0);
     if (obj == nullptr)
         return 1;
-    auto *desc = *reinterpret_cast<const uint8_t *const *>(
-        static_cast<const uint8_t *>(obj) + Offsets::OFF_UNIT_DESCRIPTOR);
+    auto *desc = Game::Read<const uint8_t *>(
+        obj, Offsets::OFF_UNIT_DESCRIPTOR);
     if (desc == nullptr)
         return 1;
-    const uint64_t createdBy = *reinterpret_cast<const uint64_t *>(
-        desc + Offsets::OFF_UNIT_FIELD_CREATEDBY);
+    const uint64_t createdBy = Game::Read<uint64_t>(
+        desc, Offsets::OFF_UNIT_FIELD_CREATEDBY);
     if (createdBy == ctx->playerGuid)
         ctx->present[match] = true;
     return 1; // keep scanning — other slots may match other creatures
@@ -231,19 +215,15 @@ int __fastcall FindGuidCallback(FindGuidCtx *ctx, void * /*unusedEdx*/,
         return 1;
     if (static_cast<uint32_t>((guid >> 24) & 0xFFFFFFu) != ctx->entry)
         return 1;
-    auto ObjectPtr =
-        reinterpret_cast<ObjectPtr_t>(Offsets::FUN_CLNT_OBJ_MGR_OBJECT_PTR);
-    void *obj = ObjectPtr(Offsets::TYPEMASK_UNIT, nullptr,
-                          static_cast<uint32_t>(guid),
-                          static_cast<uint32_t>(guid >> 32), 0);
+    void *obj = Object::ByGuid(Offsets::TYPEMASK_UNIT, guid, nullptr, 0);
     if (obj == nullptr)
         return 1;
-    auto *desc = *reinterpret_cast<const uint8_t *const *>(
-        static_cast<const uint8_t *>(obj) + Offsets::OFF_UNIT_DESCRIPTOR);
+    auto *desc = Game::Read<const uint8_t *>(
+        obj, Offsets::OFF_UNIT_DESCRIPTOR);
     if (desc == nullptr)
         return 1;
-    if (*reinterpret_cast<const uint64_t *>(
-            desc + Offsets::OFF_UNIT_FIELD_CREATEDBY) == ctx->playerGuid) {
+    if (Game::Read<uint64_t>(
+            desc, Offsets::OFF_UNIT_FIELD_CREATEDBY) == ctx->playerGuid) {
         ctx->found = guid;
         return 0; // stop
     }
@@ -253,7 +233,7 @@ int __fastcall FindGuidCallback(FindGuidCtx *ctx, void * /*unusedEdx*/,
 uint64_t FindTotemGuid(uint32_t entry) {
     if (entry == 0)
         return 0;
-    if (*reinterpret_cast<void *volatile *>(Offsets::VAR_LOCAL_PLAYER_PTR) ==
+    if (Game::Read<void *volatile>(Offsets::VAR_LOCAL_PLAYER_PTR) ==
         nullptr)
         return 0;
     const uint64_t player = Unit::Identity::PlayerGuid();
@@ -314,7 +294,7 @@ void OnTick() {
     // object-manager enumerator derefs the manager unconditionally, so it's
     // gated on the local player existing.
     if (anyActive && now - g_lastScanMs >= kScanIntervalMs &&
-        *reinterpret_cast<void *volatile *>(Offsets::VAR_LOCAL_PLAYER_PTR) !=
+        Game::Read<void *volatile>(Offsets::VAR_LOCAL_PLAYER_PTR) !=
             nullptr) {
         const uint64_t player = Unit::Identity::PlayerGuid();
         if (player != 0) {
@@ -351,12 +331,11 @@ const Tick::WorldTick::AutoSubscribe _tick{&OnTick};
 const char *IconPath(int iconID) {
     if (iconID <= 0)
         return nullptr;
-    const int count = *reinterpret_cast<const int *>(
-        static_cast<uintptr_t>(Offsets::VAR_SPELL_ICON_COUNT));
+    const int count = Game::Read<int>(Offsets::VAR_SPELL_ICON_COUNT);
     if (iconID > count)
         return nullptr;
-    auto *const *records = *reinterpret_cast<const uint8_t *const *const *>(
-        static_cast<uintptr_t>(Offsets::VAR_SPELL_ICON_RECORDS));
+    auto *const *records = Game::Read<const uint8_t *const *>(
+        Offsets::VAR_SPELL_ICON_RECORDS);
     if (records == nullptr || records[iconID] == nullptr)
         return nullptr;
     return *reinterpret_cast<const char *const *>(records[iconID] + 4);
@@ -410,13 +389,12 @@ int __fastcall Script_GetTotemInfo(void *L) {
     const char *icon = nullptr;
     if (rec != nullptr) {
         const int locale =
-            *reinterpret_cast<const int *>(static_cast<uintptr_t>(
-                Offsets::VAR_LOCALE_INDEX));
-        const char *n = *reinterpret_cast<const char *const *>(
-            rec + OFF_NAME + locale * 4);
+            Game::Read<int>(Offsets::VAR_LOCALE_INDEX);
+        const char *n = Game::Read<const char *>(
+            rec, Offsets::OFF_SPELL_NAMES + locale * 4);
         if (n != nullptr)
             name = n;
-        icon = IconPath(*reinterpret_cast<const int *>(rec + OFF_ICON_ID));
+        icon = IconPath(Game::Read<int>(rec, Offsets::OFF_SPELL_RECORD_ICON_ID));
     }
 
     Game::Lua::PushBool(L, haveTotem);
@@ -445,10 +423,9 @@ int __fastcall Script_GetTotemTimeLeft(void *L) {
     if (slot >= 1 && slot <= kSlots) {
         const Slot &t = g_slots[slot - 1];
         if (t.active && t.durationMs != 0) {
-            const uint32_t now = NowMs();
-            const uint32_t end = t.startMs + t.durationMs;
-            if (now < end)
-                seconds = static_cast<double>(end - now) / 1000.0;
+            const uint32_t left = Time::Clock::Remaining(t.startMs + t.durationMs);
+            if (left != 0)
+                seconds = static_cast<double>(left) / 1000.0;
         }
     }
     Game::Lua::PushNumber(L, seconds);
@@ -553,7 +530,7 @@ int __fastcall Script_GameTooltipSetTotem(void *L) {
     if (!t.active || t.spellID == 0)
         return 0;
 
-    void *self = Game::Lua::ResolveObject(L, 1);
+    void *self = Game::Lua::ResolveTooltip(L);
     if (self == nullptr)
         return 0;
 
@@ -561,20 +538,16 @@ int __fastcall Script_GameTooltipSetTotem(void *L) {
     if (rec == nullptr)
         return 0;
     const int locale =
-        *reinterpret_cast<const int *>(static_cast<uintptr_t>(Offsets::VAR_LOCALE_INDEX));
+        Game::Read<int>(Offsets::VAR_LOCALE_INDEX);
     const char *name =
-        *reinterpret_cast<const char *const *>(rec + OFF_NAME + locale * 4);
+        Game::Read<const char *>(rec, Offsets::OFF_SPELL_NAMES + locale * 4);
     if (name == nullptr || name[0] == '\0')
         return 0;
 
     // Milliseconds remaining (0 = unknown / expired duration).
     uint32_t msLeft = 0;
-    if (t.durationMs != 0) {
-        const uint32_t now = NowMs();
-        const uint32_t end = t.startMs + t.durationMs;
-        if (now < end)
-            msLeft = end - now;
-    }
+    if (t.durationMs != 0)
+        msLeft = Time::Clock::Remaining(t.startMs + t.durationMs);
 
     reinterpret_cast<ClearTooltip_t>(Offsets::FUN_GAMETOOLTIP_CLEAR)(self);
     AddColoredLine(self, name, kNameColor);
@@ -630,8 +603,8 @@ void OnPlayerSpellGo(uint32_t spellID) {
     if (rec == nullptr)
         return;
 
-    const auto *effects = reinterpret_cast<const int32_t *>(rec + OFF_EFFECT);
-    const auto *misc = reinterpret_cast<const int32_t *>(rec + OFF_MISC_VALUE);
+    const auto *effects = Game::Ptr<const int32_t>(rec, Offsets::OFF_SPELL_RECORD_EFFECT);
+    const auto *misc = Game::Ptr<const int32_t>(rec, Offsets::OFF_SPELL_RECORD_EFFECT_MISC_VALUE);
     for (int i = 0; i < Offsets::SPELL_RECORD_EFFECT_COUNT; ++i) {
         const int eff = effects[i];
         if (eff < kEffectSummonTotemSlot1 || eff > kEffectSummonTotemSlot4)

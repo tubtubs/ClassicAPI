@@ -43,6 +43,8 @@
 #include "Game.h"
 #include "Offsets.h"
 #include "guid/Guid.h"
+#include "object/Resolve.h"
+#include "time/Clock.h"
 #include "unit/Position.h"
 
 #include <cmath>
@@ -76,10 +78,7 @@ using Predicate_t = int(__fastcall *)(void *player, void *cand, int mode);
 using SetTargetByGuid_t = void(__fastcall *)(const uint64_t *guid);
 using EnumCallback_t = int(__fastcall *)(void *ctx, void *unusedEdx, uint64_t guid);
 using EnumVisibleObjects_t = int(__fastcall *)(EnumCallback_t cb, void *ctx);
-using ObjectPtr_t = void *(__fastcall *)(uint32_t typeMask, const char *dbg,
-                                         uint32_t guidLo, uint32_t guidHi,
-                                         int dbgCode);
-using TickMs_t = uint32_t(__fastcall *)();
+using Time::Clock::NowMs;
 
 bool PassesFilter(void *player, void *cand, uint64_t guid, Filter f) {
     auto valid = reinterpret_cast<Predicate_t>(Offsets::FUN_TARGET_CANDIDATE_VALID);
@@ -113,11 +112,7 @@ int __fastcall CollectCb(CollectCtx *ctx, void * /*edx*/, uint64_t guid) {
         return 1;
     // Players and creatures both resolve under TYPEMASK_UNIT (CGPlayer
     // derives from CGUnit); non-unit objects resolve to null and drop out.
-    auto ObjectPtr =
-        reinterpret_cast<ObjectPtr_t>(Offsets::FUN_CLNT_OBJ_MGR_OBJECT_PTR);
-    void *cand = ObjectPtr(Offsets::TYPEMASK_UNIT, nullptr,
-                           static_cast<uint32_t>(guid),
-                           static_cast<uint32_t>(guid >> 32), 0);
+    void *cand = Object::ByGuid(Offsets::TYPEMASK_UNIT, guid, nullptr, 0);
     if (cand == nullptr || cand == ctx->player)
         return 1;
     if (!PassesFilter(ctx->player, cand, guid, ctx->filter))
@@ -180,10 +175,6 @@ uint64_t CurrentSelection() {
     const uint32_t hi = *reinterpret_cast<volatile uint32_t *>(
         Offsets::VAR_CURRENT_SELECTION_GUID_HI);
     return (static_cast<uint64_t>(hi) << 32) | lo;
-}
-
-uint32_t NowMs() {
-    return reinterpret_cast<TickMs_t>(Offsets::FUN_OS_TICKCOUNT_MS)();
 }
 
 // Ascending insertion sort by 3D distance (candidate counts are tiny).

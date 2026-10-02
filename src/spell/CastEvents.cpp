@@ -19,6 +19,7 @@
 #include "net/PacketReader.h"
 #include "net/SendObserver.h"
 #include "spell/Lookup.h"
+#include "time/Clock.h"
 #include "unit/Identity.h"
 
 #include <cstdio>
@@ -29,37 +30,84 @@ namespace Spell::CastEvents {
 
 namespace {
 
-// Spell.dbc localized string arrays (9 locale slots, 4 bytes each).
-constexpr int OFF_NAME = 0x1E0; // Name[9]
-constexpr int OFF_RANK = 0x204; // Rank[9]
 
-constexpr const char *kStart = "UNIT_SPELLCAST_START";
-constexpr const char *kStop = "UNIT_SPELLCAST_STOP";
-constexpr const char *kDelayed = "UNIT_SPELLCAST_DELAYED";
-constexpr const char *kChannelStart = "UNIT_SPELLCAST_CHANNEL_START";
-constexpr const char *kChannelStop = "UNIT_SPELLCAST_CHANNEL_STOP";
-constexpr const char *kChannelUpdate = "UNIT_SPELLCAST_CHANNEL_UPDATE";
-constexpr const char *kSucceeded = "UNIT_SPELLCAST_SUCCEEDED";
-constexpr const char *kInterrupted = "UNIT_SPELLCAST_INTERRUPTED";
-constexpr const char *kFailed = "UNIT_SPELLCAST_FAILED";
-constexpr const char *kFailedQuiet = "UNIT_SPELLCAST_FAILED_QUIET";
-constexpr const char *kSent = "UNIT_SPELLCAST_SENT";
-constexpr const char *kReticleTarget = "UNIT_SPELLCAST_RETICLE_TARGET";
-constexpr const char *kReticleClear = "UNIT_SPELLCAST_RETICLE_CLEAR";
+// --- Event documentation ----------------------------------------------------
+//
+// Every event here carries `(unitTarget, castGUID, spellID, spellName, rank)`
+// except SENT, which inserts `target` at argument 2. `spellName` and `rank`
+// are a ClassicAPI addition to the retail payload — they save the handler a
+// lookup, and a handler written for retail simply ignores them.
 
-const Event::Custom::AutoReserve _rStart{kStart};
-const Event::Custom::AutoReserve _rStop{kStop};
-const Event::Custom::AutoReserve _rDelayed{kDelayed};
-const Event::Custom::AutoReserve _rChannelStart{kChannelStart};
-const Event::Custom::AutoReserve _rChannelStop{kChannelStop};
-const Event::Custom::AutoReserve _rChannelUpdate{kChannelUpdate};
-const Event::Custom::AutoReserve _rSucceeded{kSucceeded};
-const Event::Custom::AutoReserve _rInterrupted{kInterrupted};
-const Event::Custom::AutoReserve _rFailed{kFailed};
-const Event::Custom::AutoReserve _rFailedQuiet{kFailedQuiet};
-const Event::Custom::AutoReserve _rSent{kSent};
-const Event::Custom::AutoReserve _rReticleTarget{kReticleTarget};
-const Event::Custom::AutoReserve _rReticleClear{kReticleClear};
+const Game::Doc::Field kCastPayload[] = {
+    Game::Doc::Req("unitTarget", "UnitToken", "The unit that is casting."),
+    Game::Doc::Req("castGUID", "string",
+                   "Identifies one cast. Every event of that cast carries the same value."),
+    Game::Doc::Req("spellID", "number"),
+    Game::Doc::Opt("spellName", "string", nullptr, "The spell's name in the client's language."),
+    Game::Doc::Opt("rank", "string", nullptr, "The spell's rank text, when it has one."),
+};
+
+// The reticle is up before any cast exists, so there is no castGUID to send.
+const Game::Doc::Field kReticlePayload[] = {
+    Game::Doc::Req("unitTarget", "UnitToken", "Always \"player\"."),
+    Game::Doc::Req("castGUID", "string", "Always empty; no cast exists yet."),
+    Game::Doc::Req("spellID", "number"),
+    Game::Doc::Opt("spellName", "string", nullptr, "The spell's name in the client's language."),
+    Game::Doc::Opt("rank", "string", nullptr, "The spell's rank text, when it has one."),
+};
+
+const Game::Doc::Field kSentPayload[] = {
+    Game::Doc::Req("unitTarget", "UnitToken", "Always \"player\"."),
+    Game::Doc::Req("target", "string",
+                   "Unit token of the cast's target, or empty for a self or untargeted cast."),
+    Game::Doc::Req("castGUID", "string",
+                   "Identifies one cast. Every event of that cast carries the same value."),
+    Game::Doc::Req("spellID", "number"),
+    Game::Doc::Opt("spellName", "string", nullptr, "The spell's name in the client's language."),
+    Game::Doc::Opt("rank", "string", nullptr, "The spell's rank text, when it has one."),
+};
+
+const Game::Doc::Event kStartDoc{"Spell", "A unit began casting a spell.", kCastPayload};
+const Game::Doc::Event kStopDoc{"Spell",
+    "A cast ended, for any reason. It follows every START.", kCastPayload};
+const Game::Doc::Event kDelayedDoc{"Spell",
+    "A cast's finish time moved. Read the times again.", kCastPayload};
+const Game::Doc::Event kChannelStartDoc{"Spell", "A unit began channeling a spell.",
+                                        kCastPayload};
+const Game::Doc::Event kChannelStopDoc{"Spell",
+    "A channel ended, whether it finished or was cut short.", kCastPayload};
+const Game::Doc::Event kChannelUpdateDoc{"Spell",
+    "A channel's finish time moved. Read the times again.", kCastPayload};
+const Game::Doc::Event kSucceededDoc{"Spell", "A spell took effect.", kCastPayload};
+const Game::Doc::Event kInterruptedDoc{"Spell",
+    "A cast was cut short. Channels do not fire this.", kCastPayload};
+const Game::Doc::Event kFailedDoc{"Spell",
+    "A cast was refused before it began, such as out of range or short of power.",
+    kCastPayload};
+const Game::Doc::Event kFailedQuietDoc{"Spell",
+    "A cast was refused and the client showed no error.", kCastPayload};
+const Game::Doc::Event kSentDoc{"Spell",
+    "The player asked the server to cast a spell. It is the first event of a cast.",
+    kSentPayload};
+const Game::Doc::Event kReticleTargetDoc{"Spell",
+    "A spell is waiting for the player to choose a ground target.", kReticlePayload};
+const Game::Doc::Event kReticleClearDoc{"Spell",
+    "The player cancelled a spell that was waiting for a ground target.", kReticlePayload};
+
+// The reservations double as the fire handles (`k*.Slot()` — O(1)).
+const Event::Custom::AutoReserve kStart{"UNIT_SPELLCAST_START", &kStartDoc};
+const Event::Custom::AutoReserve kStop{"UNIT_SPELLCAST_STOP", &kStopDoc};
+const Event::Custom::AutoReserve kDelayed{"UNIT_SPELLCAST_DELAYED", &kDelayedDoc};
+const Event::Custom::AutoReserve kChannelStart{"UNIT_SPELLCAST_CHANNEL_START", &kChannelStartDoc};
+const Event::Custom::AutoReserve kChannelStop{"UNIT_SPELLCAST_CHANNEL_STOP", &kChannelStopDoc};
+const Event::Custom::AutoReserve kChannelUpdate{"UNIT_SPELLCAST_CHANNEL_UPDATE", &kChannelUpdateDoc};
+const Event::Custom::AutoReserve kSucceeded{"UNIT_SPELLCAST_SUCCEEDED", &kSucceededDoc};
+const Event::Custom::AutoReserve kInterrupted{"UNIT_SPELLCAST_INTERRUPTED", &kInterruptedDoc};
+const Event::Custom::AutoReserve kFailed{"UNIT_SPELLCAST_FAILED", &kFailedDoc};
+const Event::Custom::AutoReserve kFailedQuiet{"UNIT_SPELLCAST_FAILED_QUIET", &kFailedQuietDoc};
+const Event::Custom::AutoReserve kSent{"UNIT_SPELLCAST_SENT", &kSentDoc};
+const Event::Custom::AutoReserve kReticleTarget{"UNIT_SPELLCAST_RETICLE_TARGET", &kReticleTargetDoc};
+const Event::Custom::AutoReserve kReticleClear{"UNIT_SPELLCAST_RETICLE_CLEAR", &kReticleClearDoc};
 
 // Autoshot spams client-side failures while ramping — nampower filters it
 // out of its failure event, so do we.
@@ -69,8 +117,8 @@ constexpr uint32_t kAutoShotSpellId = 75;
 constexpr uint16_t kTargetFlagUnit = 0x0002;
 
 const char *LocalizedField(const uint8_t *rec, int fieldOffset) {
-    const int locale = *reinterpret_cast<int *>(Offsets::VAR_LOCALE_INDEX);
-    return *reinterpret_cast<const char *const *>(rec + fieldOffset + locale * 4);
+    const int locale = Game::Read<int>(Offsets::VAR_LOCALE_INDEX);
+    return Game::Read<const char *>(rec, fieldOffset + locale * 4);
 }
 
 // Cast UID for a REAL (Type-3) cast — player and remote alike. Per the retail
@@ -110,8 +158,9 @@ void BuildCastGuid(char *out, size_t n, int type, int spellID, int castUID) {
 // rank)`. Gated on a listener so an unwatched event does no DBC lookups or
 // string formatting. A null name/rank pushes `nil` through the dispatcher's
 // `lua_pushstring(NULL) → pushnil` tail-jump, which is fine.
-void Fire(const char *eventName, int spellID, int guidNum, int type = 3) {
-    const int slot = Event::Custom::Lookup(eventName);
+void Fire(const Event::Custom::AutoReserve &event, int spellID, int guidNum,
+          int type = 3) {
+    const int slot = event.Slot();
     if (!Event::Custom::HasListeners(slot))
         return;
     const uint8_t *rec = Spell::Lookup::RecordForID(spellID);
@@ -120,8 +169,8 @@ void Fire(const char *eventName, int spellID, int guidNum, int type = 3) {
     char castGuid[48];
     BuildCastGuid(castGuid, sizeof(castGuid), type, spellID, guidNum);
     Event::Custom::Fire(slot, "%s%s%d%s%s", "player", castGuid, spellID,
-                        LocalizedField(rec, OFF_NAME),
-                        LocalizedField(rec, OFF_RANK));
+                        LocalizedField(rec, Offsets::OFF_SPELL_NAMES),
+                        LocalizedField(rec, Offsets::OFF_SPELL_RECORD_RANK));
 }
 
 // SENT is the one event whose shape differs from the rest, matching modern:
@@ -129,7 +178,7 @@ void Fire(const char *eventName, int spellID, int guidNum, int type = 3) {
 // inserted at arg2. `target` is a unit token (e.g. "target") resolved from
 // the cast packet, or "" for self / no-target casts.
 void FireSent(int spellID, int guidNum, const char *target) {
-    const int slot = Event::Custom::Lookup(kSent);
+    const int slot = kSent.Slot();
     if (!Event::Custom::HasListeners(slot))
         return;
     const uint8_t *rec = Spell::Lookup::RecordForID(spellID);
@@ -138,8 +187,8 @@ void FireSent(int spellID, int guidNum, const char *target) {
     char castGuid[48];
     BuildCastGuid(castGuid, sizeof(castGuid), /*type=*/3, spellID, guidNum);
     Event::Custom::Fire(slot, "%s%s%s%d%s%s", "player", target ? target : "",
-                        castGuid, spellID, LocalizedField(rec, OFF_NAME),
-                        LocalizedField(rec, OFF_RANK));
+                        castGuid, spellID, LocalizedField(rec, Offsets::OFF_SPELL_NAMES),
+                        LocalizedField(rec, Offsets::OFF_SPELL_RECORD_RANK));
 }
 
 // Fire a RETICLE event `(unitTarget, castGUID, spellID, spellName, rank)`.
@@ -150,16 +199,16 @@ void FireSent(int spellID, int guidNum, const char *target) {
 // the load-bearing fields — are exact; only arg2 differs (`""` vs `nil`),
 // which is inconsequential for a reticle (no cast to identify). spellName /
 // rank are our usual extension tail.
-void FireReticle(const char *eventName, int spellID) {
-    const int slot = Event::Custom::Lookup(eventName);
+void FireReticle(const Event::Custom::AutoReserve &event, int spellID) {
+    const int slot = event.Slot();
     if (!Event::Custom::HasListeners(slot))
         return;
     const uint8_t *rec = Spell::Lookup::RecordForID(spellID);
     if (rec == nullptr)
         return;
     Event::Custom::Fire(slot, "%s%s%d%s%s", "player", "", spellID,
-                        LocalizedField(rec, OFF_NAME),
-                        LocalizedField(rec, OFF_RANK));
+                        LocalizedField(rec, Offsets::OFF_SPELL_NAMES),
+                        LocalizedField(rec, Offsets::OFF_SPELL_RECORD_RANK));
 }
 
 // spellID whose reticle we last reported active (0 = no reticle up).
@@ -178,11 +227,23 @@ int g_guidCounter = 0;
 int g_castSpell = 0;   // 0 = not casting
 int g_castStart = 0;   // startMs of the tracked cast (detects same-spell recast)
 int g_castGuid = 0;    // castGUID counter value for the tracked cast
-int g_castDelay = 0;   // last-seen accumulated pushback (ms)
+int g_castEnd = 0;     // last-seen endMs (any movement fires DELAYED)
 bool g_castSucceeded = false; // SPELL_GO seen for the tracked cast this cast
+
+// UNIT_SPELLCAST_INTERRUPTED de-dup. SpellFailed_h and PollPlayer can both
+// surface the same interrupt: the client fires Spell_C_SpellFailed AND drops the
+// tracked cast (e.g. an Esc cancel of a normal spell, or a movement interrupt).
+// SpellFailed_h stamps here when it fires INTERRUPTED; PollPlayer skips its own
+// for the same spell within the window, so one interrupt = one event. A
+// SuperWoW-style kick clears the cast WITHOUT a Spell_C_SpellFailed, so no stamp
+// is made and PollPlayer still owns those.
+int g_lastInterruptSpell = 0;
+int g_lastInterruptTMs = 0;
+constexpr int kInterruptDedupMs = 1000;
 
 int g_chanSpell = 0;
 int g_chanGuid = 0;
+int g_chanStart = 0; // startMs we last fired CHANNEL_START for (detects a recast)
 
 // castGUID minted at SENT, pending until the matching downstream event
 // (START / SUCCEEDED / FAILED for the same spell) consumes it — so all of
@@ -257,22 +318,17 @@ int g_pendingChanSuccSpell = 0;
 int g_pendingChanSuccTMs = 0;
 constexpr int kChanSuccDeferMs = 500;
 
-// Spell.dbc AttributesEx channel bits — same test Spell::Cast uses.
-constexpr int OFF_ATTRIBUTES_EX = 0x1C;
-constexpr uint32_t SPELL_ATTR_EX_CHANNELED = 0x4 | 0x40; // IS_CHANNELED | SELF
-
 bool IsChanneledSpell(int spellID) {
     const uint8_t *rec = Spell::Lookup::RecordForID(spellID);
     return rec != nullptr &&
-           (*reinterpret_cast<const uint32_t *>(rec + OFF_ATTRIBUTES_EX) &
-            SPELL_ATTR_EX_CHANNELED) != 0;
+           (Game::Read<uint32_t>(rec, Offsets::OFF_SPELL_RECORD_ATTRIBUTES_EX) &
+            Offsets::SPELL_ATTR_EX_CHANNELED) != 0;
 }
 
-int NowMs() {
-    using TickMs_t = uint32_t(__fastcall *)();
-    return static_cast<int>(reinterpret_cast<TickMs_t>(
-        static_cast<uintptr_t>(Offsets::FUN_OS_TICKCOUNT_MS))());
-}
+// Only used for relative windows (`now - stampMs < window`), where the int
+// deltas cancel and stay correct across the wrap. Reader from the one
+// canonical source; see `Time::Clock`.
+int NowMs() { return static_cast<int>(Time::Clock::NowMs()); }
 
 // ---- UNIT_SPELLCAST_FAILED (client-side cast rejection) ----------------
 // Co-hook `Spell_C_SpellFailed` — the local player's own cast failures
@@ -312,6 +368,8 @@ void __fastcall SpellFailed_h(uint32_t spellId, int result, int unk1, int unk2,
         int guid = g_castSpell == sid ? g_castGuid
                    : recentCast       ? g_endedGuid
                                       : NextCastGuid(sid);
+        g_lastInterruptSpell = sid;
+        g_lastInterruptTMs = now;
         Fire(kInterrupted, sid, guid);
         return;
     }
@@ -376,9 +434,9 @@ const Net::SendObserver::AutoSubscribe _sendSub{&OnSend};
 // the payload is fanned out per token (`target` / `focus` / `nameplateN` /
 // `party` / `raid` / `mouseover`). Same `(unit, castGUID, spellID, spellName,
 // rank)` shape as the player events, just with a non-"player" unit.
-void FireRemote(const char *eventName, uint64_t casterGuid, int spellID,
-                int guidNum) {
-    const int slot = Event::Custom::Lookup(eventName);
+void FireRemote(const Event::Custom::AutoReserve &event, uint64_t casterGuid,
+                int spellID, int guidNum) {
+    const int slot = event.Slot();
     if (!Event::Custom::HasListeners(slot))
         return;
     const uint8_t *rec = Spell::Lookup::RecordForID(spellID);
@@ -390,8 +448,8 @@ void FireRemote(const char *eventName, uint64_t casterGuid, int spellID,
         return;
     char castGuid[48];
     BuildCastGuid(castGuid, sizeof(castGuid), /*type=*/3, spellID, guidNum);
-    const char *name = LocalizedField(rec, OFF_NAME);
-    const char *rank = LocalizedField(rec, OFF_RANK);
+    const char *name = LocalizedField(rec, Offsets::OFF_SPELL_NAMES);
+    const char *rank = LocalizedField(rec, Offsets::OFF_SPELL_RECORD_RANK);
     for (int i = 0; i < n; ++i)
         Event::Custom::Fire(slot, "%s%s%d%s%s", tokens[i], castGuid, spellID,
                             name, rank);
@@ -433,7 +491,9 @@ RemoteEvt *AllocRemoteEvt(uint64_t guid) {
 
 } // namespace
 
-void PollPlayer(int castSpellID, int castStartMs, int castDelayMs,
+bool PlayerCastSucceeded() { return g_castSucceeded; }
+
+void PollPlayer(int castSpellID, int castStartMs, int castEndMs,
                 int channelSpellID, int channelStartMs) {
     // ---- Regular cast -------------------------------------------------
     // A "new cast" is a different spell OR the same spell re-stamped at a
@@ -448,7 +508,13 @@ void PollPlayer(int castSpellID, int castStartMs, int castDelayMs,
         // completion's SPELL_GO (and thus OnPlayerSucceeded) has already run
         // a frame earlier, so the flag reliably tells the two apart even
         // though the engine routes both through the same abort choke point.
-        if (!g_castSucceeded)
+        // Skip if SpellFailed_h already fired INTERRUPTED for this cast (de-dup
+        // — see g_lastInterruptSpell); still fire STOP.
+        const bool alreadyInterrupted =
+            g_lastInterruptSpell == g_castSpell &&
+            Time::Clock::Elapsed(static_cast<uint32_t>(g_lastInterruptTMs)) <
+                static_cast<uint32_t>(kInterruptDedupMs);
+        if (!g_castSucceeded && !alreadyInterrupted)
             Fire(kInterrupted, g_castSpell, g_castGuid);
         Fire(kStop, g_castSpell, g_castGuid);
         g_endedSpell = g_castSpell; // for SpellFailed_h's interrupt-vs-fail gate
@@ -460,24 +526,44 @@ void PollPlayer(int castSpellID, int castStartMs, int castDelayMs,
         g_castGuid = NextCastGuid(castSpellID);
         g_castSpell = castSpellID;
         g_castStart = castStartMs;
-        g_castDelay = castDelayMs;
+        g_castEnd = castEndMs;
         g_castSucceeded = false;
         Fire(kStart, castSpellID, g_castGuid);
-    } else if (g_castSpell != 0 && castDelayMs > g_castDelay) {
-        // Pushback grew (SMSG_SPELL_DELAYED extended the cast).
-        g_castDelay = castDelayMs;
+    } else if (g_castSpell != 0 && castEndMs != g_castEnd) {
+        // The cast's end moved: pushback (SMSG_SPELL_DELAYED extends it) or
+        // the confirming SMSG_SPELL_START snapping the client-predicted cast
+        // time to the server's authoritative one — the server scales ranged
+        // abilities by ranged attack speed (Steady/Aimed Shot), which the
+        // client's prediction helper doesn't model, so the confirming packet
+        // shortens the bar ~RTT after START (pfUI#43). Either direction, the
+        // addon must re-read the times; DELAYED is the re-read trigger.
+        g_castEnd = castEndMs;
         Fire(kDelayed, g_castSpell, g_castGuid);
     }
 
     // ---- Channel ------------------------------------------------------
-    // Detect a new channel by spellID ONLY (not startMs): a channel is
-    // stamped twice at start — SMSG_SPELL_START, then MSG_CHANNEL_START
-    // re-stamps with the server duration — which changes startMs but is the
-    // SAME channel. A startMs check would spuriously fire STOP+START on the
-    // re-stamp. A genuine re-channel of the same spell passes through
-    // g_chanSpell==0 (CHANNEL_STOP) first, so spellID alone still catches it.
-    (void)channelStartMs;
-    const bool newChan = channelSpellID != 0 && channelSpellID != g_chanSpell;
+    // A DIFFERENT channel spell is trivially a new channel. A SAME-spell
+    // re-channel (recasting Fishing while already fishing) is ALSO a new
+    // channel and must fire CHANNEL_STOP + CHANNEL_START, but it keeps
+    // channelSpellID == g_chanSpell (the channel never returns to 0 between the
+    // two — +0x228 stays set for a continuous channel), so spellID alone can't
+    // see it. Two independent tells together identify it without a timing
+    // heuristic — BOTH required:
+    //   - the channel was RE-STAMPED: channelStartMs advanced past the value we
+    //     fired CHANNEL_START for, AND
+    //   - a fresh CMSG_CAST_SPELL is pending for this spell (g_pendingGuid — the
+    //     recast's SENT, not yet consumed).
+    // Each start stamps the channel TWICE (SMSG_SPELL_START then
+    // MSG_CHANNEL_START), which advances startMs on the SAME start — but the
+    // first CHANNEL_START already consumed g_pendingGuid, so the second stamp
+    // fails the pending test → no spurious restart. A REJECTED recast
+    // (SPELL_IN_PROGRESS) sends a CMSG (guid pending) but the server never
+    // re-stamps the channel, so startMs is unchanged → also no restart.
+    const bool reChannel = channelSpellID != 0 && channelSpellID == g_chanSpell &&
+                           channelStartMs != g_chanStart && g_pendingGuid != 0 &&
+                           g_pendingSpell == channelSpellID;
+    const bool newChan = channelSpellID != 0 &&
+                         (channelSpellID != g_chanSpell || reChannel);
     if (g_chanSpell != 0 && (channelSpellID == 0 || newChan)) {
         // Channels only ever fire CHANNEL_STOP — never INTERRUPTED — whether
         // they end naturally or are cut short (retail behavior, verified).
@@ -491,6 +577,7 @@ void PollPlayer(int castSpellID, int castStartMs, int castDelayMs,
         // SUCCEEDED / CHANNEL_STOP on one castGUID.
         g_chanGuid = NextCastGuid(channelSpellID);
         g_chanSpell = channelSpellID;
+        g_chanStart = channelStartMs;
         Fire(kChannelStart, channelSpellID, g_chanGuid);
         // Modern fires SUCCEEDED right after CHANNEL_START. SPELL_GO deferred
         // it to here so it lands after START, sharing the channel's guid.
@@ -538,14 +625,14 @@ void OnPlayerSucceeded(int spellID) {
 
 void PollReticle() {
     const bool active =
-        *reinterpret_cast<const int *>(Offsets::VAR_SPELL_TARGETING_FLAGS) != 0;
+        Game::Read<int>(Offsets::VAR_SPELL_TARGETING_FLAGS) != 0;
     if (active) {
         if (s_reticleSpell == 0) {
             // Reticle just came up — report the pending spell. Read the spellID
             // now (it's set by Spell_C_CastSpell before targeting begins); if
             // it's transiently 0 this frame, retry next tick.
             const int spellID =
-                *reinterpret_cast<const int *>(Offsets::VAR_PENDING_CAST_SPELL);
+                Game::Read<int>(Offsets::VAR_PENDING_CAST_SPELL);
             if (spellID != 0) {
                 s_reticleSpell = spellID;
                 s_reticlePlaced = false;

@@ -13,6 +13,7 @@
 
 #include "Game.h"
 #include "Offsets.h"
+#include "item/CGItem.h"
 #include "unit/Flags.h"
 
 #include <cstdint>
@@ -23,11 +24,9 @@ namespace {
 
 using GetItemBySlot_t = void *(__thiscall *)(void *invMgr, int slot);
 using GetVisibleItem_t = void *(__thiscall *)(void *unit, int slot);
-using ResolveUnitToken_t = void *(__fastcall *)(const char *token);
 
 void *ResolveUnit(const char *token) {
-    auto fn = reinterpret_cast<ResolveUnitToken_t>(Offsets::FUN_RESOLVE_UNIT_TOKEN);
-    return fn(token);
+    return Game::ResolveUnitToken(token);
 }
 
 // Walks the local player's private inventory manager — the same path
@@ -41,8 +40,7 @@ int ItemIDForLocalPlayer(void *playerPtr, int slot1Based) {
     auto *item = static_cast<uint8_t *>(getBySlot(invMgr, slot1Based - 1));
     if (item == nullptr)
         return 0;
-    auto *instance = *reinterpret_cast<uint8_t *const *>(
-        item + Offsets::OFF_ITEM_INSTANCE_BLOCK);
+    auto *instance = Item::InstanceBlock(item);
     if (instance == nullptr)
         return 0;
     return static_cast<int>(*reinterpret_cast<const uint32_t *>(

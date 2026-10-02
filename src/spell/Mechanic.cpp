@@ -53,7 +53,7 @@ static const char *MechanicName(uint32_t mechanicID) {
                                      Offsets::VAR_SPELLMECHANIC_COUNT, mechanicID);
     if (rec == nullptr)
         return nullptr;
-    auto names = reinterpret_cast<const char *const *>(rec + Offsets::OFF_SPELLMECHANIC_NAME);
+    auto names = Game::Ptr<const char *const>(rec, Offsets::OFF_SPELLMECHANIC_NAME);
     const char *s = names[0]; // enUS
     return (s != nullptr && s[0] != '\0') ? s : nullptr;
 }
@@ -65,7 +65,7 @@ static int __fastcall Script_GetSpellMechanicByID(void *L) {
         return 0; // nil for invalid / out-of-range spell IDs
 
     const uint32_t mechanicID =
-        *reinterpret_cast<const uint32_t *>(record + Offsets::OFF_SPELL_RECORD_MECHANIC);
+        Game::Read<uint32_t>(record, Offsets::OFF_SPELL_RECORD_MECHANIC);
 
     Game::Lua::PushNumber(L, static_cast<double>(mechanicID));
 
@@ -80,9 +80,27 @@ static int __fastcall Script_GetSpellMechanicByID(void *L) {
     return 2;
 }
 
+// --- Documentation ----------------------------------------------------------
+
+const Game::Doc::Field kArgs[] = {
+    Game::Doc::Req("spellID", "SpellIdentifier",
+                   "A spell ID, spell link, or spell name."),
+};
+const Game::Doc::Field kRets[] = {
+    Game::Doc::Opt("mechanicID", "number", nullptr,
+                   "The mechanic the spell applies, 0 when it applies none; "
+                   "nil for an unknown spell."),
+    Game::Doc::Opt("name", "string", nullptr,
+                   "The English mechanic name, nil when the mechanic has none."),
+};
+const Game::Doc::Function kGetSpellMechanicByID{
+    "The crowd-control mechanic a spell applies, with its English name.",
+    kArgs, kRets};
+
 static void RegisterLuaFunctions() {
     Game::Lua::RegisterTableFunction("C_Spell", "GetSpellMechanicByID",
-                                     &Script_GetSpellMechanicByID);
+                                     &Script_GetSpellMechanicByID,
+                                     &kGetSpellMechanicByID);
 }
 
 static const Game::ModuleAutoRegister _autoreg{&RegisterLuaFunctions};

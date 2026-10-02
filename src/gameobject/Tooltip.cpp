@@ -14,6 +14,7 @@
 #include "Game.h"
 #include "Offsets.h"
 #include "guid/Guid.h"
+#include "object/Resolve.h"
 
 #include <cstdint>
 
@@ -28,9 +29,6 @@ namespace GameObject::Tooltip {
 // on every subsequent `SetX` call — same gating pattern Has/GetUnitGUID,
 // Has/GetItem, and Has/GetSpell use.
 
-using ObjectResolveByGUID_t = void *(__fastcall *)(int type, const char *debugName,
-                                                   uint32_t guidLo, uint32_t guidHi,
-                                                   int priority);
 using GameObjectGetName_t = const char *(__fastcall *)(void *gameObject);
 
 // `GameTooltip:GetGameObject()` → (name, id, guid) for whichever gameobject
@@ -60,22 +58,21 @@ static int __fastcall Script_GameTooltipGetGameObject(void *L) {
         Game::Lua::Error(L, "Usage: GameTooltip:GetGameObject()");
         return 0;
     }
-    void *tooltipObj = Game::Lua::ResolveObject(L, 1);
+    void *tooltipObj = Game::Lua::ResolveTooltip(L);
     if (tooltipObj == nullptr)
         return 0;
 
     const auto *base = static_cast<const uint8_t *>(tooltipObj);
-    const uint32_t guidLo = *reinterpret_cast<const uint32_t *>(
-        base + Offsets::OFF_TOOLTIP_GAMEOBJECT_GUID_LO);
-    const uint32_t guidHi = *reinterpret_cast<const uint32_t *>(
-        base + Offsets::OFF_TOOLTIP_GAMEOBJECT_GUID_HI);
+    const uint32_t guidLo =
+        Game::Read<uint32_t>(base, Offsets::OFF_TOOLTIP_GAMEOBJECT_GUID_LO);
+    const uint32_t guidHi =
+        Game::Read<uint32_t>(base, Offsets::OFF_TOOLTIP_GAMEOBJECT_GUID_HI);
     if (guidLo == 0 && guidHi == 0)
         return 0;
 
-    auto resolve = reinterpret_cast<ObjectResolveByGUID_t>(
-        Offsets::FUN_OBJECT_RESOLVE_BY_GUID);
-    void *obj = resolve(Offsets::OBJ_TYPE_GAMEOBJECT, "GameTooltip:GetGameObject",
-                        guidLo, guidHi, 0x172);
+    void *obj = Object::ByGuid(Offsets::TYPEMASK_GAMEOBJECT,
+                               (static_cast<uint64_t>(guidHi) << 32) | guidLo,
+                               "GameTooltip:GetGameObject", 0x172);
     if (obj == nullptr)
         return 0;
 
@@ -108,16 +105,16 @@ static int __fastcall Script_GameTooltipHasGameObject(void *L) {
         Game::Lua::Error(L, "Usage: GameTooltip:HasGameObject()");
         return 0;
     }
-    void *tooltipObj = Game::Lua::ResolveObject(L, 1);
+    void *tooltipObj = Game::Lua::ResolveTooltip(L);
     if (tooltipObj == nullptr) {
         Game::Lua::PushBool(L, false);
         return 1;
     }
     const auto *base = static_cast<const uint8_t *>(tooltipObj);
-    const uint32_t guidLo = *reinterpret_cast<const uint32_t *>(
-        base + Offsets::OFF_TOOLTIP_GAMEOBJECT_GUID_LO);
-    const uint32_t guidHi = *reinterpret_cast<const uint32_t *>(
-        base + Offsets::OFF_TOOLTIP_GAMEOBJECT_GUID_HI);
+    const uint32_t guidLo =
+        Game::Read<uint32_t>(base, Offsets::OFF_TOOLTIP_GAMEOBJECT_GUID_LO);
+    const uint32_t guidHi =
+        Game::Read<uint32_t>(base, Offsets::OFF_TOOLTIP_GAMEOBJECT_GUID_HI);
     Game::Lua::PushBool(L, guidLo != 0 || guidHi != 0);
     return 1;
 }

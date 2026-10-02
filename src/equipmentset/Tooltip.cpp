@@ -47,11 +47,14 @@
 // at the end (Script_Show), matching retail: PaperDollFrame.lua sets the
 // anchor then calls SetEquipmentSet with no trailing :Show().
 
+#include "equipmentset/Tooltip.h"
+
 #include "Game.h"
 #include "Offsets.h"
 #include "equipmentset/Data.h"
 #include "equipmentset/Locations.h"
 #include "equipmentset/Set.h"
+#include "item/Record.h"
 
 #include <cstdint>
 
@@ -108,17 +111,6 @@ struct Tally {
     uint32_t missingItemIDs[SLOT_COUNT];
 };
 
-using GetItemRecord_t = const uint8_t *(__thiscall *)(void *cache, uint32_t itemID,
-                                                      const uint64_t *guid, void *callback,
-                                                      void *userData, int unused);
-
-const uint8_t *PeekItemRecord(uint32_t itemID) {
-    auto fn = reinterpret_cast<GetItemRecord_t>(Offsets::FUN_DBCACHE_ITEMSTATS_GET_RECORD);
-    auto *cache = reinterpret_cast<void *>(Offsets::VAR_ITEMDB_CACHE);
-    const uint64_t zeroGuid = 0;
-    return fn(cache, itemID, &zeroGuid, nullptr, nullptr, 0);
-}
-
 // Walks a set's slots, classifying each non-empty entry into the
 // equipped / in-inventory / ignored / missing buckets via
 // `Locations::FindGUID`. For missing slots, also records the saved
@@ -153,6 +145,8 @@ Tally TallySet(const Set &s) {
     return t;
 }
 
+} // namespace
+
 int __fastcall Script_GameTooltipSetEquipmentSet(void *L) {
     if (Game::Lua::Type(L, 1) != Game::Lua::TYPE_TABLE) {
         Game::Lua::Error(L, "Usage: GameTooltip:SetEquipmentSet(\"setName\")");
@@ -170,7 +164,7 @@ int __fastcall Script_GameTooltipSetEquipmentSet(void *L) {
     if (s == nullptr)
         return 0;
 
-    void *self = Game::Lua::ResolveObject(L, 1);
+    void *self = Game::Lua::ResolveTooltip(L);
     if (self == nullptr)
         return 0;
 
@@ -215,13 +209,13 @@ int __fastcall Script_GameTooltipSetEquipmentSet(void *L) {
             unnamedMissing++;
             continue;
         }
-        auto *record = PeekItemRecord(id);
+        auto *record = Item::PeekRecord(id);
         if (record == nullptr) {
             unnamedMissing++;
             continue;
         }
-        const char *name = *reinterpret_cast<const char *const *>(
-            record + Offsets::OFF_ITEMSTATS_NAME);
+        const char *name = Game::Read<const char *>(
+            record, Offsets::OFF_ITEMSTATS_NAME);
         if (name == nullptr || name[0] == '\0') {
             unnamedMissing++;
             continue;
@@ -253,6 +247,8 @@ int __fastcall Script_GameTooltipSetEquipmentSet(void *L) {
     reinterpret_cast<ShowScript_t>(Offsets::FUN_SCRIPT_FRAME_SHOW)(L);
     return 0;
 }
+
+namespace {
 
 const Game::Lua::FrameMethodEntry g_methods[] = {
     {"SetEquipmentSet", &Script_GameTooltipSetEquipmentSet},

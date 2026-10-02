@@ -119,6 +119,28 @@ bool CallRegionNumber(void *L, uintptr_t fn, double *out) {
     return true;
 }
 
+// `IsMouseOver` and `IsDragging` go on the REGION base registry, which every
+// region-family type inherits from — so a frame, texture or fontstring self
+// reaches them legitimately, and a Region-only gate would reject the very
+// callers the base registration exists to serve. Accepting the four ids
+// states that set directly instead of resting on an assumption about which
+// classes the engine's `IsA` treats as Regions. Both methods only read
+// Region-base state, so the wider set is sound. Non-raising: each reports
+// false for an unusable self, the contract they already had.
+constexpr uintptr_t kRegionFamilyTypeIds[] = {
+    Offsets::VAR_REGION_LUA_TYPE_ID,
+    Offsets::VAR_FRAME_LUA_TYPE_ID,
+    Offsets::VAR_TEXTURE_LUA_TYPE_ID,
+    Offsets::VAR_FONTSTRING_LUA_TYPE_ID,
+};
+
+void *ResolveRegionFamily(void *L) {
+    return Game::Lua::ResolveTypedObjectAny(
+        L, 1, kRegionFamilyTypeIds,
+        static_cast<int>(sizeof(kRegionFamilyTypeIds) / sizeof(kRegionFamilyTypeIds[0])),
+        /*raiseError=*/false);
+}
+
 int __fastcall Script_IsMouseOver(void *L) {
     // Offsets first — the stack gets reshaped by the delegated getters.
     const double offTop = Game::Lua::IsNumber(L, 2) ? Game::Lua::ToNumber(L, 2) : 0.0;
@@ -126,13 +148,12 @@ int __fastcall Script_IsMouseOver(void *L) {
     const double offLeft = Game::Lua::IsNumber(L, 4) ? Game::Lua::ToNumber(L, 4) : 0.0;
     const double offRight = Game::Lua::IsNumber(L, 5) ? Game::Lua::ToNumber(L, 5) : 0.0;
 
-    void *obj = Game::Lua::ResolveObject(L, 1);
+    void *obj = ResolveRegionFamily(L);
     if (obj == nullptr) {
         Game::Lua::PushBool(L, false);
         return 1;
     }
-    const float effScale = *reinterpret_cast<const float *>(
-        reinterpret_cast<const uint8_t *>(obj) + Offsets::OFF_REGION_EFFECTIVE_SCALE);
+    const float effScale = Game::Read<float>(obj, Offsets::OFF_REGION_EFFECTIVE_SCALE);
 
     double left, right, top, bottom;
     if (effScale == 0.0f ||
@@ -192,14 +213,11 @@ int __fastcall Script_GetRect(void *L) {
 // regions — a texture/fontstring self can never match the frame stored
 // there, so it reports false, as it should.
 int __fastcall Script_IsDragging(void *L) {
-    void *self = Game::Lua::ResolveObject(L, 1);
-    void *ctx = *reinterpret_cast<void *const *>(
-        static_cast<uintptr_t>(Offsets::VAR_UI_CONTEXT_PTR));
+    void *self = ResolveRegionFamily(L);
+    void *ctx = Game::Read<void *>(static_cast<uintptr_t>(Offsets::VAR_UI_CONTEXT_PTR));
     void *dragTarget =
         ctx != nullptr
-            ? *reinterpret_cast<void *const *>(
-                  reinterpret_cast<const uint8_t *>(ctx) +
-                  Offsets::OFF_UI_CONTEXT_DRAG_TARGET)
+            ? Game::Read<void *>(ctx, Offsets::OFF_UI_CONTEXT_DRAG_TARGET)
             : nullptr;
     Game::Lua::PushBool(L, self != nullptr && self == dragTarget);
     return 1;
@@ -335,65 +353,6 @@ int __fastcall Script_HookScript(void *L) {
     return 0;
 }
 
-// ---- IsEventRegistered (Frame) ---------------------------------------------
-
-// `frame:IsEventRegistered("event")` — vanilla has RegisterEvent /
-// UnregisterEvent but not the query. There's no engine Script_* to
-// delegate to, so we replicate the membership check that lives inside
-// Frame::RegisterEvent (FUN_00702140): find the event by name in the live
-// event table, then walk that entry's subscriber chain for this frame.
-// The frame pointer we compare against is the same CFrameScriptObject*
-// the engine stores (Game::Lua::ResolveObject resolves self exactly as
-// Script_RegisterEvent does).
-using SStrCmpI_t = int(__stdcall *)(const char *a, const char *b, int n);
-
-bool FrameHasEvent(void *frame, const char *eventName) {
-    const uint32_t count = *reinterpret_cast<const uint32_t *>(
-        static_cast<uintptr_t>(Offsets::VAR_EVENT_TABLE_COUNT));
-    auto *base = *reinterpret_cast<const uint8_t *const *>(
-        static_cast<uintptr_t>(Offsets::VAR_EVENT_TABLE_BASE_PTR));
-    if (count == 0 || base == nullptr)
-        return false;
-
-    auto sstrcmpi = reinterpret_cast<SStrCmpI_t>(
-        static_cast<uintptr_t>(Offsets::FUN_SSTR_CMP_I));
-
-    for (uint32_t i = 0; i < count; ++i) {
-        const uint8_t *entry = base + i * Offsets::EVENT_ENTRY_STRIDE;
-        const char *name = *reinterpret_cast<const char *const *>(
-            entry + Offsets::OFF_EVENT_ENTRY_NAME);
-        if (name == nullptr)
-            continue;
-        if (sstrcmpi(name, eventName, 0x7FFFFFFF) != 0)
-            continue;
-        // Names are unique, so this is the one entry — walk its chain.
-        uintptr_t node = *reinterpret_cast<const uintptr_t *>(
-            entry + Offsets::OFF_EVENT_ENTRY_HEAD);
-        while ((node & 1) == 0 && node != 0) {
-            if (*reinterpret_cast<void *const *>(
-                    node + Offsets::OFF_EVENT_NODE_FRAME) == frame)
-                return true;
-            node = *reinterpret_cast<const uintptr_t *>(
-                node + Offsets::OFF_EVENT_NODE_NEXT);
-        }
-        return false;
-    }
-    return false;
-}
-
-int __fastcall Script_IsEventRegistered(void *L) {
-    if (!Game::Lua::IsString(L, 2)) {
-        Game::Lua::Error(L, "Usage: frame:IsEventRegistered(\"event\")");
-        return 0;
-    }
-    void *frame = Game::Lua::ResolveObject(L, 1);
-    const char *eventName = Game::Lua::ToString(L, 2);
-    const bool registered =
-        frame != nullptr && eventName != nullptr && FrameHasEvent(frame, eventName);
-    Game::Lua::PushBool(L, registered);
-    return 1;
-}
-
 // ---- SetPoint one-arg form (Script_SetPoint co-hook) -----------------------
 
 // Vanilla's Script_SetPoint accepts every modern form except the bare
@@ -433,7 +392,6 @@ const Game::Lua::FrameMethodEntry g_frameMethods[] = {
                                   Offsets::FUN_SCRIPT_FRAME_HIDE>},
     {"SetResizeBounds", &Script_SetResizeBounds},
     {"HookScript", &Script_HookScript},
-    {"IsEventRegistered", &Script_IsEventRegistered},
     {"GetEffectiveAlpha", &Script_GetEffectiveAlpha},
 };
 

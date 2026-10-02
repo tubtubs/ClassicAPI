@@ -18,29 +18,19 @@
 #include "item/BagFamily.h"
 #include "item/Data.h"
 #include "item/ID.h"
+#include "item/Icon.h"
 #include "item/Link.h"
 #include "item/Location.h"
+#include "item/Record.h"
 
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 
 namespace Item::Info {
 
-using GetItemRecord_t = const uint8_t *(__thiscall *)(void *cache, uint32_t itemID,
-                                                       const uint64_t *guid, void *callback,
-                                                       void *userData, bool requestIfMissing);
-
 static const char *PushedOrEmpty(const char *s) { return (s != nullptr && s[0] != 0) ? s : ""; }
 
-static int CurrentLocaleIndex() { return *reinterpret_cast<int *>(Offsets::VAR_LOCALE_INDEX); }
-
-static const uint8_t *FetchItemRecord(uint32_t itemID) {
-    auto fn = reinterpret_cast<GetItemRecord_t>(Offsets::FUN_DBCACHE_ITEMSTATS_GET_RECORD);
-    auto *cache = reinterpret_cast<void *>(Offsets::VAR_ITEMDB_CACHE);
-    const uint64_t zeroGuid = 0;
-    return fn(cache, itemID, &zeroGuid, nullptr, nullptr, false);
-}
+static int CurrentLocaleIndex() { return Game::Read<int>(Offsets::VAR_LOCALE_INDEX); }
 
 static const char *LookupItemClassName(uint32_t classID) {
     return PushedOrEmpty(DBC::LocalizedField(
@@ -49,10 +39,10 @@ static const char *LookupItemClassName(uint32_t classID) {
 }
 
 static const char *LookupItemSubClassName(uint32_t classID, uint32_t subClassID) {
-    const int count = *reinterpret_cast<int *>(Offsets::VAR_ITEMSUBCLASS_COUNT);
+    const int count = Game::Read<int>(Offsets::VAR_ITEMSUBCLASS_COUNT);
     if (count <= 0)
         return "";
-    auto *records = *reinterpret_cast<const uint8_t *const *>(Offsets::VAR_ITEMSUBCLASS_RECORDS);
+    auto *records = Game::Read<const uint8_t *>(Offsets::VAR_ITEMSUBCLASS_RECORDS);
     if (records == nullptr)
         return "";
     const int locale = CurrentLocaleIndex();
@@ -64,12 +54,12 @@ static const char *LookupItemSubClassName(uint32_t classID, uint32_t subClassID)
             continue;
         // Mirror Script_GetItemInfo's fallback chain at 0x48E311..0x48E32C:
         // try the verbose name first, fall back to the short name.
-        const char *verbose = *reinterpret_cast<const char *const *>(
-            record + Offsets::OFF_ITEMSUBCLASS_DISPLAY_NAME + locale * 4);
+        const char *verbose = Game::Read<const char *>(
+            record, Offsets::OFF_ITEMSUBCLASS_DISPLAY_NAME + locale * 4);
         if (verbose != nullptr && verbose[0] != 0)
             return verbose;
-        const char *shortName = *reinterpret_cast<const char *const *>(
-            record + Offsets::OFF_ITEMSUBCLASS_NAME + locale * 4);
+        const char *shortName = Game::Read<const char *>(
+            record, Offsets::OFF_ITEMSUBCLASS_NAME + locale * 4);
         return PushedOrEmpty(shortName);
     }
     return "";
@@ -80,19 +70,6 @@ static const char *LookupInvType(uint32_t invType) {
         return "";
     auto **table = reinterpret_cast<const char **>(Offsets::VAR_INVTYPE_STRING_TABLE);
     return PushedOrEmpty(table[invType]);
-}
-
-static bool BuildIconPath(uint32_t displayInfoID, char *out, size_t outSize) {
-    if (out == nullptr || outSize == 0)
-        return false;
-    out[0] = 0;
-    const char *iconName = DBC::StringField(
-        Offsets::VAR_ITEMDISPLAYINFO_RECORDS, Offsets::VAR_ITEMDISPLAYINFO_COUNT,
-        displayInfoID, Offsets::OFF_ITEMDISPLAYINFO_ICON);
-    if (iconName == nullptr)
-        return false;
-    snprintf(out, outSize, "Interface\\Icons\\%s", iconName);
-    return true;
 }
 
 // `GetItemInfoInstant` is the modern "synchronous, never blocks" item
@@ -114,7 +91,7 @@ static int __fastcall Script_GetItemInfoInstant(void *L) {
 
     Game::Lua::PushNumber(L, static_cast<double>(itemID));
 
-    const uint8_t *record = FetchItemRecord(static_cast<uint32_t>(itemID));
+    const uint8_t *record = Item::PeekRecord(static_cast<uint32_t>(itemID));
     if (record == nullptr) {
         for (int i = 0; i < 6; ++i)
             Game::Lua::PushNil(L);
@@ -122,16 +99,16 @@ static int __fastcall Script_GetItemInfoInstant(void *L) {
     }
 
     const uint32_t classID =
-        *reinterpret_cast<const uint32_t *>(record + Offsets::OFF_ITEMSTATS_CLASS);
+        Game::Read<uint32_t>(record, Offsets::OFF_ITEMSTATS_CLASS);
     const uint32_t subClassID =
-        *reinterpret_cast<const uint32_t *>(record + Offsets::OFF_ITEMSTATS_SUBCLASS);
+        Game::Read<uint32_t>(record, Offsets::OFF_ITEMSTATS_SUBCLASS);
     const uint32_t displayInfoID =
-        *reinterpret_cast<const uint32_t *>(record + Offsets::OFF_ITEMSTATS_DISPLAY_INFO_ID);
+        Game::Read<uint32_t>(record, Offsets::OFF_ITEMSTATS_DISPLAY_INFO_ID);
     const uint32_t invType =
-        *reinterpret_cast<const uint32_t *>(record + Offsets::OFF_ITEMSTATS_INVENTORY_TYPE);
+        Game::Read<uint32_t>(record, Offsets::OFF_ITEMSTATS_INVENTORY_TYPE);
 
     char iconPath[260];
-    if (!BuildIconPath(displayInfoID, iconPath, sizeof(iconPath)))
+    if (!Item::Icon::PathForDisplayInfoID(displayInfoID, iconPath, sizeof(iconPath)))
         iconPath[0] = 0;
 
     Game::Lua::PushString(L, LookupItemClassName(classID));
@@ -150,13 +127,15 @@ static int __fastcall Script_GetItemInfoInstant(void *L) {
 static int PushIconForItemID(void *L, int itemID) {
     if (itemID <= 0)
         return 0;
-    const uint8_t *record = FetchItemRecord(static_cast<uint32_t>(itemID));
-    if (record == nullptr)
+    const uint8_t *record = Item::PeekRecord(static_cast<uint32_t>(itemID));
+    if (record == nullptr) {
+        Item::Data::WarmCache(static_cast<uint32_t>(itemID));
         return 0;
-    const uint32_t displayInfoID = *reinterpret_cast<const uint32_t *>(
-        record + Offsets::OFF_ITEMSTATS_DISPLAY_INFO_ID);
+    }
+    const uint32_t displayInfoID = Game::Read<uint32_t>(
+        record, Offsets::OFF_ITEMSTATS_DISPLAY_INFO_ID);
     char iconPath[260];
-    if (!BuildIconPath(displayInfoID, iconPath, sizeof(iconPath)))
+    if (!Item::Icon::PathForDisplayInfoID(displayInfoID, iconPath, sizeof(iconPath)))
         return 0;
     Game::Lua::PushString(L, iconPath);
     return 1;
@@ -229,7 +208,7 @@ static int __fastcall Script_C_Item_GetItemFamily(void *L) {
     const int itemID = Item::Arg::ResolveItemID(L, 1);
     if (itemID <= 0)
         return 0;
-    const uint8_t *record = FetchItemRecord(static_cast<uint32_t>(itemID));
+    const uint8_t *record = Item::PeekRecord(static_cast<uint32_t>(itemID));
     if (record == nullptr) {
         Item::Data::WarmCache(static_cast<uint32_t>(itemID));
         return 0;
@@ -264,7 +243,7 @@ static int __fastcall Script_C_Item_GetItemInfo(void *L) {
     if (itemID <= 0)
         return 0;
 
-    const uint8_t *record = FetchItemRecord(static_cast<uint32_t>(itemID));
+    const uint8_t *record = Item::PeekRecord(static_cast<uint32_t>(itemID));
     if (record == nullptr) {
         Item::Data::WarmCache(static_cast<uint32_t>(itemID));
         return 0; // nil this call; GET_ITEM_INFO_RECEIVED fires when ready
@@ -284,10 +263,10 @@ static int __fastcall Script_C_Item_GetItemInfo(void *L) {
     const uint32_t sellPrice = u32(Offsets::OFF_ITEMSTATS_SELL_PRICE);
     const uint32_t bindType = u32(Offsets::OFF_ITEMSTATS_BONDING);
     const uint32_t setID = u32(Offsets::OFF_ITEMSTATS_ITEM_SET);
-    const char *name = *reinterpret_cast<const char *const *>(
-        record + Offsets::OFF_ITEMSTATS_NAME);
-    const char *description = *reinterpret_cast<const char *const *>(
-        record + Offsets::OFF_ITEMSTATS_DESCRIPTION);
+    const char *name = Game::Read<const char *>(
+        record, Offsets::OFF_ITEMSTATS_NAME);
+    const char *description = Game::Read<const char *>(
+        record, Offsets::OFF_ITEMSTATS_DESCRIPTION);
 
     // Apply the link's random suffix ("... of the Owl") to both the name and
     // the reconstructed link when the input carried one (arg.suffix); with no
@@ -300,7 +279,7 @@ static int __fastcall Script_C_Item_GetItemInfo(void *L) {
             : name;
 
     char iconPath[260];
-    if (!BuildIconPath(displayInfoID, iconPath, sizeof(iconPath)))
+    if (!Item::Icon::PathForDisplayInfoID(displayInfoID, iconPath, sizeof(iconPath)))
         iconPath[0] = 0;
     char link[256];
     const bool haveLink = Item::Link::BasicFromIDSuffix(static_cast<uint32_t>(itemID),
